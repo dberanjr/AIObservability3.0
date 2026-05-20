@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
+import { useSampling } from "../../scope/SamplingContext";
 import { buildTokenSeriesQuery } from "./dataQueries";
 import { estimateCost, getPricing } from "../../data/pricing";
 import { toNum } from "../../data/format";
@@ -47,6 +48,7 @@ const parseScopeMs = (from: string): number => {
 
 export const useTokenConsumption = (): UseTokenConsumptionResult => {
   const { scope } = useScope();
+  const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
@@ -61,13 +63,13 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
 
   return useMemo<UseTokenConsumptionResult>(() => {
     const row = data?.records?.[0];
+    // Each bucket value is a sum() of tokens — extrapolate every point.
     const arr = (row?.tokens ?? []).map((v) => {
       const n = toNum(v);
-      return Number.isFinite(n) ? n : 0;
+      return Number.isFinite(n) ? n * samplingRatio : 0;
     });
     const intervalMs = intervalSec * 1000;
     const blended = getPricing("claude-sonnet-4-6");
-    // Estimate input/output ~50/50 split until per-bucket I/O is available.
     const points: TokenSeriesPoint[] = arr.map((tokens, i) => {
       const halfIn = tokens / 2;
       const halfOut = tokens / 2;
@@ -89,5 +91,5 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading, intervalSec]);
+  }, [data, isLoading, error, servicesLoading, intervalSec, samplingRatio]);
 };

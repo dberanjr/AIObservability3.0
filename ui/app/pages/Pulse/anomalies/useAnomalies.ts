@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../../scope/useScopedDql";
 import { useScope } from "../../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../../scope/useResolvedServices";
+import { useSampling } from "../../../scope/SamplingContext";
 import {
   buildCostSpikeQuery,
   buildLatencySpikeQuery,
@@ -75,6 +76,7 @@ export interface UseAnomaliesResult {
 
 export const useAnomalies = (): UseAnomaliesResult => {
   const { scope } = useScope();
+  const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
@@ -109,7 +111,9 @@ export const useAnomalies = (): UseAnomaliesResult => {
     );
     for (const r of latencyRecords) {
       const servicePerf = num(r.service_p95_ms);
-      const spanCount = num(r.span_count);
+      // p95 latency is sampling-invariant; spanCount is a count() that needs
+      // extrapolation for the displayed "across X spans" detail.
+      const spanCount = num(r.span_count) * samplingRatio;
       const ratio = fleetBaselineMs > 0 ? servicePerf / fleetBaselineMs : 0;
       if (!r.service || ratio <= THRESHOLDS.latencySpikeRatio) continue;
       anomalies.push({
@@ -128,8 +132,9 @@ export const useAnomalies = (): UseAnomaliesResult => {
     const costRow = cost.data?.records?.[0];
     const costRatio = num(costRow?.ratio);
     if (costRow && costRatio > THRESHOLDS.costSpikeRatio) {
-      const current = num(costRow.current);
-      const avg = num(costRow.avg);
+      // ratio is invariant; absolute hourly token counts need extrapolation.
+      const current = num(costRow.current) * samplingRatio;
+      const avg = num(costRow.avg) * samplingRatio;
       anomalies.push({
         id: "cost-spike",
         type: "cost-spike",
@@ -153,8 +158,8 @@ export const useAnomalies = (): UseAnomaliesResult => {
         severity: ratioSeverity(ratio, 15, 25),
         category: ANOMALY_LABELS["token-surge"],
         entity: r.service,
-        metric: `${fmtTokens(num(r.current))} tokens / hour`,
-        context: `${ratio.toFixed(1)}× hourly avg (${fmtTokens(num(r.avg))}/h)`,
+        metric: `${fmtTokens(num(r.current) * samplingRatio)} tokens / hour`,
+        context: `${ratio.toFixed(1)}× hourly avg (${fmtTokens(num(r.avg) * samplingRatio)}/h)`,
         detail: `Per-service token volume has surged in the latest hour relative to its own rolling average.`,
         intents: DEFAULT_FINDING_INTENTS,
       });
@@ -170,7 +175,7 @@ export const useAnomalies = (): UseAnomaliesResult => {
         category: ANOMALY_LABELS["runaway-agent"],
         entity: `${r.agent}${r.service ? ` · ${r.service}` : ""}`,
         metric: `p90 ${fmtMs(p90)}`,
-        context: `Above the ${fmtMs(THRESHOLDS.runawayAgentP90Ms)} runaway threshold across ${r.invocations ?? 0} invocations`,
+        context: `Above the ${fmtMs(THRESHOLDS.runawayAgentP90Ms)} runaway threshold across ${Math.round((r.invocations ?? 0) * samplingRatio)} invocations`,
         detail: `Agent invocations are running longer than the 10-minute runaway threshold. Likely candidates: unbounded tool loops, retry storms, or a tool that hangs without timeout.`,
         intents: DEFAULT_FINDING_INTENTS,
       });
@@ -196,6 +201,7 @@ export const useAnomalies = (): UseAnomaliesResult => {
         undefined,
     };
   }, [
+    samplingRatio,
     servicesLoading,
     latency.data,
     latency.error,

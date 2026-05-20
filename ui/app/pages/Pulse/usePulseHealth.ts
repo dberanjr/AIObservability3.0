@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
+import { useSampling } from "../../scope/SamplingContext";
 import {
   buildCostBaselineQuery,
   buildCostQuery,
@@ -57,8 +58,13 @@ const clamp = (value: number, min: number, max: number): number =>
 
 const round = (n: number): number => Math.round(n);
 
-const operationalPillar = (rec: OperationalRecord | undefined): Pillar => {
-  const total = num(rec?.total);
+const operationalPillar = (
+  rec: OperationalRecord | undefined,
+  samplingRatio: number,
+): Pillar => {
+  // Extrapolate count for the displayed span volume only — error rate and
+  // p95 are sampling-invariant statistics computed at sample size.
+  const total = num(rec?.total) * samplingRatio;
   if (!rec || total === 0) {
     return {
       key: "operational",
@@ -68,9 +74,10 @@ const operationalPillar = (rec: OperationalRecord | undefined): Pillar => {
       reasons: [{ text: "No AI spans observed in the current scope." }],
     };
   }
-  const errors = num(rec.errors);
   const p95 = num(rec.p95_ms);
-  const errorRatePct = (errors / total) * 100;
+  const rawTotal = num(rec.total);
+  const errorRatePct =
+    rawTotal > 0 ? (num(rec.errors) / rawTotal) * 100 : 0;
   const latencyPenalty = clamp((p95 - 2000) / 100, 0, 60);
   const errorPenalty = clamp(errorRatePct * 10, 0, 40);
   const score = clamp(round(100 - latencyPenalty - errorPenalty), 0, 100);
@@ -94,9 +101,14 @@ const operationalPillar = (rec: OperationalRecord | undefined): Pillar => {
   return { key: "operational", label: "Operational", status, score, reasons };
 };
 
-const qualityPillar = (rec: QualityRecord | undefined): Pillar => {
-  const total = num(rec?.total);
-  const withEval = num(rec?.with_eval);
+const qualityPillar = (
+  rec: QualityRecord | undefined,
+  samplingRatio: number,
+): Pillar => {
+  // Extrapolate display-only counts; coverage and avg_score are ratios/stats
+  // that are sampling-invariant.
+  const total = num(rec?.total) * samplingRatio;
+  const withEval = num(rec?.with_eval) * samplingRatio;
   const setupCta = {
     label: "Setup eval pipeline",
     href: QUALITY_EVAL_SETUP_GUIDE,
@@ -167,11 +179,14 @@ const costPillar = (
   current: CostRecord | undefined,
   baseline: CostBaselineRecord | undefined,
   scopeHours: number,
+  samplingRatio: number,
 ): Pillar => {
-  const inputTokens = num(current?.input_tokens);
-  const outputTokens = num(current?.output_tokens);
+  // Extrapolate sums/counts. distinct_models is a distinctCount aggregate —
+  // sampling-invariant, do not multiply.
+  const inputTokens = num(current?.input_tokens) * samplingRatio;
+  const outputTokens = num(current?.output_tokens) * samplingRatio;
   const totalTokens = inputTokens + outputTokens;
-  const requests = num(current?.requests);
+  const requests = num(current?.requests) * samplingRatio;
   const distinctModels = num(current?.distinct_models);
 
   if (requests === 0 || totalTokens === 0) {
@@ -184,8 +199,12 @@ const costPillar = (
     };
   }
 
+  // Both current and baseline are sampled at the same ratio so the ratio
+  // (currentPerHour / baselinePerHour) is invariant. We still scale baseline
+  // tokens for display consistency with totalTokens above.
   const baselineTokens =
-    num(baseline?.input_tokens_7d) + num(baseline?.output_tokens_7d);
+    (num(baseline?.input_tokens_7d) + num(baseline?.output_tokens_7d)) *
+    samplingRatio;
   const baselinePerHour = baselineTokens / HOURS_PER_WEEK;
   const currentPerHour = scopeHours > 0 ? totalTokens / scopeHours : totalTokens;
   const ratio = baselinePerHour > 0 ? currentPerHour / baselinePerHour : 1;
@@ -229,6 +248,7 @@ const parseScopeHours = (from: string): number => {
 
 export const usePulseHealth = (): PulseHealth => {
   const { scope } = useScope();
+  const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
@@ -252,12 +272,19 @@ export const usePulseHealth = (): PulseHealth => {
 
   return useMemo<PulseHealth>(() => {
     const scopeHours = parseScopeHours(scope.timeframe.from);
-    const operational = operationalPillar(opResult.data?.records?.[0]);
-    const quality = qualityPillar(qualityResult.data?.records?.[0]);
+    const operational = operationalPillar(
+      opResult.data?.records?.[0],
+      samplingRatio,
+    );
+    const quality = qualityPillar(
+      qualityResult.data?.records?.[0],
+      samplingRatio,
+    );
     const cost = costPillar(
       costResult.data?.records?.[0],
       costBaselineResult.data?.records?.[0],
       scopeHours,
+      samplingRatio,
     );
     const error =
       opResult.error ??
@@ -278,6 +305,7 @@ export const usePulseHealth = (): PulseHealth => {
     };
   }, [
     scope.timeframe.from,
+    samplingRatio,
     servicesLoading,
     opResult.data,
     opResult.error,

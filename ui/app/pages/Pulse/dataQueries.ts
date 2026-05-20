@@ -1,5 +1,6 @@
 import { scopeFilterClause } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
+import { dqlNormalizedProvider, dqlViaBedrock } from "../../detection/dql";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
@@ -93,8 +94,10 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Provider share of requests. Pre-normalization happens in detection layer
- * (Session 6) — for v1 the raw gen_ai.provider.name value is used.
+ * Provider share of requests. Bedrock-proxied calls are unwrapped to their
+ * upstream vendor (anthropic / cohere / mistral / etc.) server-side via
+ * dqlNormalizedProvider so the donut buckets canonical providers rather than
+ * raw `gen_ai.provider.name` variants like "aws_bedrock" vs "aws-bedrock".
  */
 export const buildProviderMixQuery = (
   serviceIds: string[] | null,
@@ -103,10 +106,14 @@ export const buildProviderMixQuery = (
 fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| fieldsAdd
+    provider = ${dqlNormalizedProvider()},
+    via_bedrock = if(${dqlViaBedrock()}, 1, else: 0)
 | summarize
     requests = count(),
     tokens = sum(toLong(gen_ai.usage.input_tokens) + toLong(gen_ai.usage.output_tokens)),
-    by: { provider = gen_ai.provider.name }
+    via_bedrock_count = sum(via_bedrock),
+    by: { provider }
 | sort requests desc
 | limit 12
 `.trim();

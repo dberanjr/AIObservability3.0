@@ -64,3 +64,25 @@ export const useSampling = (): SamplingContextValue => {
   }
   return ctx;
 };
+
+/**
+ * Multiply a `count()` or `sum()` aggregate by the active sampling ratio to
+ * extrapolate back to the unsampled population. With samplingRatio=N the
+ * scan reads 1 in N rows, so counts/sums under-report by ~N×.
+ *
+ * Do NOT apply to statistics that are sampling-invariant: percentiles,
+ * averages, min/max, error rates, distinctCount.
+ */
+export const extrapolate = (
+  value: number | null | undefined,
+  samplingRatio: number,
+): number | null => {
+  if (value == null || !Number.isFinite(value)) return value ?? null;
+  return value * samplingRatio;
+};
+
+/** Element-wise version of `extrapolate` for timeseries arrays. */
+export const extrapolateSeries = (
+  values: number[],
+  samplingRatio: number,
+): number[] => values.map((v) => (Number.isFinite(v) ? v * samplingRatio : v));

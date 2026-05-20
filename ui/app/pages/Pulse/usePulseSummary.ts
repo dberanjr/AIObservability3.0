@@ -2,6 +2,11 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
+import {
+  extrapolate,
+  extrapolateSeries,
+  useSampling,
+} from "../../scope/SamplingContext";
 import { buildSummaryQuery, buildTokenSeriesQuery } from "./dataQueries";
 import { estimateCost, getPricing } from "../../data/pricing";
 
@@ -57,6 +62,7 @@ const BLENDED_PRICE_PER_MTOK = {
 
 export const usePulseSummary = (): PulseSummary => {
   const { scope } = useScope();
+  const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
@@ -74,10 +80,13 @@ export const usePulseSummary = (): PulseSummary => {
   return useMemo<PulseSummary>(() => {
     const row = summary.data?.records?.[0];
     const sparkRow = spark.data?.records?.[0];
-    const inTok = row?.input_tokens ?? 0;
-    const outTok = row?.output_tokens ?? 0;
-    const tokens = row?.total_tokens ?? null;
-    const requests = row?.requests ?? null;
+    // Counts and sums are sampled — extrapolate back to the unsampled
+    // population. Ratios (error rate, token efficiency) and statistics
+    // (percentiles, distinctCount) are sampling-invariant.
+    const inTok = (row?.input_tokens ?? 0) * samplingRatio;
+    const outTok = (row?.output_tokens ?? 0) * samplingRatio;
+    const tokens = extrapolate(row?.total_tokens, samplingRatio);
+    const requests = extrapolate(row?.requests, samplingRatio);
 
     const spend = estimateCost(inTok, outTok, {
       inputPerMTok: BLENDED_PRICE_PER_MTOK.input,
@@ -87,6 +96,8 @@ export const usePulseSummary = (): PulseSummary => {
       tier: "mid",
     });
 
+    // costPerRequest is invariant under sampling — spend and requests
+    // are both scaled by samplingRatio, so the quotient cancels.
     const costPerRequest =
       requests && requests > 0 ? spend / requests : null;
 
@@ -102,13 +113,19 @@ export const usePulseSummary = (): PulseSummary => {
       mcpTools: row?.mcp_tools ?? null,
       tokenEfficiencyPct: row?.token_efficiency_pct ?? null,
       spark: {
-        tokens: Array.isArray(sparkRow?.tokens) ? sparkRow.tokens.filter((v) => typeof v === "number") : [],
+        tokens: Array.isArray(sparkRow?.tokens)
+          ? extrapolateSeries(
+              sparkRow.tokens.filter((v) => typeof v === "number"),
+              samplingRatio,
+            )
+          : [],
       },
       isLoading:
         servicesLoading || summary.isLoading || spark.isLoading,
       error: summary.error ?? spark.error ?? undefined,
     };
   }, [
+    samplingRatio,
     servicesLoading,
     summary.data,
     summary.error,

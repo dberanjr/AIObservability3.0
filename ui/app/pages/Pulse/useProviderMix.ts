@@ -2,7 +2,13 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
+import { useSampling } from "../../scope/SamplingContext";
 import { buildProviderMixQuery } from "./dataQueries";
+import {
+  PROVIDER_COLOR,
+  PROVIDER_DISPLAY,
+  type ProviderId,
+} from "../../detection/attributes";
 
 interface ProviderRecord {
   provider?: string;
@@ -30,35 +36,40 @@ export interface UseProviderMixResult {
   error?: Error;
 }
 
-const PROVIDER_COLOR: Record<string, string> = {
-  anthropic: "var(--purple-2)",
-  openai: "var(--green-2)",
-  bedrock: "var(--cyan)",
-  google: "var(--green-2)",
-  azure: "var(--blue)",
-  unknown: "var(--text-4)",
-};
+const isKnownProvider = (p: string): p is ProviderId =>
+  Object.prototype.hasOwnProperty.call(PROVIDER_COLOR, p);
 
-const colorFor = (provider: string): string => {
-  const key = provider.trim().toLowerCase();
-  return PROVIDER_COLOR[key] ?? "var(--text-4)";
-};
+/**
+ * Distinct fallback palette for non-canonical providers (custom proxies,
+ * tenant-specific names like "sierra", etc.). Picked from Strato tokens that
+ * don't collide with the canonical PROVIDER_COLOR entries.
+ */
+const FALLBACK_PALETTE = [
+  "var(--magenta)",
+  "var(--teal)",
+  "var(--orange)",
+  "var(--lime)",
+  "var(--indigo)",
+  "var(--pink)",
+  "var(--yellow)",
+  "var(--red)",
+] as const;
 
-const displayName = (provider: string): string => {
-  const map: Record<string, string> = {
-    anthropic: "Anthropic",
-    openai: "OpenAI",
-    bedrock: "AWS Bedrock",
-    "aws-bedrock": "AWS Bedrock",
-    google: "Google",
-    azure: "Azure",
-  };
-  const key = provider.trim().toLowerCase();
-  return map[key] ?? provider;
-};
+/**
+ * Pretty-print a non-canonical provider key. "aws_bedrock" → "Aws Bedrock",
+ * "sierra" → "Sierra". Replaces underscores/hyphens with spaces and title-cases.
+ */
+const prettifyUnknown = (provider: string): string =>
+  provider
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
 
 export const useProviderMix = (): UseProviderMixResult => {
   const { scope } = useScope();
+  const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
@@ -70,33 +81,46 @@ export const useProviderMix = (): UseProviderMixResult => {
 
   return useMemo<UseProviderMixResult>(() => {
     const records = data?.records ?? [];
-    const totalRequests = records.reduce(
-      (acc, r) => acc + (r.requests ?? 0),
-      0,
-    );
+    // Per-provider request counts and token sums need extrapolation. Shares
+    // (sharePct) are ratios and unaffected, but the displayed center value
+    // and the legend's per-provider request counts both need to reflect the
+    // unsampled population.
+    const totalRequests =
+      records.reduce((acc, r) => acc + (r.requests ?? 0), 0) * samplingRatio;
 
     let bedrockProxyVolume = 0;
+    let fallbackIdx = 0;
     const shares: ProviderShare[] = records
       .filter((r): r is Required<Pick<ProviderRecord, "provider">> & ProviderRecord =>
         typeof r.provider === "string" && r.provider.length > 0,
       )
       .map((r) => {
-        const provider = r.provider;
-        const requests = r.requests ?? 0;
-        const viaBedrock = r.via_bedrock_count ?? 0;
+        const provider = r.provider.trim().toLowerCase();
+        const requests = (r.requests ?? 0) * samplingRatio;
+        const viaBedrock = (r.via_bedrock_count ?? 0) * samplingRatio;
         bedrockProxyVolume += viaBedrock;
+
+        const known = isKnownProvider(provider);
+        const color = known
+          ? PROVIDER_COLOR[provider]
+          : FALLBACK_PALETTE[fallbackIdx++ % FALLBACK_PALETTE.length];
+        const display = known
+          ? PROVIDER_DISPLAY[provider]
+          : prettifyUnknown(provider);
+
         return {
           provider,
-          displayName: displayName(provider),
+          displayName: display,
           requests,
-          tokens: r.tokens ?? 0,
+          tokens: (r.tokens ?? 0) * samplingRatio,
           sharePct:
             totalRequests > 0 ? (requests / totalRequests) * 100 : 0,
-          color: colorFor(provider),
-          // True when ALL of this provider's volume came in via Bedrock,
-          // or when the provider key itself is "aws-bedrock".
+          color,
+          // Bedrock-proxy flag: either the canonical key is aws-bedrock, or
+          // every request for this provider arrived via the Bedrock proxy
+          // (signal for the "via Bedrock proxy" sublabel).
           isBedrockProxy:
-            /bedrock/i.test(provider) ||
+            provider === "aws-bedrock" ||
             (viaBedrock > 0 && viaBedrock === requests),
         };
       });
@@ -112,5 +136,5 @@ export const useProviderMix = (): UseProviderMixResult => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading]);
+  }, [data, isLoading, error, servicesLoading, samplingRatio]);
 };

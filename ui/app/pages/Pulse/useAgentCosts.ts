@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
+import { useSampling } from "../../scope/SamplingContext";
 import { buildAgentCostQuery } from "./dataQueries";
 import { estimateCost, getPricing } from "../../data/pricing";
 
@@ -32,6 +33,7 @@ export interface UseAgentCostsResult {
 
 export const useAgentCosts = (): UseAgentCostsResult => {
   const { scope } = useScope();
+  const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
@@ -46,12 +48,16 @@ export const useAgentCosts = (): UseAgentCostsResult => {
     for (const r of data?.records ?? []) {
       if (!r.agent) continue;
       const pricing = getPricing(r.model);
-      const inTok = r.input_tokens ?? 0;
-      const outTok = r.output_tokens ?? 0;
+      // Extrapolate token sums and invocation counts back to the unsampled
+      // population. Cost is derived from the extrapolated token figures so it
+      // scales correctly without an explicit multiply.
+      const inTok = (r.input_tokens ?? 0) * samplingRatio;
+      const outTok = (r.output_tokens ?? 0) * samplingRatio;
+      const invocations = (r.invocations ?? 0) * samplingRatio;
       const cost = estimateCost(inTok, outTok, pricing);
       const existing = byAgent.get(r.agent);
       if (existing) {
-        existing.invocations += r.invocations ?? 0;
+        existing.invocations += invocations;
         existing.inputTokens += inTok;
         existing.outputTokens += outTok;
         existing.tokens += inTok + outTok;
@@ -62,7 +68,7 @@ export const useAgentCosts = (): UseAgentCostsResult => {
       } else {
         byAgent.set(r.agent, {
           agent: r.agent,
-          invocations: r.invocations ?? 0,
+          invocations,
           inputTokens: inTok,
           outputTokens: outTok,
           tokens: inTok + outTok,
@@ -79,5 +85,5 @@ export const useAgentCosts = (): UseAgentCostsResult => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading]);
+  }, [data, isLoading, error, servicesLoading, samplingRatio]);
 };
