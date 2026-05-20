@@ -47,6 +47,17 @@ const arcPath = (
   ].join(" ");
 };
 
+/**
+ * Defined CSS custom property guaranteed to resolve in every theme. Used as
+ * the final fallback in the slice-color chain so no slice can ever render
+ * white because of a typo'd or missing color token.
+ */
+const SAFE_FALLBACK_FILL = "var(--blue)";
+
+/** Resolve a slice color, falling through known defaults. */
+const safeFill = (color: string | undefined | null): string =>
+  color && color.trim().length > 0 ? color : SAFE_FALLBACK_FILL;
+
 export const Donut = ({
   slices,
   centerValue,
@@ -77,7 +88,7 @@ export const Donut = ({
         <svg width={size} height={size} role="img" aria-label="Provider mix">
           <circle cx={cx} cy={cy} r={r} fill="var(--surface-2)" />
           {arcs.map(({ slice, d }) =>
-            d ? <path key={slice.key} d={d} fill={slice.color} /> : null,
+            d ? <path key={slice.key} d={d} fill={safeFill(slice.color)} /> : null,
           )}
           <circle cx={cx} cy={cy} r={rInner} fill="var(--surface)" />
         </svg>
@@ -123,7 +134,7 @@ export const Donut = ({
                   width: 10,
                   height: 10,
                   borderRadius: 2,
-                  background: s.color,
+                  background: safeFill(s.color),
                   flex: "0 0 auto",
                 }}
               />

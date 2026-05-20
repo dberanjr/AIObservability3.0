@@ -46,7 +46,11 @@ export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) 
         {result.isLoading ? (
           <Skeleton style={{ height: 180 }} />
         ) : (
-          <Histogram bars={bars} height={180} />
+          <Histogram
+            bars={bars}
+            height={180}
+            valueFormatter={(n) => `${fmtCount(n)} req`}
+          />
         )}
       </Flex>
     </Surface>

@@ -41,18 +41,21 @@ const isKnownProvider = (p: string): p is ProviderId =>
 
 /**
  * Distinct fallback palette for non-canonical providers (custom proxies,
- * tenant-specific names like "sierra", etc.). Picked from Strato tokens that
- * don't collide with the canonical PROVIDER_COLOR entries.
+ * tenant-specific names like "sierra", etc.). Every entry MUST resolve to a
+ * defined CSS custom property in ui/app/theme/tokens.ts — otherwise the SVG
+ * fill falls back to the browser default and slices render white.
+ *
+ * Selected from the brand palette, avoiding the tokens already mapped to
+ * canonical providers in detection/attributes.ts so unknowns don't visually
+ * collide with known vendors.
  */
 const FALLBACK_PALETTE = [
-  "var(--magenta)",
-  "var(--teal)",
-  "var(--orange)",
-  "var(--lime)",
-  "var(--indigo)",
   "var(--pink)",
-  "var(--yellow)",
+  "var(--blue-pale)",
+  "var(--green-lime)",
+  "var(--purple-dark)",
   "var(--red)",
+  "var(--purple)",
 ] as const;
 
 /**

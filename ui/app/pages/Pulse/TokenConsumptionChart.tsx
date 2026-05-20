@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -6,11 +6,34 @@ import { AreaChart } from "../../components/charts/AreaChart";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import type { UseTokenConsumptionResult } from "./useTokenConsumption";
 
+/**
+ * Build a friendly "Xm ago" / "Xh ago" label for each timeseries bucket so
+ * the AreaChart cursor tooltip can show where in the window the cursor sits.
+ */
+const buildRelativeLabels = (
+  pointCount: number,
+  intervalMs: number,
+): string[] => {
+  const totalMs = pointCount * intervalMs;
+  return Array.from({ length: pointCount }, (_, i) => {
+    const agoMs = totalMs - i * intervalMs;
+    if (agoMs < 60_000) return "just now";
+    if (agoMs < 3_600_000) return `${Math.round(agoMs / 60_000)}m ago`;
+    if (agoMs < 86_400_000) return `${Math.round(agoMs / 3_600_000)}h ago`;
+    return `${Math.round(agoMs / 86_400_000)}d ago`;
+  });
+};
+
 export interface TokenConsumptionChartProps {
   result: UseTokenConsumptionResult;
 }
 
 export const TokenConsumptionChart = ({ result }: TokenConsumptionChartProps) => {
+  const xLabels = useMemo(
+    () => buildRelativeLabels(result.points.length, result.intervalMs),
+    [result.points.length, result.intervalMs],
+  );
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
@@ -44,6 +67,7 @@ export const TokenConsumptionChart = ({ result }: TokenConsumptionChartProps) =>
             height={220}
             formatLeft={(n) => fmtTokens(n)}
             formatRight={(n) => fmtUSDCompact(n)}
+            xLabels={xLabels}
             series={[
               {
                 label: "Tokens",

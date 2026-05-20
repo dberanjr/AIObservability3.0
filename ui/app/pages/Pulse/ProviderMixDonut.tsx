@@ -4,7 +4,7 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Donut } from "../../components/charts/Donut";
 import type { DonutSlice } from "../../components/charts/Donut";
-import { fmtCount } from "../../data/format";
+import { fmtCountCompact } from "../../data/format";
 import type { UseProviderMixResult } from "./useProviderMix";
 
 export interface ProviderMixDonutProps {
@@ -41,7 +41,7 @@ export const ProviderMixDonut = ({ result }: ProviderMixDonutProps) => {
         ) : (
           <Donut
             slices={slices}
-            centerValue={fmtCount(result.totalRequests)}
+            centerValue={fmtCountCompact(result.totalRequests)}
             centerLabel="requests"
           />
         )}

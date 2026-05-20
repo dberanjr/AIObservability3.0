@@ -66,7 +66,12 @@ const Tile = ({ label, value, sub, spark }: TileProps) => (
       )}
       {spark && spark.values.length > 1 && (
         <div style={{ marginTop: "auto" }}>
-          <Sparkline values={spark.values} color={spark.color} height={24} />
+          <Sparkline
+            values={spark.values}
+            color={spark.color}
+            height={24}
+            valueFormatter={fmtTokens}
+          />
         </div>
       )}
     </Flex>

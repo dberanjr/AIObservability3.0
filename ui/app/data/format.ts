@@ -64,3 +64,17 @@ export const fmtCount = (n: unknown): string => {
   if (num == null) return "—";
   return Math.round(num).toLocaleString();
 };
+
+/**
+ * Short-form count (e.g. 77.01M, 2.68M, 1.5k) for tight spaces like donut
+ * centers and tile values where the full comma-separated number would
+ * overflow.
+ */
+export const fmtCountCompact = (n: unknown): string => {
+  const num = finite(n);
+  if (num == null) return "—";
+  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(2)}B`;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
+  return Math.round(num).toLocaleString();
+};

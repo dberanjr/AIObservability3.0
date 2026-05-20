@@ -28,7 +28,13 @@ export interface UseTokenConsumptionResult {
   error?: Error;
 }
 
-const TARGET_BUCKETS = 60;
+/**
+ * Bucket count for the token-consumption series. Higher value = finer
+ * granularity (smaller per-bucket time slice). Clamped against a 60-second
+ * floor below, so very short timeframes don't try to bucket below the limit
+ * Grail allows for `makeTimeseries`.
+ */
+const TARGET_BUCKETS = 240;
 
 const parseScopeMs = (from: string): number => {
   const m = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
