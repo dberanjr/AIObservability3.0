@@ -1,0 +1,116 @@
+import { dqlEscape, scopeFilterClause } from "../../scope/queries";
+import type { Timeframe } from "../../scope/types";
+
+const to = (tf: Timeframe): string => tf.to ?? "now()";
+
+/**
+ * Per-prompt rows for the Stream / Metadata views. Reads a small set of
+ * canonical attribute paths; falls back to coalesce when teams emit either
+ * `gen_ai.prompt.0.content` or `gen_ai.prompt.content`. Sampled to 200 rows.
+ */
+export const buildPromptsListQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+| fieldsAdd
+    kind = if(isNotNull(gen_ai.provider.name), "LLM", else: "Agent"),
+    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
+    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    duration_ms = duration / 1000000,
+    prompt_text = coalesce(
+      gen_ai.prompt.0.content,
+      gen_ai.prompt.content,
+      gen_ai.prompt,
+      ""
+    ),
+    response_text = coalesce(
+      gen_ai.completion.0.content,
+      gen_ai.response.content,
+      gen_ai.completion,
+      ""
+    ),
+    pii_detected = coalesce(toBoolean(gen_ai.privacy.pii_detected), false),
+    has_warning = coalesce(toBoolean(gen_ai.response.warning), false),
+    has_error = if(isNotNull(exception.type), true, else: false),
+    type_label = coalesce(gen_ai.operation.name, gen_ai.kind, "completion")
+| fields
+    timestamp,
+    kind,
+    type_label,
+    service = entityName(dt.entity.service),
+    service_id = dt.entity.service,
+    model = gen_ai.request.model,
+    agent = gen_ai.agent.name,
+    in_tok,
+    out_tok,
+    duration_ms,
+    prompt_text,
+    response_text,
+    pii_detected,
+    has_warning,
+    has_error,
+    trace_id = trace.id,
+    span_id = span.id
+| sort timestamp desc
+| limit 200
+`.trim();
+
+/**
+ * Aggregate counts/averages for the 6-tile summary row.
+ */
+export const buildPromptsSummaryQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+| fieldsAdd
+    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
+    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    pii = if(coalesce(toBoolean(gen_ai.privacy.pii_detected), false), 1, else: 0),
+    warn = if(coalesce(toBoolean(gen_ai.response.warning), false), 1, else: 0),
+    err = if(isNotNull(exception.type), 1, else: 0)
+| summarize
+    total = count(),
+    avg_duration_ms = avg(duration) / 1000000,
+    avg_input_tokens = avg(in_tok),
+    avg_output_tokens = avg(out_tok),
+    pii_detected = sum(pii),
+    warnings = sum(warn),
+    errors = sum(err)
+`.trim();
+
+/**
+ * Eval coverage + averages for the Prompt quality analytics section.
+ * Returns NULL averages when the attribute isn't present — the UI surfaces
+ * the empty-with-attribute-name guidance in that case.
+ */
+export const buildPromptQualityQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name)
+| fieldsAdd
+    has_halluc = if(isNotNull(gen_ai.evaluation.hallucination), 1, else: 0),
+    has_correct = if(isNotNull(gen_ai.evaluation.correctness), 1, else: 0),
+    has_faith = if(isNotNull(gen_ai.evaluation.faithfulness), 1, else: 0),
+    has_rel = if(isNotNull(gen_ai.evaluation.relevance), 1, else: 0)
+| summarize
+    total = count(),
+    hallucination_pct = avg(toDouble(gen_ai.evaluation.hallucination)) * 100,
+    correctness_pct = avg(toDouble(gen_ai.evaluation.correctness)) * 100,
+    faithfulness_pct = avg(toDouble(gen_ai.evaluation.faithfulness)) * 100,
+    relevance_pct = avg(toDouble(gen_ai.evaluation.relevance)) * 100,
+    with_halluc = sum(has_halluc),
+    with_correct = sum(has_correct),
+    with_faith = sum(has_faith),
+    with_rel = sum(has_rel)
+`.trim();
+
+void dqlEscape;

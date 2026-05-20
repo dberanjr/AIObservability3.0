@@ -3,12 +3,23 @@
   "environmentUrl": "https://ualpre.apps.dynatrace.com/",
   "app": {
     "name": "AI Observability 3.0 App",
-    "version": "0.0.0",
-    "description": "A starting project with routing, fetching data, and charting",
+    "version": "0.0.21",
+    "description": "End-to-end observability for agentic AI workloads",
     "id": "my.ai.observability.3.0.app",
     "scopes": [
-      { "name": "storage:logs:read", "comment": "default template" },
-      { "name": "storage:buckets:read", "comment": "default template" }
+      { "name": "storage:logs:read",         "comment": "Read application logs for guardrail and error detection" },
+      { "name": "storage:metrics:read",      "comment": "Read metrics for Pulse reliability score and forecasting" },
+      { "name": "storage:spans:read",        "comment": "Read spans for agent, tool, model, and prompt analysis" },
+      { "name": "storage:bizevents:read",    "comment": "Read business events for evaluation scores" },
+      { "name": "storage:events:read",       "comment": "Read Davis problems (dt.davis.problems) for reliability score open-problems component" },
+      { "name": "storage:entities:read",     "comment": "Resolve AppCI entity IDs and service names" },
+      { "name": "storage:lookups:read",      "comment": "Lookup CMDB entities for scope resolution" },
+      { "name": "storage:buckets:read",      "comment": "Required by Grail for bucket-level access to spans/events/logs/metrics tables" },
+      { "name": "davis:analyzers:execute",   "comment": "Run Davis AI analyzers for token-usage forecasting" },
+      { "name": "app-settings:objects:read", "comment": "Read per-user settings (privacy mode, pricing overrides, column config)" },
+      { "name": "app-settings:objects:write","comment": "Persist per-user settings changes" },
+      { "name": "state:user-app-states:read",  "comment": "Read per-user persisted state (scan limit, SLA thresholds, privacy mode)" },
+      { "name": "state:user-app-states:write", "comment": "Persist per-user state changes" }
     ]
   }
 }

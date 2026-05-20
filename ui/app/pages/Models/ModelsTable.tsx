@@ -1,0 +1,446 @@
+import React, { useMemo, useState } from "react";
+import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Skeleton } from "@dynatrace/strato-components/content";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+} from "@dynatrace/strato-icons";
+import {
+  fmtCount,
+  fmtMs,
+  fmtPercent,
+  fmtTokens,
+  fmtUSD,
+} from "../../data/format";
+import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
+
+type SortKey =
+  | "model"
+  | "requests"
+  | "inputTokens"
+  | "outputTokens"
+  | "avgMs"
+  | "p95Ms"
+  | "p99Ms"
+  | "errorRatePct"
+  | "timeoutRatePct"
+  | "tokensPerSec"
+  | "contextUtilizationPct"
+  | "cost"
+  | "costPerMTok";
+
+interface Column {
+  id: string;
+  label: string;
+  width?: number;
+  align?: "left" | "right";
+  sortBy?: SortKey;
+}
+
+const COLS: Column[] = [
+  { id: "model", label: "Model", sortBy: "model" },
+  { id: "type", label: "Type", width: 100 },
+  { id: "provider", label: "Provider", width: 130 },
+  { id: "req", label: "Req", width: 80, align: "right", sortBy: "requests" },
+  { id: "in", label: "In tok", width: 80, align: "right", sortBy: "inputTokens" },
+  { id: "out", label: "Out tok", width: 80, align: "right", sortBy: "outputTokens" },
+  { id: "ctx", label: "Ctx util", width: 110, sortBy: "contextUtilizationPct" },
+  { id: "tps", label: "Tok/s", width: 80, align: "right", sortBy: "tokensPerSec" },
+  { id: "avg", label: "Avg", width: 80, align: "right", sortBy: "avgMs" },
+  { id: "p95", label: "P95", width: 80, align: "right", sortBy: "p95Ms" },
+  { id: "p99", label: "P99", width: 80, align: "right", sortBy: "p99Ms" },
+  { id: "err", label: "Err", width: 70, align: "right", sortBy: "errorRatePct" },
+  { id: "timeout", label: "Timeout", width: 80, align: "right", sortBy: "timeoutRatePct" },
+  { id: "cost", label: "Cost", width: 90, align: "right", sortBy: "cost" },
+  { id: "per1m", label: "$/1M", width: 90, align: "right", sortBy: "costPerMTok" },
+];
+
+const ProviderChip = ({ model }: { model: ModelRow }) => (
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 4,
+      padding: "2px 8px",
+      borderRadius: 999,
+      border: `1px solid color-mix(in oklab, ${model.providerColor} 50%, transparent)`,
+      background: "transparent",
+      fontSize: 11,
+      color: model.providerColor,
+      fontWeight: 600,
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+    }}
+  >
+    <span
+      aria-hidden
+      style={{
+        width: 5,
+        height: 5,
+        borderRadius: "50%",
+        background: model.providerColor,
+      }}
+    />
+    {model.provider.label}
+  </span>
+);
+
+const TypeChip = ({ model }: { model: ModelRow }) => (
+  <span
+    title={
+      model.typeInferredFromName ? "Inferred from model name" : undefined
+    }
+    style={{
+      padding: "2px 8px",
+      borderRadius: 999,
+      background: "var(--surface-3)",
+      fontSize: 11,
+      color: "var(--text-2)",
+    }}
+  >
+    {MODEL_TYPE_LABEL[model.type]}
+    {model.typeInferredFromName && (
+      <span style={{ marginLeft: 4, color: "var(--text-4)" }}>·</span>
+    )}
+  </span>
+);
+
+const ContextUtilBar = ({ model }: { model: ModelRow }) => {
+  if (model.contextUtilizationPct == null) {
+    return (
+      <Text
+        style={{
+          fontSize: 11.5,
+          color: "var(--text-4)",
+          fontFamily: "var(--mono, monospace)",
+        }}
+      >
+        —
+      </Text>
+    );
+  }
+  const pct = Math.min(100, Math.max(0, model.contextUtilizationPct));
+  const color =
+    pct < 40 ? "var(--green-2)" : pct < 80 ? "var(--amber)" : "var(--red)";
+  return (
+    <Flex flexDirection="column" gap={2} style={{ width: "100%" }}>
+      <div
+        style={{
+          position: "relative",
+          height: 6,
+          width: "100%",
+          background: "var(--surface-3)",
+          borderRadius: 999,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${pct.toFixed(1)}%`,
+            height: "100%",
+            background: color,
+          }}
+        />
+      </div>
+      <Text
+        style={{
+          fontSize: 11,
+          color: "var(--text-2)",
+          fontVariantNumeric: "tabular-nums",
+          fontFamily: "var(--mono, monospace)",
+        }}
+      >
+        {fmtPercent(model.contextUtilizationPct, 0)}
+      </Text>
+    </Flex>
+  );
+};
+
+const Cell = ({
+  children,
+  width,
+  align,
+  mono,
+  color,
+  style,
+}: {
+  children: React.ReactNode;
+  width?: number;
+  align?: "left" | "right";
+  mono?: boolean;
+  color?: string;
+  style?: React.CSSProperties;
+}) => (
+  <div
+    style={{
+      flex: width ? "0 0 auto" : 1,
+      width,
+      minWidth: 0,
+      textAlign: align,
+      padding: "8px 6px",
+      fontSize: 12.5,
+      color: color ?? "var(--text)",
+      fontFamily: mono ? "var(--mono, monospace)" : undefined,
+      fontVariantNumeric: mono ? "tabular-nums" : undefined,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      ...style,
+    }}
+  >
+    {children}
+  </div>
+);
+
+const costColor = (perMTok: number): string | undefined => {
+  if (perMTok > 0 && perMTok < 2) return "var(--green-2)";
+  if (perMTok > 20) return "var(--red)";
+  return undefined;
+};
+
+export interface ModelsTableProps {
+  models: ModelRow[];
+  isLoading: boolean;
+}
+
+export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
+    key: "requests",
+    dir: "desc",
+  });
+
+  const sorted = useMemo(() => {
+    const copy = [...models];
+    copy.sort((a, b) => {
+      const k = sort.key;
+      if (k === "model") {
+        const cmp = a.model.localeCompare(b.model);
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
+      const av = (a[k] as number | null | undefined) ?? 0;
+      const bv = (b[k] as number | null | undefined) ?? 0;
+      const cmp = av - bv;
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    return copy;
+  }, [models, sort]);
+
+  const toggleSort = (key: SortKey) =>
+    setSort((current) =>
+      current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "desc" },
+    );
+
+  return (
+    <Surface elevation="raised" padding={0}>
+      <Flex flexDirection="column" gap={0}>
+        <Flex
+          alignItems="center"
+          justifyContent="space-between"
+          style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
+        >
+          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+            All models
+          </Heading>
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            {models.length} {models.length === 1 ? "model" : "models"}
+          </Text>
+        </Flex>
+
+        <Flex
+          alignItems="center"
+          style={{ padding: "0 10px", borderBottom: "1px solid var(--border)" }}
+        >
+          {COLS.map((c) => {
+            const active = c.sortBy && sort.key === c.sortBy;
+            const Arrow =
+              active && sort.dir === "asc" ? ChevronUpIcon : ChevronDownIcon;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={!c.sortBy}
+                onClick={() => c.sortBy && toggleSort(c.sortBy)}
+                style={{
+                  all: "unset",
+                  cursor: c.sortBy ? "pointer" : "default",
+                  flex: c.width ? "0 0 auto" : 1,
+                  width: c.width,
+                  textAlign: c.align,
+                  padding: "8px 6px",
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: active ? "var(--text)" : "var(--text-3)",
+                }}
+              >
+                <Flex
+                  alignItems="center"
+                  justifyContent={
+                    c.align === "right" ? "flex-end" : "flex-start"
+                  }
+                  gap={2}
+                >
+                  {c.label}
+                  {active && <Arrow size={12} />}
+                </Flex>
+              </button>
+            );
+          })}
+        </Flex>
+
+        {isLoading && sorted.length === 0 ? (
+          <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} style={{ height: 36 }} />
+            ))}
+          </Flex>
+        ) : sorted.length === 0 ? (
+          <Flex style={{ padding: "32px 16px" }}>
+            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+              No models match the current filter.
+            </Text>
+          </Flex>
+        ) : (
+          sorted.map((m) => (
+            <div
+              key={m.modelKey}
+              role="row"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "0 10px",
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <Cell mono>{m.model}</Cell>
+              <Cell width={100}>
+                <TypeChip model={m} />
+              </Cell>
+              <Cell width={130}>
+                <ProviderChip model={m} />
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {fmtCount(m.requests)}
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {fmtTokens(m.inputTokens)}
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {fmtTokens(m.outputTokens)}
+              </Cell>
+              <Cell width={110}>
+                <ContextUtilBar model={m} />
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {m.tokensPerSec == null ? (
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--text-4)",
+                      fontFamily: "var(--mono, monospace)",
+                    }}
+                  >
+                    —
+                  </Text>
+                ) : (
+                  Math.round(m.tokensPerSec).toLocaleString()
+                )}
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {fmtMs(m.avgMs)}
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {fmtMs(m.p95Ms)}
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {fmtMs(m.p99Ms)}
+              </Cell>
+              <Cell
+                width={70}
+                align="right"
+                mono
+                color={m.errorRatePct > 5 ? "var(--red)" : undefined}
+              >
+                {m.errors > 0 ? fmtPercent(m.errorRatePct) : "0%"}
+              </Cell>
+              <Cell width={80} align="right" mono>
+                {m.hasTimeoutAttribute ? (
+                  m.timeouts > 0 ? (
+                    fmtPercent(m.timeoutRatePct, 2)
+                  ) : (
+                    "0%"
+                  )
+                ) : (
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--text-4)",
+                      fontFamily: "var(--mono, monospace)",
+                    }}
+                    title="span.status_code not set on this model's spans"
+                  >
+                    —
+                  </Text>
+                )}
+              </Cell>
+              <Cell width={90} align="right" mono>
+                {m.pricingUnknown ? (
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--text-4)",
+                      fontFamily: "var(--mono, monospace)",
+                    }}
+                  >
+                    —
+                  </Text>
+                ) : (
+                  fmtUSD(m.cost)
+                )}
+              </Cell>
+              <Cell
+                width={90}
+                align="right"
+                mono
+                color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
+              >
+                {m.pricingUnknown ? (
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--text-4)",
+                      fontFamily: "var(--mono, monospace)",
+                    }}
+                  >
+                    —
+                  </Text>
+                ) : (
+                  fmtUSD(m.costPerMTok)
+                )}
+              </Cell>
+            </div>
+          ))
+        )}
+
+        <Flex
+          style={{
+            padding: "10px 16px",
+            borderTop: "1px solid var(--border)",
+            background: "var(--surface-2)",
+          }}
+        >
+          <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
+            $/1M coloured green &lt; $2, red &gt; $20. Context util = avg input
+            tokens / model context window from{" "}
+            <code>data/pricing.ts</code> (green &lt; 40%, amber 40–80%, red &gt;
+            80%). Tokens/sec shows "—" for embedding models.
+          </Text>
+        </Flex>
+      </Flex>
+    </Surface>
+  );
+};
