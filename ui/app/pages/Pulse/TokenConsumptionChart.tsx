@@ -8,10 +8,9 @@ import type { UseTokenConsumptionResult } from "./useTokenConsumption";
 import type { UseTokenForecastResult } from "./useTokenForecast";
 
 /**
- * Build a friendly "Xm ago" / "Xh ago" label for each timeseries bucket so
- * the AreaChart cursor tooltip can show where in the window the cursor sits.
- * Includes forecast positions when present — those are labelled as "Xm
- * ahead" / "Xh ahead".
+ * Build labels for every bucket on the combined (history + forecast) axis.
+ * Historical positions get "Xm ago" / "Xh ago"; forecast positions get
+ * "+Xm" / "+Xh" so the cursor tooltip stays oriented.
  */
 const buildLabels = (
   historicalCount: number,
@@ -51,26 +50,20 @@ export const TokenConsumptionChart = ({
 }: TokenConsumptionChartProps) => {
   const historicalTokens = result.points.map((p) => p.tokens);
   const historicalCosts = result.points.map((p) => p.estCost);
-
-  // When the forecast is on, align history to the same length the forecast
-  // produced — its `forecastStartIdx` is the historical length the analyzer
-  // saw, which we re-use so the chart axes match.
+  const histLen = historicalTokens.length;
   const fc = forecast.forecast;
-  const histLen =
-    forecastEnabled && fc ? fc.forecastStartIdx : historicalTokens.length;
-  const forecastLen =
-    forecastEnabled && fc ? fc.values.length - fc.forecastStartIdx : 0;
+  const forecastLen = forecastEnabled && fc ? fc.values.length : 0;
 
-  const padOrTrim = (src: number[], targetLen: number): number[] => {
-    if (src.length === targetLen) return src;
-    if (src.length > targetLen) return src.slice(src.length - targetLen);
-    return new Array(targetLen - src.length).fill(0).concat(src);
-  };
-  const tokensAligned = padOrTrim(historicalTokens, histLen).concat(
-    new Array(forecastLen).fill(0),
+  // Append zero-tails so the historical series and the forecast share the
+  // same x-axis length. Forecast band itself is null-padded so it only
+  // appears to the right of the divider.
+  const tokensCombined = useMemo(
+    () => historicalTokens.concat(new Array(forecastLen).fill(0)),
+    [historicalTokens, forecastLen],
   );
-  const costsAligned = padOrTrim(historicalCosts, histLen).concat(
-    new Array(forecastLen).fill(0),
+  const costsCombined = useMemo(
+    () => historicalCosts.concat(new Array(forecastLen).fill(0)),
+    [historicalCosts, forecastLen],
   );
 
   const xLabels = useMemo(
@@ -78,18 +71,19 @@ export const TokenConsumptionChart = ({
     [histLen, result.intervalMs, forecastLen],
   );
 
-  const forecastBand: ForecastBand | undefined =
-    forecastEnabled && fc
-      ? {
-          values: fc.values,
-          lower: fc.lower,
-          upper: fc.upper,
-          startIdx: fc.forecastStartIdx,
-          color: "var(--purple-2)",
-          label: "Forecast",
-          axis: "left",
-        }
-      : undefined;
+  const forecastBand: ForecastBand | undefined = useMemo(() => {
+    if (!forecastEnabled || !fc || histLen === 0) return undefined;
+    const leadingNulls = new Array<number | null>(histLen).fill(null);
+    return {
+      values: leadingNulls.concat(fc.values),
+      lower: leadingNulls.concat(fc.lower),
+      upper: leadingNulls.concat(fc.upper),
+      startIdx: histLen,
+      color: "var(--purple-2)",
+      label: "Forecast",
+      axis: "left",
+    };
+  }, [forecastEnabled, fc, histLen]);
 
   return (
     <Surface elevation="raised" padding={16}>
@@ -137,13 +131,13 @@ export const TokenConsumptionChart = ({
               {
                 label: "Tokens",
                 color: "var(--blue)",
-                values: tokensAligned,
+                values: tokensCombined,
                 axis: "left",
               },
               {
                 label: "Est. cost",
                 color: "var(--purple)",
-                values: costsAligned,
+                values: costsCombined,
                 axis: "right",
                 dashed: true,
               },
@@ -185,7 +179,7 @@ const ForecastToggle = ({
       title={
         error
           ? `Forecast error: ${error.message}`
-          : "Predict the next 30% of the timeframe using Dynatrace Intelligence (GenericForecastAnalyzer). Forecast always reads unsampled data."
+          : "Predict the next ~30% of the timeframe using Dynatrace Intelligence (GenericForecastAnalyzer). Forecast always reads unsampled data."
       }
       style={{
         all: "unset",
