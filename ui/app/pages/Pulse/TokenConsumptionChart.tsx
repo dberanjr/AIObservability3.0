@@ -2,7 +2,11 @@ import React, { useMemo } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { AreaChart, type ForecastBand } from "../../components/charts/AreaChart";
+import {
+  AreaChart,
+  type AxisTick,
+  type ForecastBand,
+} from "../../components/charts/AreaChart";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import type { UseTokenConsumptionResult } from "./useTokenConsumption";
 import type { UseTokenForecastResult } from "./useTokenForecast";
@@ -35,6 +39,39 @@ const buildLabels = (
   return out;
 };
 
+/**
+ * Pick `targetCount` evenly-spaced bucket indices for x-axis tick labels.
+ * Format depends on the total span: time-of-day for <=24h windows,
+ * month/day-with-time for multi-day windows.
+ */
+const buildAxisTicks = (
+  historicalCount: number,
+  intervalMs: number,
+  forecastCount: number,
+  targetCount = 6,
+): AxisTick[] => {
+  const totalBuckets = historicalCount + forecastCount;
+  if (totalBuckets < 2) return [];
+  const now = Date.now();
+  // Bucket i corresponds to: now - (historicalCount - i) * intervalMs.
+  // Forecast bucket j (j >= historicalCount) is in the future.
+  const totalSpanMs = totalBuckets * intervalMs;
+  const multiDay = totalSpanMs >= 24 * 60 * 60 * 1000;
+  const tsFmt = new Intl.DateTimeFormat(undefined, {
+    ...(multiDay
+      ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+      : { hour: "numeric", minute: "2-digit" }),
+  });
+  const ticks: AxisTick[] = [];
+  for (let k = 0; k < targetCount; k++) {
+    const index = Math.round((k / (targetCount - 1)) * (totalBuckets - 1));
+    const offsetFromNowMs = (index - historicalCount) * intervalMs;
+    const ts = now + offsetFromNowMs;
+    ticks.push({ index, label: tsFmt.format(new Date(ts)) });
+  }
+  return ticks;
+};
+
 export interface TokenConsumptionChartProps {
   result: UseTokenConsumptionResult;
   forecast: UseTokenForecastResult;
@@ -54,20 +91,32 @@ export const TokenConsumptionChart = ({
   const fc = forecast.forecast;
   const forecastLen = forecastEnabled && fc ? fc.values.length : 0;
 
-  // Append zero-tails so the historical series and the forecast share the
-  // same x-axis length. Forecast band itself is null-padded so it only
-  // appears to the right of the divider.
-  const tokensCombined = useMemo(
-    () => historicalTokens.concat(new Array(forecastLen).fill(0)),
+  // Null-pad the historical series into forecast positions so the cursor
+  // tooltip skips them (a `0` padding would show a misleading "Tokens 0"
+  // / "Est. cost $0" line in the forecast region) and the line/area don't
+  // draw a flat tail across the divider.
+  const tokensCombined = useMemo<(number | null)[]>(
+    () =>
+      (historicalTokens as (number | null)[]).concat(
+        new Array(forecastLen).fill(null),
+      ),
     [historicalTokens, forecastLen],
   );
-  const costsCombined = useMemo(
-    () => historicalCosts.concat(new Array(forecastLen).fill(0)),
+  const costsCombined = useMemo<(number | null)[]>(
+    () =>
+      (historicalCosts as (number | null)[]).concat(
+        new Array(forecastLen).fill(null),
+      ),
     [historicalCosts, forecastLen],
   );
 
   const xLabels = useMemo(
     () => buildLabels(histLen, result.intervalMs, forecastLen),
+    [histLen, result.intervalMs, forecastLen],
+  );
+
+  const axisTicks = useMemo(
+    () => buildAxisTicks(histLen, result.intervalMs, forecastLen, 6),
     [histLen, result.intervalMs, forecastLen],
   );
 
@@ -126,6 +175,7 @@ export const TokenConsumptionChart = ({
             formatLeft={(n) => fmtTokens(n)}
             formatRight={(n) => fmtUSDCompact(n)}
             xLabels={xLabels}
+            axisTicks={axisTicks}
             forecast={forecastBand}
             series={[
               {

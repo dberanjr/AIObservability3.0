@@ -1,12 +1,24 @@
 import React, { useRef, useState } from "react";
 
 export interface AreaSeries {
-  values: number[];
+  /**
+   * Per-bucket value. Use `null` for positions where the series should not
+   * render (e.g. historical-only series padded into forecast positions).
+   * Nulls break the line and area paths and are skipped in the tooltip and
+   * y-axis scaling.
+   */
+  values: (number | null)[];
   color: string;
   label: string;
   dashed?: boolean;
   /** Right-axis series share x grid with left-axis. Used for the cost overlay. */
   axis?: "left" | "right";
+}
+
+/** One labelled x-axis tick. `index` is the bucket position in the series. */
+export interface AxisTick {
+  index: number;
+  label: string;
 }
 
 export interface ForecastBand {
@@ -35,6 +47,11 @@ export interface AreaChartProps {
   formatRight?: (n: number) => string;
   /** Per-bucket x-axis labels — shown in the cursor tooltip when present. */
   xLabels?: string[];
+  /**
+   * Sparse axis ticks rendered along the bottom edge of the chart.
+   * Indices reference positions in the series. Typically 4–8 ticks.
+   */
+  axisTicks?: AxisTick[];
   /** Optional forecast overlay rendered to the right of the historical data. */
   forecast?: ForecastBand;
 }
@@ -69,6 +86,7 @@ export const AreaChart = ({
   formatLeft,
   formatRight,
   xLabels,
+  axisTicks,
   forecast,
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -85,13 +103,14 @@ export const AreaChart = ({
       forecast?.values.length ?? 0,
     ) || 1;
 
-  // Helpers so the forecast band participates in the y-axis scaling.
+  // Skip nulls when scanning series/forecast for the y-axis max so a
+  // null-padded series doesn't NaN-poison the scale.
   const finiteMax = (arr: (number | null)[]): number =>
     arr.reduce<number>((acc, v) => (v != null && v > acc ? v : acc), 0);
 
   const leftMax = niceMax(
     Math.max(
-      leftSeries.reduce((acc, s) => Math.max(acc, ...s.values, 0), 0),
+      leftSeries.reduce((acc, s) => Math.max(acc, finiteMax(s.values)), 0),
       forecast && forecastAxis === "left"
         ? Math.max(finiteMax(forecast.upper), finiteMax(forecast.values))
         : 0,
@@ -99,7 +118,7 @@ export const AreaChart = ({
   );
   const rightMax = niceMax(
     Math.max(
-      rightSeries.reduce((acc, s) => Math.max(acc, ...s.values, 0), 0),
+      rightSeries.reduce((acc, s) => Math.max(acc, finiteMax(s.values)), 0),
       forecast && forecastAxis === "right"
         ? Math.max(finiteMax(forecast.upper), finiteMax(forecast.values))
         : 0,
@@ -110,22 +129,59 @@ export const AreaChart = ({
   const innerH = height - PAD_T - PAD_B;
   const step = length > 1 ? innerW / (length - 1) : 0;
 
-  const mkPath = (values: number[], max: number) => {
+  // Build an SVG path that breaks across null gaps so a null-padded series
+  // doesn't draw a connecting line through the empty region.
+  const mkPath = (values: (number | null)[], max: number) => {
     if (values.length === 0 || max <= 0) return "";
-    return values
-      .map((v, i) => {
-        const x = PAD_L + i * step;
-        const y = PAD_T + innerH - (v / max) * innerH;
-        return `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(" ");
+    const segments: string[] = [];
+    let inSegment = false;
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (v == null || !Number.isFinite(v)) {
+        inSegment = false;
+        continue;
+      }
+      const x = PAD_L + i * step;
+      const y = PAD_T + innerH - (v / max) * innerH;
+      segments.push(`${inSegment ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`);
+      inSegment = true;
+    }
+    return segments.join(" ");
   };
 
-  const mkArea = (values: number[], max: number) => {
+  // Area fills one polygon per contiguous non-null segment so the gradient
+  // doesn't bleed across nulls.
+  const mkArea = (values: (number | null)[], max: number) => {
     if (values.length === 0 || max <= 0) return "";
-    const path = mkPath(values, max);
-    const last = `L${(PAD_L + (values.length - 1) * step).toFixed(2)},${PAD_T + innerH} L${PAD_L},${PAD_T + innerH} Z`;
-    return `${path} ${last}`;
+    const polys: string[] = [];
+    let segStart = -1;
+    const flush = (endIdx: number) => {
+      if (segStart < 0) return;
+      const pts: string[] = [];
+      for (let i = segStart; i <= endIdx; i++) {
+        const v = values[i] as number;
+        const x = PAD_L + i * step;
+        const y = PAD_T + innerH - (v / max) * innerH;
+        pts.push(`${i === segStart ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`);
+      }
+      const baseY = PAD_T + innerH;
+      const xEnd = PAD_L + endIdx * step;
+      const xStart = PAD_L + segStart * step;
+      polys.push(
+        `${pts.join(" ")} L${xEnd.toFixed(2)},${baseY} L${xStart.toFixed(2)},${baseY} Z`,
+      );
+      segStart = -1;
+    };
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (v == null || !Number.isFinite(v)) {
+        if (segStart >= 0) flush(i - 1);
+        continue;
+      }
+      if (segStart < 0) segStart = i;
+    }
+    if (segStart >= 0) flush(values.length - 1);
+    return polys.join(" ");
   };
 
   const yTicks = Array.from({ length: yTickCount + 1 }, (_, i) => i / yTickCount);
@@ -205,6 +261,42 @@ export const AreaChart = ({
               {formatRight ? formatRight(rightMax * t) : Math.round(rightMax * t)}
             </text>
           ))}
+
+        {axisTicks?.map((tick) => {
+          const x = PAD_L + tick.index * step;
+          if (x < PAD_L || x > VIEW_W - PAD_R) return null;
+          // Edge-anchor the first and last labels so they don't get clipped
+          // by the chart frame.
+          const anchor: "start" | "middle" | "end" =
+            tick.index === 0
+              ? "start"
+              : tick.index === length - 1
+                ? "end"
+                : "middle";
+          return (
+            <g key={`xt-${tick.index}`}>
+              <line
+                x1={x}
+                x2={x}
+                y1={PAD_T + innerH}
+                y2={PAD_T + innerH + 3}
+                stroke="var(--text-3)"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+              <text
+                x={x}
+                y={PAD_T + innerH + 14}
+                fontSize={9}
+                textAnchor={anchor}
+                fill="var(--text-3)"
+                fontFamily="var(--mono, monospace)"
+              >
+                {tick.label}
+              </text>
+            </g>
+          );
+        })}
 
         {leftSeries.map((s, i) => (
           <path
