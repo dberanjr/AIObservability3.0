@@ -12,7 +12,7 @@ export const buildPromptsListQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | fieldsAdd
@@ -65,7 +65,7 @@ export const buildPromptsSummaryQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | fieldsAdd
@@ -93,7 +93,7 @@ export const buildPromptQualityQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | fieldsAdd

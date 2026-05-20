@@ -53,7 +53,6 @@ export const PulsePage = () => {
         style={{ padding: "18px 20px 80px" }}
       >
         {firstError && <ErrorBanner error={firstError} />}
-        <PlatformHealthCard health={health} />
         <SummaryTilesRow summary={summary} />
         <AnomalyPanel
           anomalies={anomalies}
@@ -75,6 +74,7 @@ export const PulsePage = () => {
           <TokenConsumptionChart result={tokenSeries} />
           <ActivityHistogramPanel result={histogram} />
         </div>
+        <PlatformHealthCard health={health} />
         <div
           style={{
             display: "grid",

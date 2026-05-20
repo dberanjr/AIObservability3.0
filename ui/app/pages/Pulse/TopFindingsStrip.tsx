@@ -40,11 +40,11 @@ export const TopFindingsStrip = ({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+              gridTemplateColumns: `repeat(${MAX_CARDS}, minmax(0, 1fr))`,
               gap: 10,
             }}
           >
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: MAX_CARDS }).map((_, i) => (
               <Skeleton key={i} style={{ height: 110, borderRadius: 10 }} />
             ))}
           </div>
@@ -56,7 +56,7 @@ export const TopFindingsStrip = ({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: `repeat(${Math.min(cards.length, MAX_CARDS)}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${MAX_CARDS}, minmax(0, 1fr))`,
               gap: 10,
             }}
           >

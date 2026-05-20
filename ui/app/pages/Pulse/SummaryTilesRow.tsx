@@ -21,8 +21,21 @@ interface TileProps {
 }
 
 const Tile = ({ label, value, sub, spark }: TileProps) => (
-  <Surface elevation="raised" padding={12} style={{ minWidth: 0 }}>
-    <Flex flexDirection="column" gap={6} style={{ minWidth: 0 }}>
+  <Surface
+    elevation="raised"
+    padding={12}
+    style={{
+      minWidth: 0,
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+    }}
+  >
+    <Flex
+      flexDirection="column"
+      gap={6}
+      style={{ minWidth: 0, flexGrow: 1, height: "100%" }}
+    >
       <Text
         style={{
           fontSize: 10.5,
@@ -52,7 +65,9 @@ const Tile = ({ label, value, sub, spark }: TileProps) => (
         <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>
       )}
       {spark && spark.values.length > 1 && (
-        <Sparkline values={spark.values} color={spark.color} height={24} />
+        <div style={{ marginTop: "auto" }}>
+          <Sparkline values={spark.values} color={spark.color} height={24} />
+        </div>
       )}
     </Flex>
   </Surface>

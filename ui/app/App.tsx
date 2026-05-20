@@ -14,12 +14,14 @@ import { PulsePage } from "./pages/Pulse/PulsePage";
 import { ToolsPage } from "./pages/Tools/ToolsPage";
 import { TopologyPage } from "./pages/Topology/TopologyPage";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
+import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
 import { ScopeProvider } from "./scope/ScopeContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 
 export const App = () => {
   return (
+    <SamplingProvider>
     <ScanLimitProvider>
     <ScopeProvider>
       <ThemeStyles />
@@ -57,5 +59,6 @@ export const App = () => {
       </Page>
     </ScopeProvider>
     </ScanLimitProvider>
+    </SamplingProvider>
   );
 };

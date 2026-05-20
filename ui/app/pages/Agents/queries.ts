@@ -20,7 +20,7 @@ export const buildAgentsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | fieldsAdd
@@ -64,7 +64,7 @@ export const buildAgentEvalQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | fieldsAdd
@@ -88,7 +88,7 @@ export const buildUpstreamServicesQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | filter isNotNull(parent.service.name)
@@ -106,7 +106,7 @@ export const buildInvocationsSeriesQuery = (
   timeframe: Timeframe,
   intervalSec: number,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | makeTimeseries invocations = count(), interval: ${intervalSec}s
@@ -122,7 +122,7 @@ export const buildDegradedTrendQuery = (
 ): string => {
   if (topAgents.length === 0) {
     return `
-fetch spans, from: now()-24h, scanLimitGBytes: 100
+fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 100
 | filter false
 | summarize n = count()
 `.trim();
@@ -131,7 +131,7 @@ fetch spans, from: now()-24h, scanLimitGBytes: 100
     .map((n) => `"${dqlEscape(n)}"`)
     .join(", ");
   return `
-fetch spans, from: now()-24h, to: now(), scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter in(gen_ai.agent.name, array(${agentArray}))
 | makeTimeseries

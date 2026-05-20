@@ -13,7 +13,7 @@ export const buildModelsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd

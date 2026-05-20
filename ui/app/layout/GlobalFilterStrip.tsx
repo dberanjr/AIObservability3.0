@@ -10,6 +10,7 @@ import { useApplicationOptions } from "../scope/useApplicationOptions";
 import { ENV_OPTIONS, TIME_PRESETS } from "../scope/types";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
 import { ScanLimitSegmented } from "./ScanLimitSegmented";
+import { SamplingSegmented } from "./SamplingSegmented";
 
 const ALL_APPLICATIONS = "__all__";
 const ALL_ENVS = "__all__";
@@ -154,6 +155,8 @@ export const GlobalFilterStrip = () => {
         </LabeledField>
 
         <Flex flexGrow={1} />
+
+        <SamplingSegmented />
 
         <ScanLimitSegmented />
 

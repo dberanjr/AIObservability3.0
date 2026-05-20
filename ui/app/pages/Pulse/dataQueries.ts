@@ -11,7 +11,7 @@ export const buildSummaryQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | fieldsAdd
@@ -45,7 +45,7 @@ export const buildAgentCostQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | filter isNotNull(gen_ai.usage.input_tokens) or isNotNull(gen_ai.usage.output_tokens)
@@ -71,7 +71,7 @@ export const buildTokenSeriesQuery = (
   timeframe: Timeframe,
   intervalSec: number,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries
@@ -86,7 +86,7 @@ ${scopeFilterClause(serviceIds)}
 export const buildActivityHistogramQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, from: now()-24h, to: now(), scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries requests = count(), interval: 1h
@@ -100,7 +100,7 @@ export const buildProviderMixQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | summarize

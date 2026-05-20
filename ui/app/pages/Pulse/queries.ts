@@ -11,7 +11,7 @@ export const buildOperationalQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
 | fieldsAdd is_error = if(isNotNull(exception.type), 1, else: 0)
@@ -30,7 +30,7 @@ export const buildQualityPresenceQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | fieldsAdd has_eval = if(
@@ -54,7 +54,7 @@ export const buildCostQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | summarize
@@ -67,7 +67,7 @@ ${scopeFilterClause(serviceIds)}
 export const buildCostBaselineQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, from: now()-7d, to: now(), scanLimitGBytes: 1000
+fetch spans, samplingRatio: 1, from: now()-7d, to: now(), scanLimitGBytes: 1000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | summarize

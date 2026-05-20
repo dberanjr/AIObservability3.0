@@ -10,7 +10,7 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
 export const buildDailyTokensQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, from: now()-7d, to: now(), scanLimitGBytes: 1000
+fetch spans, samplingRatio: 1, from: now()-7d, to: now(), scanLimitGBytes: 1000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd
@@ -31,7 +31,7 @@ export const buildServiceCostBreakdownQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd

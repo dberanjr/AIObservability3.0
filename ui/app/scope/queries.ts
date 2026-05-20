@@ -76,7 +76,7 @@ export const buildAgentCountQuery = (
 ): string => {
   const toClause = timeframe.to ?? "now()";
   return `
-fetch spans, from: ${timeframe.from}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause}, scanLimitGBytes: 200
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | summarize agents = countDistinct(gen_ai.agent.name)
@@ -89,7 +89,7 @@ export const buildToolCountQuery = (
 ): string => {
   const toClause = timeframe.to ?? "now()";
   return `
-fetch spans, from: ${timeframe.from}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause}, scanLimitGBytes: 200
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.tool.name)
 | summarize tools = countDistinct(gen_ai.tool.name)
@@ -98,7 +98,7 @@ ${scopeFilterClause(serviceIds)}
 
 /** Cheap distinct-services count used by the status line in fleet-wide mode. */
 export const FLEET_SERVICE_COUNT_QUERY = `
-fetch spans, from: now()-24h, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 200
 | filter isNotNull(gen_ai.provider.name)
 | summarize services = countDistinct(dt.entity.service)
 `.trim();
