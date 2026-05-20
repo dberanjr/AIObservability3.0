@@ -9,6 +9,24 @@ export interface AreaSeries {
   axis?: "left" | "right";
 }
 
+export interface ForecastBand {
+  /**
+   * Forecast point series, aligned to the same index space as the chart's
+   * primary series. Leading historical positions should be `null` so the
+   * forecast renders only on the right edge.
+   */
+  values: (number | null)[];
+  /** Lower confidence-band values (null-padded same as `values`). */
+  lower: (number | null)[];
+  /** Upper confidence-band values (null-padded same as `values`). */
+  upper: (number | null)[];
+  /** Index where forecast begins — used to draw the "now" divider. */
+  startIdx: number;
+  color: string;
+  label?: string;
+  axis?: "left" | "right";
+}
+
 export interface AreaChartProps {
   series: AreaSeries[];
   height?: number;
@@ -17,6 +35,8 @@ export interface AreaChartProps {
   formatRight?: (n: number) => string;
   /** Per-bucket x-axis labels — shown in the cursor tooltip when present. */
   xLabels?: string[];
+  /** Optional forecast overlay rendered to the right of the historical data. */
+  forecast?: ForecastBand;
 }
 
 const VIEW_W = 600;
@@ -49,6 +69,7 @@ export const AreaChart = ({
   formatLeft,
   formatRight,
   xLabels,
+  forecast,
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -56,19 +77,32 @@ export const AreaChart = ({
 
   const leftSeries = series.filter((s) => (s.axis ?? "left") === "left");
   const rightSeries = series.filter((s) => s.axis === "right");
+  const forecastAxis = forecast?.axis ?? "left";
   const length =
-    Math.max(0, ...series.map((s) => s.values.length)) || 1;
+    Math.max(
+      0,
+      ...series.map((s) => s.values.length),
+      forecast?.values.length ?? 0,
+    ) || 1;
+
+  // Helpers so the forecast band participates in the y-axis scaling.
+  const finiteMax = (arr: (number | null)[]): number =>
+    arr.reduce<number>((acc, v) => (v != null && v > acc ? v : acc), 0);
 
   const leftMax = niceMax(
-    leftSeries.reduce(
-      (acc, s) => Math.max(acc, ...s.values, 0),
-      0,
+    Math.max(
+      leftSeries.reduce((acc, s) => Math.max(acc, ...s.values, 0), 0),
+      forecast && forecastAxis === "left"
+        ? Math.max(finiteMax(forecast.upper), finiteMax(forecast.values))
+        : 0,
     ),
   );
   const rightMax = niceMax(
-    rightSeries.reduce(
-      (acc, s) => Math.max(acc, ...s.values, 0),
-      0,
+    Math.max(
+      rightSeries.reduce((acc, s) => Math.max(acc, ...s.values, 0), 0),
+      forecast && forecastAxis === "right"
+        ? Math.max(finiteMax(forecast.upper), finiteMax(forecast.values))
+        : 0,
     ),
   );
 
@@ -208,6 +242,95 @@ export const AreaChart = ({
           />
         ))}
 
+        {forecast &&
+          (() => {
+            const maxForAxis = forecastAxis === "right" ? rightMax : leftMax;
+            if (maxForAxis <= 0) return null;
+
+            // Confidence band polygon — upper edge forward, lower edge back.
+            const upperPts: string[] = [];
+            const lowerPts: string[] = [];
+            for (let i = 0; i < forecast.values.length; i++) {
+              const u = forecast.upper[i];
+              const l = forecast.lower[i];
+              if (u == null || l == null) continue;
+              const x = PAD_L + i * step;
+              upperPts.push(
+                `${x.toFixed(2)},${(
+                  PAD_T +
+                  innerH -
+                  (u / maxForAxis) * innerH
+                ).toFixed(2)}`,
+              );
+              lowerPts.push(
+                `${x.toFixed(2)},${(
+                  PAD_T +
+                  innerH -
+                  (l / maxForAxis) * innerH
+                ).toFixed(2)}`,
+              );
+            }
+            const bandPath =
+              upperPts.length > 0 && lowerPts.length > 0
+                ? `M${upperPts.join(" L")} L${lowerPts.reverse().join(" L")} Z`
+                : "";
+
+            const forecastPath = forecast.values
+              .map((v, i) => {
+                if (v == null) return null;
+                const x = PAD_L + i * step;
+                const y = PAD_T + innerH - (v / maxForAxis) * innerH;
+                return `${x.toFixed(2)},${y.toFixed(2)}`;
+              })
+              .filter((p): p is string => p !== null);
+            const linePath =
+              forecastPath.length > 0
+                ? `M${forecastPath.join(" L")}`
+                : "";
+
+            const dividerX = PAD_L + forecast.startIdx * step;
+
+            return (
+              <g>
+                {bandPath && (
+                  <path d={bandPath} fill={forecast.color} opacity={0.18} />
+                )}
+                {linePath && (
+                  <path
+                    d={linePath}
+                    fill="none"
+                    stroke={forecast.color}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                <line
+                  x1={dividerX}
+                  x2={dividerX}
+                  y1={PAD_T}
+                  y2={PAD_T + innerH}
+                  stroke="var(--text-3)"
+                  strokeWidth={1}
+                  strokeDasharray="3 2"
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.6}
+                />
+                <text
+                  x={dividerX + 4}
+                  y={PAD_T + 10}
+                  fontSize={9}
+                  fill="var(--text-3)"
+                  fontFamily="var(--mono, monospace)"
+                >
+                  now
+                </text>
+              </g>
+            );
+          })()}
+
         {hoverIdx != null && (
           <>
             <line
@@ -315,6 +438,51 @@ export const AreaChart = ({
               </div>
             );
           })}
+          {forecast &&
+            (() => {
+              const v = forecast.values[hoverIdx];
+              if (v == null) return null;
+              const fmt =
+                (forecastAxis === "right" ? formatRight : formatLeft) ??
+                ((n: number) => String(Math.round(n)));
+              const lo = forecast.lower[hoverIdx];
+              const hi = forecast.upper[hoverIdx];
+              return (
+                <>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 2,
+                        background: forecast.color,
+                        flex: "0 0 auto",
+                      }}
+                    />
+                    <span style={{ color: "var(--text-3)" }}>
+                      {forecast.label ?? "Forecast"}
+                    </span>
+                    <span style={{ fontWeight: 600, marginLeft: "auto" }}>
+                      {fmt(v)}
+                    </span>
+                  </div>
+                  {lo != null && hi != null && (
+                    <div
+                      style={{
+                        color: "var(--text-3)",
+                        fontSize: 10,
+                        textAlign: "right",
+                      }}
+                    >
+                      band {fmt(lo)} – {fmt(hi)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
         </div>
       )}
     </div>

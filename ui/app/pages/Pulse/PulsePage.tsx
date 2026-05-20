@@ -20,12 +20,19 @@ import { useProviderMix } from "./useProviderMix";
 import { usePulseHealth } from "./usePulseHealth";
 import { usePulseSummary } from "./usePulseSummary";
 import { useTokenConsumption } from "./useTokenConsumption";
+import { useTokenForecast } from "./useTokenForecast";
+import { usePersistedState } from "../../state/usePersistedState";
 
 export const PulsePage = () => {
   const health = usePulseHealth();
   const summary = usePulseSummary();
   const agentCosts = useAgentCosts();
   const tokenSeries = useTokenConsumption();
+  const [forecastEnabled, setForecastEnabled] = usePersistedState<boolean>(
+    "ai-obs.pulse.forecast-enabled",
+    false,
+  );
+  const tokenForecast = useTokenForecast(forecastEnabled);
   const histogram = useActivityHistogram();
   const providerMix = useProviderMix();
   const { anomalies, isLoading: anomaliesLoading, error: anomaliesError } =
@@ -71,7 +78,12 @@ export const PulsePage = () => {
             gap: 16,
           }}
         >
-          <TokenConsumptionChart result={tokenSeries} />
+          <TokenConsumptionChart
+            result={tokenSeries}
+            forecast={tokenForecast}
+            forecastEnabled={forecastEnabled}
+            onToggleForecast={setForecastEnabled}
+          />
           <ActivityHistogramPanel result={histogram} />
         </div>
         <PlatformHealthCard health={health} />
