@@ -1,4 +1,5 @@
 import { Page } from "@dynatrace/strato-components-preview/layouts";
+import { SegmentsProvider } from "@dynatrace/strato-components/filters";
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 import { Data } from "./pages/Data";
@@ -21,6 +22,7 @@ import { ThemeStyles } from "./theme/ThemeStyles";
 
 export const App = () => {
   return (
+    <SegmentsProvider>
     <SamplingProvider>
     <ScanLimitProvider>
     <ScopeProvider>
@@ -60,5 +62,6 @@ export const App = () => {
     </ScopeProvider>
     </ScanLimitProvider>
     </SamplingProvider>
+    </SegmentsProvider>
   );
 };

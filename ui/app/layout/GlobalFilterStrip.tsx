@@ -3,6 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Select } from "@dynatrace/strato-components/forms";
+import { SegmentSelector } from "@dynatrace/strato-components/filters";
 import { ResetIcon } from "@dynatrace/strato-icons";
 import { useScope } from "../scope/ScopeContext";
 import { useAppCiOptions } from "../scope/useAppCiOptions";
@@ -152,6 +153,10 @@ export const GlobalFilterStrip = () => {
               ))}
             </Select.Content>
           </Select>
+        </LabeledField>
+
+        <LabeledField label="Segments">
+          <SegmentSelector variant="compact" />
         </LabeledField>
 
         <Flex flexGrow={1} />

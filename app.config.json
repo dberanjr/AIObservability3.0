@@ -3,7 +3,7 @@
   "environmentUrl": "https://ualpre.apps.dynatrace.com/",
   "app": {
     "name": "AI Observability 3.0 App",
-    "version": "0.0.27",
+    "version": "0.0.28",
     "description": "End-to-end observability for agentic AI workloads",
     "id": "my.ai.observability.3.0.app",
     "scopes": [
@@ -19,7 +19,8 @@
       { "name": "app-settings:objects:read", "comment": "Read per-user settings (privacy mode, pricing overrides, column config)" },
       { "name": "app-settings:objects:write","comment": "Persist per-user settings changes" },
       { "name": "state:user-app-states:read",  "comment": "Read per-user persisted state (scan limit, SLA thresholds, privacy mode)" },
-      { "name": "state:user-app-states:write", "comment": "Persist per-user state changes" }
+      { "name": "state:user-app-states:write", "comment": "Persist per-user state changes" },
+      { "name": "storage:filter-segments:read", "comment": "Read tenant-defined filter segments to apply as scope filters" }
     ]
   }
 }
