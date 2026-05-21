@@ -4,6 +4,8 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import {
   useTweaks,
   type Accent,
+  type ChartCurve,
+  type ChartLabels,
   type ChartStyle,
   type Density,
   type Theme,
@@ -159,11 +161,25 @@ const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
   { value: "pink", label: "pink" },
   { value: "amber", label: "amber" },
   { value: "red", label: "red" },
+  { value: "indigo", label: "indigo" },
+  { value: "lime", label: "lime" },
+  { value: "gray", label: "gray" },
 ];
 const CHART_STYLE_OPTIONS: SegmentOption<ChartStyle>[] = [
   { value: "line", label: "line" },
   { value: "area", label: "area" },
   { value: "gradient", label: "gradient" },
+];
+const CHART_CURVE_OPTIONS: SegmentOption<ChartCurve>[] = [
+  { value: "linear", label: "linear" },
+  { value: "smooth", label: "smooth" },
+];
+const CHART_LABELS_OPTIONS: SegmentOption<ChartLabels>[] = [
+  { value: "none", label: "none" },
+  { value: "peak", label: "peak" },
+  { value: "minmedmax", label: "min/med/max" },
+  { value: "interesting", label: "interesting" },
+  { value: "all", label: "all" },
 ];
 
 /**
@@ -178,6 +194,9 @@ const ACCENT_SWATCH: Record<Accent, string> = {
   pink: "#E436FF",
   amber: "#B45F06",
   red: "#C0291E",
+  indigo: "#4635D6",
+  lime: "#BDDF28",
+  gray: "#5a5b62",
 };
 
 export const TweaksPanel = () => {
@@ -306,6 +325,26 @@ export const TweaksPanel = () => {
                 options={CHART_STYLE_OPTIONS}
                 value={t.chartStyle}
                 onChange={t.setChartStyle}
+              />
+            </Flex>
+
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Curve</FieldLabel>
+              <Segmented
+                ariaLabel="Chart curve"
+                options={CHART_CURVE_OPTIONS}
+                value={t.chartCurve}
+                onChange={t.setChartCurve}
+              />
+            </Flex>
+
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Value labels</FieldLabel>
+              <Segmented
+                ariaLabel="Chart value labels"
+                options={CHART_LABELS_OPTIONS}
+                value={t.chartLabels}
+                onChange={t.setChartLabels}
               />
             </Flex>
           </Flex>

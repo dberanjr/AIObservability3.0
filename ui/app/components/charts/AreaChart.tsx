@@ -1,5 +1,64 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { useTweaks } from "../../tweaks/TweaksContext";
+import { useTweaks, type ChartLabels } from "../../tweaks/TweaksContext";
+
+/**
+ * Decide which series indices get an inline value label based on the user's
+ * Tweaks pick. Indices reference the original `values` array (nulls passed
+ * through transparently). Capped at ~12 labels in `all` mode so a dense
+ * series doesn't overlap labels into illegibility.
+ */
+const pickLabelIndices = (
+  values: (number | null)[],
+  mode: ChartLabels,
+): number[] => {
+  if (mode === "none") return [];
+  const finite = values
+    .map((v, i) => ({ v, i }))
+    .filter(
+      (p): p is { v: number; i: number } =>
+        p.v != null && Number.isFinite(p.v),
+    );
+  if (finite.length === 0) return [];
+
+  if (mode === "peak") {
+    return [finite.reduce((a, b) => (b.v > a.v ? b : a)).i];
+  }
+  if (mode === "minmedmax") {
+    const sorted = [...finite].sort((a, b) => a.v - b.v);
+    return [
+      sorted[0].i,
+      sorted[Math.floor(sorted.length / 2)].i,
+      sorted[sorted.length - 1].i,
+    ];
+  }
+  if (mode === "interesting") {
+    // Local maxima above 1.3× the series mean. Falls back to the global max
+    // when nothing crosses the threshold.
+    const mean = finite.reduce((s, p) => s + p.v, 0) / finite.length;
+    const thr = mean * 1.3;
+    const out: number[] = [];
+    for (let k = 1; k < finite.length - 1; k++) {
+      if (
+        finite[k].v > thr &&
+        finite[k].v > finite[k - 1].v &&
+        finite[k].v > finite[k + 1].v
+      ) {
+        out.push(finite[k].i);
+      }
+    }
+    if (out.length === 0) {
+      out.push(finite.reduce((a, b) => (b.v > a.v ? b : a)).i);
+    }
+    return out;
+  }
+  // "all" — cap at 12 evenly-spaced labels.
+  const cap = 12;
+  if (finite.length <= cap) return finite.map((p) => p.i);
+  const stride = Math.max(1, Math.round(finite.length / cap));
+  const out: number[] = [];
+  for (let k = 0; k < finite.length; k += stride) out.push(finite[k].i);
+  return out;
+};
 
 export interface AreaSeries {
   /**
@@ -133,9 +192,10 @@ export const AreaChart = ({
   const [brush, setBrush] = useState<{ startPx: number; endPx: number } | null>(
     null,
   );
-  const { chartStyle } = useTweaks();
+  const { chartStyle, chartCurve, chartLabels } = useTweaks();
   const gradientId = useId();
   const brushable = Boolean(xDomain && onBrushSelect);
+  const smooth = chartCurve === "smooth";
 
   // Track the container's actual pixel width so the SVG viewBox matches
   // 1:1 and text doesn't get stretched by aspect-ratio scaling.
@@ -188,59 +248,77 @@ export const AreaChart = ({
   const innerH = height - PAD_T - PAD_B;
   const step = length > 1 ? innerW / (length - 1) : 0;
 
-  // Build an SVG path that breaks across null gaps so a null-padded series
-  // doesn't draw a connecting line through the empty region.
-  const mkPath = (values: (number | null)[], max: number) => {
-    if (values.length === 0 || max <= 0) return "";
-    const segments: string[] = [];
-    let inSegment = false;
+  // Group values into contiguous non-null segments of {x,y} points.
+  // Shared by mkPath / mkArea so they handle null gaps identically.
+  const collectSegments = (
+    values: (number | null)[],
+    max: number,
+  ): Array<Array<{ x: number; y: number }>> => {
+    const out: Array<Array<{ x: number; y: number }>> = [];
+    let cur: Array<{ x: number; y: number }> = [];
     for (let i = 0; i < values.length; i++) {
       const v = values[i];
       if (v == null || !Number.isFinite(v)) {
-        inSegment = false;
+        if (cur.length > 0) {
+          out.push(cur);
+          cur = [];
+        }
         continue;
       }
-      const x = PAD_L + i * step;
-      const y = PAD_T + innerH - (v / max) * innerH;
-      segments.push(`${inSegment ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`);
-      inSegment = true;
+      cur.push({
+        x: PAD_L + i * step,
+        y: PAD_T + innerH - (v / max) * innerH,
+      });
     }
-    return segments.join(" ");
+    if (cur.length > 0) out.push(cur);
+    return out;
+  };
+
+  // Cubic Bezier with symmetric tangent control points. Smoothing factor
+  // 0.2 follows the d3 monotone-cubic feel without overshoot at peaks.
+  const SMOOTHING = 0.2;
+  const linePathFromPts = (pts: Array<{ x: number; y: number }>): string => {
+    if (pts.length === 0) return "";
+    if (!smooth || pts.length === 1) {
+      return pts
+        .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`)
+        .join(" ");
+    }
+    let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 2] ?? pts[i - 1];
+      const p1 = pts[i - 1];
+      const p2 = pts[i];
+      const p3 = pts[i + 1] ?? pts[i];
+      const cx1 = p1.x + (p2.x - p0.x) * SMOOTHING;
+      const cy1 = p1.y + (p2.y - p0.y) * SMOOTHING;
+      const cx2 = p2.x - (p3.x - p1.x) * SMOOTHING;
+      const cy2 = p2.y - (p3.y - p1.y) * SMOOTHING;
+      d += ` C${cx1.toFixed(2)},${cy1.toFixed(2)} ${cx2.toFixed(2)},${cy2.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`;
+    }
+    return d;
+  };
+
+  const mkPath = (values: (number | null)[], max: number): string => {
+    if (values.length === 0 || max <= 0) return "";
+    return collectSegments(values, max).map(linePathFromPts).join(" ");
   };
 
   // Area fills one polygon per contiguous non-null segment so the gradient
-  // doesn't bleed across nulls.
-  const mkArea = (values: (number | null)[], max: number) => {
+  // doesn't bleed across nulls. Uses the same curve interpolation as mkPath
+  // so the area's top edge matches the stroked line exactly.
+  const mkArea = (values: (number | null)[], max: number): string => {
     if (values.length === 0 || max <= 0) return "";
-    const polys: string[] = [];
-    let segStart = -1;
-    const flush = (endIdx: number) => {
-      if (segStart < 0) return;
-      const pts: string[] = [];
-      for (let i = segStart; i <= endIdx; i++) {
-        const v = values[i] as number;
-        const x = PAD_L + i * step;
-        const y = PAD_T + innerH - (v / max) * innerH;
-        pts.push(`${i === segStart ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`);
-      }
-      const baseY = PAD_T + innerH;
-      const xEnd = PAD_L + endIdx * step;
-      const xStart = PAD_L + segStart * step;
-      polys.push(
-        `${pts.join(" ")} L${xEnd.toFixed(2)},${baseY} L${xStart.toFixed(2)},${baseY} Z`,
-      );
-      segStart = -1;
-    };
-    for (let i = 0; i < values.length; i++) {
-      const v = values[i];
-      if (v == null || !Number.isFinite(v)) {
-        if (segStart >= 0) flush(i - 1);
-        continue;
-      }
-      if (segStart < 0) segStart = i;
-    }
-    if (segStart >= 0) flush(values.length - 1);
-    return polys.join(" ");
+    const baseY = PAD_T + innerH;
+    return collectSegments(values, max)
+      .map((pts) => {
+        if (pts.length === 0) return "";
+        const topPath = linePathFromPts(pts);
+        const last = pts[pts.length - 1];
+        const first = pts[0];
+        return `${topPath} L${last.x.toFixed(2)},${baseY} L${first.x.toFixed(2)},${baseY} Z`;
+      })
+      .join(" ");
   };
 
   const yTicks = Array.from({ length: yTickCount + 1 }, (_, i) => i / yTickCount);
@@ -476,6 +554,36 @@ export const AreaChart = ({
             vectorEffect="non-scaling-stroke"
           />
         ))}
+
+        {chartLabels !== "none" &&
+          [...leftSeries, ...rightSeries].map((s) => {
+            const max = (s.axis === "right" ? rightMax : leftMax) || 1;
+            const fmt =
+              (s.axis === "right" ? formatRight : formatLeft) ??
+              ((n: number) => String(Math.round(n)));
+            const indices = pickLabelIndices(s.values, chartLabels);
+            return indices.map((idx) => {
+              const v = s.values[idx];
+              if (v == null) return null;
+              const x = PAD_L + idx * step;
+              const y = PAD_T + innerH - (v / max) * innerH;
+              return (
+                <text
+                  key={`vl-${s.label}-${idx}`}
+                  x={x}
+                  y={y - 4}
+                  fontSize={9}
+                  textAnchor="middle"
+                  fill="var(--text-3)"
+                  opacity={0.7}
+                  fontFamily="var(--mono, monospace)"
+                  pointerEvents="none"
+                >
+                  {fmt(v)}
+                </text>
+              );
+            });
+          })}
 
         {fcList.length > 0 &&
           (() => {

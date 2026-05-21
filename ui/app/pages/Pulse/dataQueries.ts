@@ -7,6 +7,10 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
 /**
  * One row of aggregate signals used by the 9-tile summary row.
  * Tokens (current + spark series), p95 latency, error rate, distinct counts.
+ *
+ * MCP servers/tools are derived from `traceloop.workflow.name` matching
+ * `*.mcp` (the v2 app's proven formula) — canonical OTel `mcp.*`
+ * attributes aren't emitted by the SDKs in this tenant.
  */
 export const buildSummaryQuery = (
   serviceIds: string[] | null,
@@ -18,7 +22,9 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd
     in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
     out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
-    is_error = if(isNotNull(exception.type), 1, else: 0)
+    is_error = if(isNotNull(exception.type), 1, else: 0),
+    mcp_server = if(matchesValue(traceloop.workflow.name, "*.mcp"), traceloop.workflow.name),
+    mcp_tool   = if(matchesValue(traceloop.workflow.name, "*.mcp"), coalesce(gen_ai.tool.name, traceloop.entity.name))
 | summarize
     requests = count(),
     input_tokens = sum(in_tok),
@@ -26,8 +32,8 @@ ${scopeFilterClause(serviceIds)}
     p95_ns = percentile(duration, 95),
     errors = sum(is_error),
     models = countDistinct(gen_ai.request.model),
-    mcp_servers = countDistinct(mcp.server.name),
-    mcp_tools = countDistinct(gen_ai.tool.name)
+    mcp_servers = countDistinct(mcp_server),
+    mcp_tools = countDistinct(mcp_tool)
 | fieldsAdd
     total_tokens = input_tokens + output_tokens,
     p95_ms = p95_ns / 1000000,
@@ -87,7 +93,7 @@ ${scopeFilterClause(serviceIds)}
 export const buildActivityHistogramQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 2000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries requests = count(), interval: 1h
@@ -111,7 +117,10 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Per-MCP-server request counts for the MCP Servers tile donut.
+ * Per-MCP-server request counts for the MCP Servers tile donut. MCP
+ * workflows are identified via traceloop.workflow.name matching `*.mcp`
+ * — that's what the v2 app proved works on this tenant; canonical
+ * `mcp.server.name` isn't emitted by the SDKs in use.
  */
 export const buildMcpServersBreakdownQuery = (
   serviceIds: string[] | null,
@@ -119,14 +128,16 @@ export const buildMcpServersBreakdownQuery = (
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
-| filter isNotNull(mcp.server.name)
-| summarize requests = count(), by: { server = mcp.server.name }
+| filter matchesValue(traceloop.workflow.name, "*.mcp")
+| summarize requests = count(), by: { server = traceloop.workflow.name }
 | sort requests desc
 | limit 12
 `.trim();
 
 /**
- * Per-MCP-tool call counts for the MCP Tools tile donut.
+ * Per-MCP-tool call counts for the MCP Tools tile donut. Uses the same
+ * `*.mcp` workflow guard plus a coalesce to `traceloop.entity.name` for
+ * tools that don't carry an explicit `gen_ai.tool.name`.
  */
 export const buildMcpToolsBreakdownQuery = (
   serviceIds: string[] | null,
@@ -134,8 +145,10 @@ export const buildMcpToolsBreakdownQuery = (
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
-| filter isNotNull(gen_ai.tool.name)
-| summarize calls = count(), by: { tool = gen_ai.tool.name }
+| filter matchesValue(traceloop.workflow.name, "*.mcp")
+| fieldsAdd tool = coalesce(gen_ai.tool.name, traceloop.entity.name)
+| filter isNotNull(tool)
+| summarize calls = count(), by: { tool }
 | sort calls desc
 | limit 12
 `.trim();

@@ -18,8 +18,20 @@ export type Accent =
   | "green"
   | "pink"
   | "amber"
-  | "red";
+  | "red"
+  | "indigo"
+  | "lime"
+  | "gray";
 export type ChartStyle = "line" | "area" | "gradient";
+/** Linear (straight segments) or smooth (cubic Bezier) line interpolation. */
+export type ChartCurve = "linear" | "smooth";
+/** Which data points get an inline value label drawn on the chart. */
+export type ChartLabels =
+  | "none"
+  | "peak"
+  | "minmedmax"
+  | "interesting"
+  | "all";
 
 export interface TweaksState {
   theme: Theme;
@@ -27,6 +39,8 @@ export interface TweaksState {
   tileStyle: TileStyle;
   accent: Accent;
   chartStyle: ChartStyle;
+  chartCurve: ChartCurve;
+  chartLabels: ChartLabels;
 }
 
 export const DEFAULT_TWEAKS: TweaksState = {
@@ -35,6 +49,8 @@ export const DEFAULT_TWEAKS: TweaksState = {
   tileStyle: "card",
   accent: "blue",
   chartStyle: "area",
+  chartCurve: "linear",
+  chartLabels: "none",
 };
 
 export interface TweaksContextValue extends TweaksState {
@@ -43,6 +59,8 @@ export interface TweaksContextValue extends TweaksState {
   setTileStyle: (v: TileStyle) => void;
   setAccent: (v: Accent) => void;
   setChartStyle: (v: ChartStyle) => void;
+  setChartCurve: (v: ChartCurve) => void;
+  setChartLabels: (v: ChartLabels) => void;
   resetTweaks: () => void;
   isPanelOpen: boolean;
   openPanel: () => void;
@@ -92,6 +110,8 @@ export const TweaksProvider = ({
       setTileStyle: merge("tileStyle"),
       setAccent: merge("accent"),
       setChartStyle: merge("chartStyle"),
+      setChartCurve: merge("chartCurve"),
+      setChartLabels: merge("chartLabels"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),
       isPanelOpen,
       openPanel: () => setPanelOpen(true),

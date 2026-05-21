@@ -19,6 +19,10 @@ export const brand = {
   red: "#C0291E",
   intelSoftLight: "#F3ECFB",
   intelSoftDark: "rgba(108, 58, 214, 0.16)",
+  // Medium-dark gray used by the Tweaks "gray" accent. Distinct from the
+  // typography text-* tokens so it can be re-skinned without dragging
+  // labels along with it.
+  gray: "#5a5b62",
 } as const;
 
 export const chartPalette = {
@@ -170,16 +174,27 @@ ${toBlock(darkSurfaces)}
   --shadow-lg: none;
 }
 
-/* ---- Tweaks: tile style ---- */
-:root[data-aiobs-tile="bordered"] [data-aiobs-tile-target] {
+/* ---- Tweaks: tile style ----
+ * Strato Surface renders an outer .strato-surface div plus an inner
+ * .surface-background pseudo-element div that actually carries the
+ * elevation shadow + background. We override the inner element so the
+ * tweak applies to every Surface across the app without each call site
+ * needing to opt in.
+ */
+:root[data-aiobs-tile="bordered"] .strato-surface .surface-background {
   box-shadow: none !important;
-  border: 1px solid var(--border) !important;
-  background: var(--surface) !important;
-}
-:root[data-aiobs-tile="ghost"] [data-aiobs-tile-target] {
-  box-shadow: none !important;
-  border: none !important;
   background: transparent !important;
+}
+:root[data-aiobs-tile="bordered"] .strato-surface {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+:root[data-aiobs-tile="ghost"] .strato-surface .surface-background {
+  box-shadow: none !important;
+  background: transparent !important;
+}
+:root[data-aiobs-tile="ghost"] .strato-surface {
+  border: none;
 }
 
 /* ---- Tweaks: accent — overrides --blue (the primary accent token most
@@ -191,9 +206,12 @@ ${toBlock(darkSurfaces)}
   --purple-2: ${brand.blue};
   --purple: ${brand.bluePurple};
 }
-:root[data-aiobs-accent="cyan"]  { --blue: ${brand.cyan};  --blue-pale: ${brand.bluePale}; }
-:root[data-aiobs-accent="green"] { --blue: ${brand.green}; --blue-pale: ${brand.greenLime}; }
-:root[data-aiobs-accent="pink"]  { --blue: ${brand.pink};  --blue-pale: ${brand.purple}; }
-:root[data-aiobs-accent="amber"] { --blue: ${brand.amber}; --blue-pale: ${brand.red}; }
-:root[data-aiobs-accent="red"]   { --blue: ${brand.red};   --blue-pale: ${brand.amber}; }
+:root[data-aiobs-accent="cyan"]   { --blue: ${brand.cyan};       --blue-pale: ${brand.bluePale}; }
+:root[data-aiobs-accent="green"]  { --blue: ${brand.green};      --blue-pale: ${brand.greenLime}; }
+:root[data-aiobs-accent="pink"]   { --blue: ${brand.pink};       --blue-pale: ${brand.purple}; }
+:root[data-aiobs-accent="amber"]  { --blue: ${brand.amber};      --blue-pale: ${brand.red}; }
+:root[data-aiobs-accent="red"]    { --blue: ${brand.red};        --blue-pale: ${brand.amber}; }
+:root[data-aiobs-accent="indigo"] { --blue: ${brand.bluePurple}; --blue-pale: ${brand.purpleDeep}; }
+:root[data-aiobs-accent="lime"]   { --blue: ${brand.greenLime};  --blue-pale: ${brand.green}; }
+:root[data-aiobs-accent="gray"]   { --blue: ${brand.gray};       --blue-pale: ${brand.gray}; }
 `;
