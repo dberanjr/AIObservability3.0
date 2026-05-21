@@ -58,6 +58,83 @@ ui/app/
 
 Queries live next to the page that owns them. Pure logic (pricing, scoring, classification, formatting) is split out and unit-tested.
 
+## Instrumenting your AI app
+
+The app reads spans your collectors already emit under the OpenTelemetry **GenAI semantic conventions** and the **OpenLLMetry** extensions. If you instrument with the [Traceloop OpenLLMetry SDK](https://github.com/traceloop/openllmetry), the [OpenTelemetry GenAI instrumentations](https://opentelemetry.io/docs/specs/semconv/gen-ai/), or one of the major framework auto-instrumentations (LangChain, LlamaIndex, OpenAI SDK, Anthropic SDK, Bedrock, Vertex), most of these attributes show up for free.
+
+Where two attribute names exist for the same thing (the older OpenLLMetry name and the newer OTel name), the app coalesces both, so either form will populate the UI.
+
+### Provider & model identity
+
+| Attribute | Purpose in the app |
+|---|---|
+| `gen_ai.provider.name` *(preferred)* / `gen_ai.system` | Provider grouping (OpenAI, Anthropic, Bedrock, Vertex…). Bedrock is server-side unwrapped to its underlying vendor. |
+| `gen_ai.request.model` | Requested model. Used for pricing lookup, fan-out analysis, and the Models tab. |
+| `gen_ai.response.model` | Actual model that served the response. Surfaced alongside the request model when they differ. |
+
+### Token usage
+
+| Attribute | Purpose in the app |
+|---|---|
+| `gen_ai.usage.input_tokens` *(OTel)* / `gen_ai.usage.prompt_tokens` *(OpenLLMetry)* | Input tokens. Coalesced — emit either. |
+| `gen_ai.usage.output_tokens` *(OTel)* / `gen_ai.usage.completion_tokens` *(OpenLLMetry)* | Output tokens. Coalesced — emit either. |
+| `gen_ai.usage.total_tokens` *(optional)* | Used as a fallback if neither input nor output is set. |
+| `gen_ai.usage.reasoning_tokens` *(optional)* | Surfaced for reasoning models. |
+
+### Request parameters
+
+| Attribute | Purpose in the app |
+|---|---|
+| `gen_ai.request.max_tokens` | Shown in the Prompts tab; used for budget-overrun detection. |
+| `gen_ai.request.temperature` | Surfaced in prompt detail. |
+| `gen_ai.request.top_p` | Surfaced in prompt detail. |
+| `gen_ai.request.reasoning_effort` | Shown for reasoning models. |
+
+### Operation & agent identity
+
+| Attribute | Purpose in the app |
+|---|---|
+| `gen_ai.operation.name` | Classifies the span (`chat`, `embeddings`, `tool`, `agent`, `task`…). Drives the partitioning between substantive and orchestration work. |
+| `gen_ai.agent.name` | Agent identity in the Agents tab and topology graph. |
+| `gen_ai.agent.id` | Agent disambiguation when multiple agents share a name. |
+| `gen_ai.tool.name` | Tool identity in the Tools tab; used for call-volume and reliability ranking. |
+
+### Workflow / framework context (OpenLLMetry)
+
+| Attribute | Purpose in the app |
+|---|---|
+| `traceloop.workflow.name` | Workflow/task name. The app also uses suffix-matching on `"*.mcp"` to identify MCP-only spans on the Pulse tab. |
+| `traceloop.entity.name` | Entity within a workflow (chain, agent, tool). |
+| `traceloop.span.kind` | One of `workflow` / `task` / `agent` / `tool` / `llm`. |
+| `traceloop.association.properties.*` | Free-form context propagated across spans (user IDs, session IDs, tenant). |
+
+### Prompt & completion content
+
+| Attribute | Purpose in the app |
+|---|---|
+| `gen_ai.prompt.{n}.role` / `gen_ai.prompt.{n}.content` | Rendered in the Prompts tab. Suppressed when per-user **Privacy mode** is enabled. |
+| `gen_ai.completion.{n}.role` / `gen_ai.completion.{n}.content` | Same — model responses rendered side-by-side with prompts. |
+
+### Errors
+
+| Attribute | Purpose in the app |
+|---|---|
+| `error` *(span status)* | Drives the error-rate columns on Agents, Tools, Models. |
+| `exception.type` / `exception.message` | Surfaced in finding cards and the trace drawer. |
+
+### Vector database (RAG)
+
+| Attribute | Purpose in the app |
+|---|---|
+| `db.system` | Vector DB identity (Pinecone, Weaviate, pgvector…). |
+| `db.vector.query.top_k` | Retrieval breadth. |
+| `db.query.embeddings.*` | Embedding query metadata. |
+
+### Reference
+
+- **OpenLLMetry semantic conventions** (Traceloop) — the canonical source for the legacy `prompt_tokens` / `completion_tokens` naming and the `traceloop.*` framework attributes: <https://www.traceloop.com/docs/openllmetry/contributing/semantic-conventions>
+- **OpenTelemetry GenAI semantic conventions** — the upstream spec for `gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.agent.*`, `gen_ai.tool.*`, and the newer `input_tokens` / `output_tokens` naming: <https://opentelemetry.io/docs/specs/semconv/gen-ai/>
+
 ## Requirements
 
 - A Dynatrace tenant on AppEngine with **Grail** enabled.
