@@ -107,8 +107,8 @@ const AccentSwatches = ({ value, onChange }: AccentSwatchesProps) => (
     aria-label="Accent color"
     style={{
       display: "flex",
-      gap: 8,
-      flexWrap: "wrap",
+      gap: 6,
+      flexWrap: "nowrap",
     }}
   >
     {ACCENT_OPTIONS.map((opt) => {
@@ -163,7 +163,10 @@ const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
   { value: "red", label: "red" },
   { value: "indigo", label: "indigo" },
   { value: "lime", label: "lime" },
-  { value: "gray", label: "gray" },
+  { value: "gray25", label: "25% gray" },
+  { value: "gray50", label: "50% gray" },
+  { value: "gray75", label: "75% gray" },
+  { value: "black", label: "black" },
 ];
 const CHART_STYLE_OPTIONS: SegmentOption<ChartStyle>[] = [
   { value: "line", label: "line" },
@@ -177,7 +180,7 @@ const CHART_CURVE_OPTIONS: SegmentOption<ChartCurve>[] = [
 const CHART_LABELS_OPTIONS: SegmentOption<ChartLabels>[] = [
   { value: "none", label: "none" },
   { value: "peak", label: "peak" },
-  { value: "minmedmax", label: "min/med/max" },
+  { value: "minmax", label: "min/max" },
   { value: "interesting", label: "interesting" },
   { value: "all", label: "all" },
 ];
@@ -196,7 +199,10 @@ const ACCENT_SWATCH: Record<Accent, string> = {
   red: "#C0291E",
   indigo: "#4635D6",
   lime: "#BDDF28",
-  gray: "#5a5b62",
+  gray25: "#bfbfbf",
+  gray50: "#808080",
+  gray75: "#404040",
+  black: "#000000",
 };
 
 export const TweaksPanel = () => {
@@ -238,7 +244,9 @@ export const TweaksPanel = () => {
         position: "fixed",
         top: 64,
         right: 16,
-        width: 340,
+        // Wide enough that the 13 accent swatches + 5 value-label segments
+        // each fit on a single line without wrapping.
+        width: 520,
         maxHeight: "calc(100vh - 96px)",
         overflowY: "auto",
         zIndex: 1000,

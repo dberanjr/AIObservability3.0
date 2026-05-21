@@ -21,7 +21,10 @@ export type Accent =
   | "red"
   | "indigo"
   | "lime"
-  | "gray";
+  | "gray25"
+  | "gray50"
+  | "gray75"
+  | "black";
 export type ChartStyle = "line" | "area" | "gradient";
 /** Linear (straight segments) or smooth (cubic Bezier) line interpolation. */
 export type ChartCurve = "linear" | "smooth";
@@ -29,7 +32,7 @@ export type ChartCurve = "linear" | "smooth";
 export type ChartLabels =
   | "none"
   | "peak"
-  | "minmedmax"
+  | "minmax"
   | "interesting"
   | "all";
 

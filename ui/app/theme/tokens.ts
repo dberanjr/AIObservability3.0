@@ -19,10 +19,14 @@ export const brand = {
   red: "#C0291E",
   intelSoftLight: "#F3ECFB",
   intelSoftDark: "rgba(108, 58, 214, 0.16)",
-  // Medium-dark gray used by the Tweaks "gray" accent. Distinct from the
-  // typography text-* tokens so it can be re-skinned without dragging
-  // labels along with it.
-  gray: "#5a5b62",
+  // Four gray steps for the Tweaks gray-accent family. Stepped by 25% K
+  // (CMYK black ink) so each value reads as a deliberate shade rather than
+  // a near-duplicate. Distinct from the typography text-* tokens so they
+  // can be re-skinned as accents without dragging labels along.
+  gray25: "#bfbfbf",
+  gray50: "#808080",
+  gray75: "#404040",
+  black: "#000000",
 } as const;
 
 export const chartPalette = {
@@ -213,5 +217,8 @@ ${toBlock(darkSurfaces)}
 :root[data-aiobs-accent="red"]    { --blue: ${brand.red};        --blue-pale: ${brand.amber}; }
 :root[data-aiobs-accent="indigo"] { --blue: ${brand.bluePurple}; --blue-pale: ${brand.purpleDeep}; }
 :root[data-aiobs-accent="lime"]   { --blue: ${brand.greenLime};  --blue-pale: ${brand.green}; }
-:root[data-aiobs-accent="gray"]   { --blue: ${brand.gray};       --blue-pale: ${brand.gray}; }
+:root[data-aiobs-accent="gray25"] { --blue: ${brand.gray25};     --blue-pale: ${brand.gray50}; }
+:root[data-aiobs-accent="gray50"] { --blue: ${brand.gray50};     --blue-pale: ${brand.gray75}; }
+:root[data-aiobs-accent="gray75"] { --blue: ${brand.gray75};     --blue-pale: ${brand.black}; }
+:root[data-aiobs-accent="black"]  { --blue: ${brand.black};      --blue-pale: ${brand.gray75}; }
 `;

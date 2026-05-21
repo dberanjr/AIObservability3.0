@@ -23,13 +23,9 @@ const pickLabelIndices = (
   if (mode === "peak") {
     return [finite.reduce((a, b) => (b.v > a.v ? b : a)).i];
   }
-  if (mode === "minmedmax") {
+  if (mode === "minmax") {
     const sorted = [...finite].sort((a, b) => a.v - b.v);
-    return [
-      sorted[0].i,
-      sorted[Math.floor(sorted.length / 2)].i,
-      sorted[sorted.length - 1].i,
-    ];
+    return [sorted[0].i, sorted[sorted.length - 1].i];
   }
   if (mode === "interesting") {
     // Local maxima above 1.3× the series mean. Falls back to the global max
@@ -153,7 +149,11 @@ export interface AreaChartProps {
 const FALLBACK_VIEW_W = 600;
 const PAD_L = 44;
 const PAD_R = 44;
-const PAD_T = 12;
+// PAD_T_BASE is the default top padding. When value labels are enabled,
+// PAD_T is bumped to give the label strip its own row above the chart so
+// pills don't sit on top of the top gridline label.
+const PAD_T_BASE = 12;
+const PAD_T_WITH_LABELS = 24;
 const PAD_B = 22;
 
 const niceMax = (max: number): number => {
@@ -245,6 +245,7 @@ export const AreaChart = ({
   );
 
   const innerW = VIEW_W - PAD_L - PAD_R;
+  const PAD_T = chartLabels !== "none" ? PAD_T_WITH_LABELS : PAD_T_BASE;
   const innerH = height - PAD_T - PAD_B;
   const step = length > 1 ? innerW / (length - 1) : 0;
 
@@ -508,7 +509,7 @@ export const AreaChart = ({
                 y2={1}
               >
                 <stop offset="0%" stopColor={s.color} stopOpacity={0.5} />
-                <stop offset="100%" stopColor={s.color} stopOpacity={0.1} />
+                <stop offset="100%" stopColor={s.color} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
@@ -556,34 +557,82 @@ export const AreaChart = ({
         ))}
 
         {chartLabels !== "none" &&
-          [...leftSeries, ...rightSeries].map((s) => {
-            const max = (s.axis === "right" ? rightMax : leftMax) || 1;
-            const fmt =
-              (s.axis === "right" ? formatRight : formatLeft) ??
-              ((n: number) => String(Math.round(n)));
-            const indices = pickLabelIndices(s.values, chartLabels);
-            return indices.map((idx) => {
-              const v = s.values[idx];
-              if (v == null) return null;
-              const x = PAD_L + idx * step;
-              const y = PAD_T + innerH - (v / max) * innerH;
-              return (
+          (() => {
+            // Build a flat list of candidate labels across every series,
+            // then place them above the plot in the PAD_T strip so they
+            // never sit on top of the colored line/area. Drop labels that
+            // would horizontally overlap a previously-placed one — keeps
+            // dense series readable.
+            const FONT_PX = 9;
+            const CHAR_PX = 5.4; // approx char width at 9px monospace
+            const PILL_PAD_X = 3;
+            const PILL_PAD_Y = 1;
+            // Vertical band reserved for labels. Sits inside PAD_T so the
+            // y axis labels and gridlines beneath remain clear.
+            const LABEL_Y = PAD_T - 2;
+
+            type Candidate = {
+              key: string;
+              cx: number;
+              halfW: number;
+              text: string;
+            };
+            const all: Candidate[] = [];
+            for (const s of [...leftSeries, ...rightSeries]) {
+              const fmt =
+                (s.axis === "right" ? formatRight : formatLeft) ??
+                ((n: number) => String(Math.round(n)));
+              const indices = pickLabelIndices(s.values, chartLabels);
+              for (const idx of indices) {
+                const v = s.values[idx];
+                if (v == null) continue;
+                const text = fmt(v);
+                all.push({
+                  key: `vl-${s.label}-${idx}`,
+                  cx: PAD_L + idx * step,
+                  halfW: (text.length * CHAR_PX) / 2 + PILL_PAD_X,
+                  text,
+                });
+              }
+            }
+            // Sort left-to-right and keep only labels that don't overlap
+            // the last accepted one. 4px breathing space between pills.
+            all.sort((a, b) => a.cx - b.cx);
+            const placed: Candidate[] = [];
+            let lastRight = -Infinity;
+            for (const c of all) {
+              if (c.cx - c.halfW < lastRight + 4) continue;
+              placed.push(c);
+              lastRight = c.cx + c.halfW;
+            }
+
+            return placed.map((c) => (
+              <g key={c.key}>
+                {/* Background pill so the text stays readable even when
+                    the chart re-skins to a dark or saturated accent. */}
+                <rect
+                  x={c.cx - c.halfW}
+                  y={LABEL_Y - FONT_PX + PILL_PAD_Y}
+                  width={c.halfW * 2}
+                  height={FONT_PX + PILL_PAD_Y * 2}
+                  rx={3}
+                  fill="var(--surface)"
+                  opacity={0.85}
+                />
                 <text
-                  key={`vl-${s.label}-${idx}`}
-                  x={x}
-                  y={y - 4}
-                  fontSize={9}
+                  x={c.cx}
+                  y={LABEL_Y}
+                  fontSize={FONT_PX}
                   textAnchor="middle"
-                  fill="var(--text-3)"
-                  opacity={0.7}
+                  fill="var(--text-2)"
                   fontFamily="var(--mono, monospace)"
                   pointerEvents="none"
                 >
-                  {fmt(v)}
+                  {c.text}
                 </text>
-              );
-            });
-          })}
+              </g>
+            ));
+          })()}
 
         {fcList.length > 0 &&
           (() => {
