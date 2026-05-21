@@ -159,7 +159,14 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
   const gridStyle: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    // Min width sized to keep all 9 tiles on one row down to ~1200px of
+    // content width (≈1280px viewport with the platform sidebar, which is
+    // about 2/3 of a 1920px desktop). The donut tiles drive the floor:
+    // 96px donut + 12px tile padding on each side = 120px hard minimum;
+    // we bump to 124px so the donut has a little breathing room.
+    // When the row finally wraps, auto-fit guarantees at least 4 tiles
+    // per row down to ~530px content width before wrapping again.
+    gridTemplateColumns: "repeat(auto-fit, minmax(124px, 1fr))",
     gap: 10,
   };
 
