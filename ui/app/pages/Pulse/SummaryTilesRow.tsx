@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../../components/charts/Sparkline";
+import { AreaChart, type AxisTick } from "../../components/charts/AreaChart";
 import {
   MiniDonut,
   MiniPartialDonut,
@@ -293,11 +294,20 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     fmt: (n: number) => string,
   ) =>
     values.length > 1 ? (
-      <Sparkline values={values} color={color} height={24} valueFormatter={fmt} />
+      <Sparkline
+        values={values}
+        color={color}
+        height={24}
+        valueFormatter={fmt}
+        labels={summary.spark.labels}
+      />
     ) : null;
 
-  // Reusable "expanded sparkline" — bigger render plus a stats grid
-  // derived from the same per-bucket series.
+  // Reusable "expanded sparkline" — renders the same series as an
+  // AreaChart at 420px so it inherits y-axis ticks, x-axis date labels,
+  // brush-zoom, and the Tweaks value-label overlay (none/peak/min-max/
+  // interesting/all). Stats grid surfaces total/avg/min/max + the
+  // bucket interval resolution.
   const sparklineExpanded = (
     title: string,
     info: string,
@@ -309,15 +319,36 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     const max = nonZero.length ? Math.max(...nonZero) : 0;
     const sum = values.reduce((a, b) => a + b, 0);
     const avg = values.length ? sum / values.length : 0;
+    const len = values.length;
+
+    // 6 evenly-spaced x-axis ticks across the bucket span. Reuse the
+    // hook-built labels so axis ticks read date+time.
+    const tickCount = 6;
+    const axisTicks: AxisTick[] =
+      len > 1
+        ? Array.from({ length: tickCount }, (_, k) => {
+            const idx = Math.round((k / (tickCount - 1)) * (len - 1));
+            return { index: idx, label: summary.spark.labels[idx] ?? "" };
+          })
+        : [];
+
     return {
       title,
-      subtitle: info,
+      subtitle: `${info} · ${summary.spark.intervalLabel} buckets`,
       body: (
-        <Sparkline
-          values={values}
-          color="var(--blue)"
+        <AreaChart
           height={420}
-          valueFormatter={fmt}
+          formatLeft={fmt}
+          xLabels={summary.spark.labels}
+          axisTicks={axisTicks}
+          series={[
+            {
+              label: title,
+              color: "var(--blue)",
+              values,
+              axis: "left",
+            },
+          ]}
         />
       ),
       stats: [
@@ -325,7 +356,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         { label: "Average", value: fmt(avg) },
         { label: "Min (non-zero)", value: fmt(min) },
         { label: "Max", value: fmt(max) },
-        { label: "Bucket count", value: String(values.length) },
+        { label: "Resolution", value: summary.spark.intervalLabel },
       ],
     };
   };

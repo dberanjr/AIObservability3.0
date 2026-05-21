@@ -87,6 +87,27 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
+ * Counts of distinct MCP servers + tools, run as its own query because
+ * MCP workflow spans don't carry `gen_ai.provider.name` — the main
+ * summary query filters those out, which is why the donut centers used
+ * to show 0 even though the breakdown queries (no GenAI filter) had
+ * data. Splitting the count query keeps the summary lean and avoids a
+ * brittle conditional-aggregate rewrite.
+ */
+export const buildMcpCountQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter matchesValue(traceloop.workflow.name, "*.mcp")
+| fieldsAdd tool = coalesce(gen_ai.tool.name, traceloop.entity.name)
+| summarize
+    mcp_servers = countDistinct(traceloop.workflow.name),
+    mcp_tools   = countDistinct(tool)
+`.trim();
+
+/**
  * Multi-series timeseries used to feed the four summary-tile sparklines
  * (Tokens / Spend / P95 latency / Error rate). Returns four parallel
  * arrays, one bucket per element, all keyed to the same `interval`. The

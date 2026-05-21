@@ -29,5 +29,5 @@ export const TIME_PRESETS: TimePreset[] = [
 ];
 
 export const DEFAULT_SCOPE: Scope = {
-  timeframe: { from: "now()-24h" },
+  timeframe: { from: "now()-1h" },
 };

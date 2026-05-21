@@ -8,6 +8,7 @@ import {
   useSampling,
 } from "../../scope/SamplingContext";
 import {
+  buildMcpCountQuery,
   buildSummaryQuery,
   buildSummarySparkSeriesQuery,
 } from "./dataQueries";
@@ -55,9 +56,20 @@ export interface PulseSummary {
     spend: number[];
     p95Ms: number[];
     errorRatePct: number[];
+    /** Bucket interval in seconds — same for every series above. */
+    intervalSec: number;
+    /** Human label for that interval ("1m" / "5m" / "1h" etc.). */
+    intervalLabel: string;
+    /** Per-bucket date+time string, e.g. "14:30" or "Jan 14 14:30". */
+    labels: string[];
   };
   isLoading: boolean;
   error?: Error;
+}
+
+interface McpCountRecord {
+  mcp_servers?: number;
+  mcp_tools?: number;
 }
 
 /**
@@ -102,6 +114,13 @@ const pickSparkIntervalSec = (totalMs: number): number => {
   return 86400; // 1 day
 };
 
+const formatIntervalLabel = (sec: number): string => {
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m`;
+  if (sec < 86400) return `${Math.round(sec / 3600)}h`;
+  return `${Math.round(sec / 86400)}d`;
+};
+
 /**
  * Cheap blended cost estimate: spend = avg(price) × tokens. We don't have a
  * per-row spend in the summary so we average the headline models. The
@@ -139,6 +158,13 @@ export const usePulseSummary = (): PulseSummary => {
           sparkIntervalSec,
         )
       : "",
+    { enabled: canQuery, staleTime: 60_000 },
+  );
+
+  // MCP server/tool counts are a separate query because the main summary
+  // filters on `gen_ai.provider.name` which excludes MCP-only spans.
+  const mcpCounts = useScopedDql<McpCountRecord>(
+    canQuery ? buildMcpCountQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -199,6 +225,32 @@ export const usePulseSummary = (): PulseSummary => {
       req > 0 ? (errorsSeries[i] / req) * 100 : 0,
     );
 
+    // Per-bucket date+time labels for the sparkline cursor tooltip. The
+    // last bucket lines up with "now"; earlier buckets step back by
+    // intervalMs. Format compresses to HH:MM for short windows and
+    // "MMM dd HH:MM" for multi-day windows.
+    const len = Math.max(
+      tokensSeries.length,
+      p95NsSeries.length,
+      errorsSeries.length,
+      requestsSeries.length,
+    );
+    const intervalMs = sparkIntervalSec * 1000;
+    const totalSpanMs = len * intervalMs;
+    const multiDay = totalSpanMs >= 24 * 60 * 60 * 1000;
+    const tsFmt = new Intl.DateTimeFormat(undefined, {
+      ...(multiDay
+        ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+        : { hour: "numeric", minute: "2-digit" }),
+    });
+    const nowMs = Date.now();
+    const sparkLabels: string[] = [];
+    for (let i = 0; i < len; i++) {
+      const ts = nowMs - (len - 1 - i) * intervalMs;
+      sparkLabels.push(tsFmt.format(new Date(ts)));
+    }
+
+    const mcpRow = mcpCounts.data?.records?.[0];
     return {
       tokens,
       requests,
@@ -207,18 +259,28 @@ export const usePulseSummary = (): PulseSummary => {
       p95Ms: row?.p95_ms ?? null,
       errorRatePct: row?.error_rate_pct ?? null,
       models: row?.models ?? null,
-      mcpServers: row?.mcp_servers ?? null,
-      mcpTools: row?.mcp_tools ?? null,
+      // MCP counts come from a dedicated query that doesn't filter on
+      // gen_ai.provider.name. Fall back to the legacy summary value if
+      // the dedicated query hasn't returned yet.
+      mcpServers: mcpRow?.mcp_servers ?? row?.mcp_servers ?? null,
+      mcpTools: mcpRow?.mcp_tools ?? row?.mcp_tools ?? null,
       tokenEfficiencyPct: row?.token_efficiency_pct ?? null,
       spark: {
         tokens: tokensSeries,
         spend: spendSeries,
         p95Ms: p95MsSeries,
         errorRatePct: errorRateSeries,
+        intervalSec: sparkIntervalSec,
+        intervalLabel: formatIntervalLabel(sparkIntervalSec),
+        labels: sparkLabels,
       },
       isLoading:
-        servicesLoading || summary.isLoading || spark.isLoading,
-      error: summary.error ?? spark.error ?? undefined,
+        servicesLoading ||
+        summary.isLoading ||
+        spark.isLoading ||
+        mcpCounts.isLoading,
+      error:
+        summary.error ?? spark.error ?? mcpCounts.error ?? undefined,
     };
   }, [
     samplingRatio,
@@ -229,5 +291,9 @@ export const usePulseSummary = (): PulseSummary => {
     spark.data,
     spark.error,
     spark.isLoading,
+    mcpCounts.data,
+    mcpCounts.error,
+    mcpCounts.isLoading,
+    sparkIntervalSec,
   ]);
 };
