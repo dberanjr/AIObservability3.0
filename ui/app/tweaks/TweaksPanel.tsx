@@ -7,6 +7,7 @@ import {
   type ChartCurve,
   type ChartLabels,
   type ChartStyle,
+  type ColorBlindFilter,
   type Density,
   type Theme,
   type TileStyle,
@@ -94,25 +95,31 @@ const Segmented = <V extends string>({
 
 interface AccentSwatchesProps {
   value: Accent;
+  customHex: string;
   onChange: (v: Accent) => void;
+  onCustomChange: (hex: string) => void;
 }
 
 /**
  * Row of colour swatches for the Accent tweak. Each swatch is a round
- * button; the selected one gets a ring outline so the choice is obvious.
+ * button; the selected one gets a ring outline. The last swatch is a
+ * "custom" picker — clicking it opens the browser's color picker so the
+ * user can choose any hex value.
  */
-const AccentSwatches = ({ value, onChange }: AccentSwatchesProps) => (
+const AccentSwatches = ({
+  value,
+  customHex,
+  onChange,
+  onCustomChange,
+}: AccentSwatchesProps) => (
   <div
     role="radiogroup"
     aria-label="Accent color"
-    style={{
-      display: "flex",
-      gap: 6,
-      flexWrap: "nowrap",
-    }}
+    style={{ display: "flex", gap: 6, flexWrap: "nowrap" }}
   >
     {ACCENT_OPTIONS.map((opt) => {
       const active = opt.value === value;
+      const swatch = ACCENT_SWATCH[opt.value];
       return (
         <button
           key={opt.value}
@@ -128,14 +135,59 @@ const AccentSwatches = ({ value, onChange }: AccentSwatchesProps) => (
             width: 26,
             height: 26,
             borderRadius: "50%",
-            background: ACCENT_SWATCH[opt.value],
+            background: swatch,
             boxShadow: active
-              ? `0 0 0 2px var(--surface), 0 0 0 4px ${ACCENT_SWATCH[opt.value]}`
+              ? `0 0 0 2px var(--surface), 0 0 0 4px ${swatch}`
               : "0 1px 2px rgba(0,0,0,0.08)",
           }}
         />
       );
     })}
+    {/* Custom-color swatch + invisible native color input layered over it. */}
+    <label
+      title="Custom color"
+      aria-label="Custom color"
+      style={{
+        position: "relative",
+        width: 26,
+        height: 26,
+        borderRadius: "50%",
+        cursor: "pointer",
+        background:
+          "conic-gradient(from 180deg at 50% 50%, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)",
+        boxShadow:
+          value === "custom"
+            ? `0 0 0 2px var(--surface), 0 0 0 4px ${customHex}`
+            : "0 1px 2px rgba(0,0,0,0.08)",
+        display: "inline-block",
+        flex: "0 0 auto",
+      }}
+    >
+      <input
+        type="color"
+        value={customHex}
+        onChange={(e) => {
+          onCustomChange(e.target.value);
+          if (value !== "custom") onChange("custom");
+        }}
+        onClick={() => {
+          // Switch to custom on first click so picking a color is a single
+          // gesture instead of requiring a separate "custom" tap first.
+          if (value !== "custom") onChange("custom");
+        }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          opacity: 0,
+          cursor: "pointer",
+          border: 0,
+          padding: 0,
+          width: "100%",
+          height: "100%",
+        }}
+        aria-label="Pick custom accent color"
+      />
+    </label>
   </div>
 );
 
@@ -163,10 +215,19 @@ const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
   { value: "red", label: "red" },
   { value: "indigo", label: "indigo" },
   { value: "lime", label: "lime" },
+  { value: "teal", label: "teal" },
+  { value: "purpleDeep", label: "purple deep" },
   { value: "gray25", label: "25% gray" },
   { value: "gray50", label: "50% gray" },
   { value: "gray75", label: "75% gray" },
   { value: "black", label: "black" },
+];
+const COLORBLIND_OPTIONS: SegmentOption<ColorBlindFilter>[] = [
+  { value: "none", label: "off" },
+  { value: "protanopia", label: "protanopia" },
+  { value: "deuteranopia", label: "deuteranopia" },
+  { value: "tritanopia", label: "tritanopia" },
+  { value: "achromatopsia", label: "grayscale" },
 ];
 const CHART_STYLE_OPTIONS: SegmentOption<ChartStyle>[] = [
   { value: "line", label: "line" },
@@ -189,7 +250,7 @@ const CHART_LABELS_OPTIONS: SegmentOption<ChartLabels>[] = [
  * Accent options render as colour swatches so users can preview the
  * mapping. Hex pulled from `theme/tokens.ts` brand palette.
  */
-const ACCENT_SWATCH: Record<Accent, string> = {
+const ACCENT_SWATCH: Record<Exclude<Accent, "custom">, string> = {
   blue: "#1C5BE5",
   purple: "#B23BE4",
   cyan: "#54C8E9",
@@ -199,6 +260,8 @@ const ACCENT_SWATCH: Record<Accent, string> = {
   red: "#C0291E",
   indigo: "#4635D6",
   lime: "#BDDF28",
+  teal: "#0EA5A5",
+  purpleDeep: "#6C3AD6",
   gray25: "#bfbfbf",
   gray50: "#808080",
   gray75: "#404040",
@@ -322,7 +385,9 @@ export const TweaksPanel = () => {
               <FieldLabel>Accent</FieldLabel>
               <AccentSwatches
                 value={t.accent}
+                customHex={t.customAccent}
                 onChange={t.setAccent}
+                onCustomChange={t.setCustomAccent}
               />
             </Flex>
 
@@ -353,6 +418,19 @@ export const TweaksPanel = () => {
                 options={CHART_LABELS_OPTIONS}
                 value={t.chartLabels}
                 onChange={t.setChartLabels}
+              />
+            </Flex>
+          </Flex>
+
+          <Flex flexDirection="column" gap={12}>
+            <SectionLabel>Accessibility</SectionLabel>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Color-blindness filter</FieldLabel>
+              <Segmented
+                ariaLabel="Colorblind filter"
+                options={COLORBLIND_OPTIONS}
+                value={t.colorBlindFilter}
+                onChange={t.setColorBlindFilter}
               />
             </Flex>
           </Flex>

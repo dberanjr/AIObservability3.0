@@ -8,6 +8,10 @@ import {
   type ChartTimeDomain,
   type ForecastBand,
 } from "../../components/charts/AreaChart";
+import {
+  ChartModal,
+  useChartExpander,
+} from "../../components/charts/ChartExpander";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
 import { estimateCost, getPricing } from "../../data/pricing";
@@ -171,6 +175,56 @@ export const TokenConsumptionChart = ({
     return { startMs, endMs };
   }, [histLen, forecastLen, result.intervalMs]);
 
+  const expander = useChartExpander();
+
+  // Summary stats for the modal: derived from the historical token series
+  // so they aren't biased by the forecast tail when it's on.
+  const stats = useMemo(() => {
+    if (historicalTokens.length === 0) return [];
+    const nonEmpty = historicalTokens.filter((v) => Number.isFinite(v));
+    const min = nonEmpty.reduce((a, b) => Math.min(a, b), Infinity);
+    const max = nonEmpty.reduce((a, b) => Math.max(a, b), -Infinity);
+    const avg = nonEmpty.reduce((a, b) => a + b, 0) / Math.max(1, nonEmpty.length);
+    const sorted = [...nonEmpty].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    return [
+      { label: "Total tokens", value: fmtTokens(result.totalTokens) },
+      { label: "Total est. cost", value: fmtUSDCompact(result.totalCost) },
+      { label: "Per-bucket min", value: fmtTokens(min) },
+      { label: "Per-bucket median", value: fmtTokens(median) },
+      { label: "Per-bucket avg", value: fmtTokens(avg) },
+      { label: "Per-bucket max", value: fmtTokens(max) },
+    ];
+  }, [historicalTokens, result.totalTokens, result.totalCost]);
+
+  const chart = (chartHeight: number) => (
+    <AreaChart
+      height={chartHeight}
+      formatLeft={(n) => fmtTokens(n)}
+      formatRight={(n) => fmtUSDCompact(n)}
+      xLabels={xLabels}
+      axisTicks={axisTicks}
+      forecasts={forecastBands}
+      xDomain={xDomain}
+      onBrushSelect={(range) => setTimeframe(range)}
+      series={[
+        {
+          label: "Tokens",
+          color: "var(--blue)",
+          values: tokensCombined,
+          axis: "left",
+        },
+        {
+          label: "Est. cost",
+          color: "var(--purple)",
+          values: costsCombined,
+          axis: "right",
+          dashed: true,
+        },
+      ]}
+    />
+  );
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
@@ -197,6 +251,7 @@ export const TokenConsumptionChart = ({
               error={forecast.error}
               onChange={onToggleForecast}
             />
+            {expander.expandButton("Expand token consumption chart")}
           </Flex>
         </Flex>
 
@@ -240,6 +295,19 @@ export const TokenConsumptionChart = ({
           </Text>
         )}
       </Flex>
+      <ChartModal
+        open={expander.open}
+        onClose={() => expander.setOpen(false)}
+        title="Token consumption"
+        subtitle={
+          forecastEnabled
+            ? "Tokens (solid) · Est. cost (dashed, right axis) · Forecast (dashed)"
+            : "Tokens (solid) · Est. cost (dashed, right axis)"
+        }
+        stats={stats}
+      >
+        {chart(440)}
+      </ChartModal>
     </Surface>
   );
 };

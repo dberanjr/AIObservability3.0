@@ -93,7 +93,7 @@ ${scopeFilterClause(serviceIds)}
 export const buildActivityHistogramQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 2000
+fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 5000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries requests = count(), interval: 1h

@@ -19,6 +19,10 @@ export const brand = {
   red: "#C0291E",
   intelSoftLight: "#F3ECFB",
   intelSoftDark: "rgba(108, 58, 214, 0.16)",
+  // Common technical-UI accents that pair well with the Dynatrace blue
+  // family: teal reads as a calm, professional cyan-adjacent; purple-deep
+  // is the saturated mid-purple from the brand palette.
+  teal: "#0EA5A5",
   // Four gray steps for the Tweaks gray-accent family. Stepped by 25% K
   // (CMYK black ink) so each value reads as a deliberate shade rather than
   // a near-duplicate. Distinct from the typography text-* tokens so they
@@ -215,10 +219,12 @@ ${toBlock(darkSurfaces)}
 :root[data-aiobs-accent="pink"]   { --blue: ${brand.pink};       --blue-pale: ${brand.purple}; }
 :root[data-aiobs-accent="amber"]  { --blue: ${brand.amber};      --blue-pale: ${brand.red}; }
 :root[data-aiobs-accent="red"]    { --blue: ${brand.red};        --blue-pale: ${brand.amber}; }
-:root[data-aiobs-accent="indigo"] { --blue: ${brand.bluePurple}; --blue-pale: ${brand.purpleDeep}; }
-:root[data-aiobs-accent="lime"]   { --blue: ${brand.greenLime};  --blue-pale: ${brand.green}; }
-:root[data-aiobs-accent="gray25"] { --blue: ${brand.gray25};     --blue-pale: ${brand.gray50}; }
-:root[data-aiobs-accent="gray50"] { --blue: ${brand.gray50};     --blue-pale: ${brand.gray75}; }
-:root[data-aiobs-accent="gray75"] { --blue: ${brand.gray75};     --blue-pale: ${brand.black}; }
-:root[data-aiobs-accent="black"]  { --blue: ${brand.black};      --blue-pale: ${brand.gray75}; }
+:root[data-aiobs-accent="indigo"]     { --blue: ${brand.bluePurple}; --blue-pale: ${brand.purpleDeep}; }
+:root[data-aiobs-accent="lime"]       { --blue: ${brand.greenLime};  --blue-pale: ${brand.green}; }
+:root[data-aiobs-accent="teal"]       { --blue: ${brand.teal};       --blue-pale: ${brand.cyan}; }
+:root[data-aiobs-accent="purpleDeep"] { --blue: ${brand.purpleDeep}; --blue-pale: ${brand.bluePurple}; }
+:root[data-aiobs-accent="gray25"]     { --blue: ${brand.gray25};     --blue-pale: ${brand.gray50}; }
+:root[data-aiobs-accent="gray50"]     { --blue: ${brand.gray50};     --blue-pale: ${brand.gray75}; }
+:root[data-aiobs-accent="gray75"]     { --blue: ${brand.gray75};     --blue-pale: ${brand.black}; }
+:root[data-aiobs-accent="black"]      { --blue: ${brand.black};      --blue-pale: ${brand.gray75}; }
 `;

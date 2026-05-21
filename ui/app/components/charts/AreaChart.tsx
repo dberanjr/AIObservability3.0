@@ -149,11 +149,7 @@ export interface AreaChartProps {
 const FALLBACK_VIEW_W = 600;
 const PAD_L = 44;
 const PAD_R = 44;
-// PAD_T_BASE is the default top padding. When value labels are enabled,
-// PAD_T is bumped to give the label strip its own row above the chart so
-// pills don't sit on top of the top gridline label.
-const PAD_T_BASE = 12;
-const PAD_T_WITH_LABELS = 24;
+const PAD_T = 12;
 const PAD_B = 22;
 
 const niceMax = (max: number): number => {
@@ -245,7 +241,6 @@ export const AreaChart = ({
   );
 
   const innerW = VIEW_W - PAD_L - PAD_R;
-  const PAD_T = chartLabels !== "none" ? PAD_T_WITH_LABELS : PAD_T_BASE;
   const innerH = height - PAD_T - PAD_B;
   const step = length > 1 ? innerW / (length - 1) : 0;
 
@@ -558,75 +553,91 @@ export const AreaChart = ({
 
         {chartLabels !== "none" &&
           (() => {
-            // Build a flat list of candidate labels across every series,
-            // then place them above the plot in the PAD_T strip so they
-            // never sit on top of the colored line/area. Drop labels that
-            // would horizontally overlap a previously-placed one — keeps
-            // dense series readable.
+            // Anchor each label above its data point with a small padding
+            // so the text sits clear of the line/area. If the data point
+            // is near the top of the plot and an above-anchored pill would
+            // clip the chart edge, the label flips below the point so it
+            // still stays inside the chart and away from the line.
             const FONT_PX = 9;
-            const CHAR_PX = 5.4; // approx char width at 9px monospace
+            const CHAR_PX = 5.4; // approx 9px monospace
             const PILL_PAD_X = 3;
             const PILL_PAD_Y = 1;
-            // Vertical band reserved for labels. Sits inside PAD_T so the
-            // y axis labels and gridlines beneath remain clear.
-            const LABEL_Y = PAD_T - 2;
+            const PILL_H = FONT_PX + PILL_PAD_Y * 2;
+            const PADDING = 6; // px between data point and pill edge
 
             type Candidate = {
               key: string;
               cx: number;
+              cy: number; // pill center-y (text baseline = cy + FONT_PX/2 - 1)
               halfW: number;
               text: string;
             };
+
             const all: Candidate[] = [];
             for (const s of [...leftSeries, ...rightSeries]) {
+              const max =
+                ((s.axis ?? "left") === "right" ? rightMax : leftMax) || 1;
               const fmt =
                 (s.axis === "right" ? formatRight : formatLeft) ??
                 ((n: number) => String(Math.round(n)));
-              const indices = pickLabelIndices(s.values, chartLabels);
-              for (const idx of indices) {
+              for (const idx of pickLabelIndices(s.values, chartLabels)) {
                 const v = s.values[idx];
                 if (v == null) continue;
                 const text = fmt(v);
+                const px = PAD_L + idx * step;
+                const py = PAD_T + innerH - (v / max) * innerH;
+                // Prefer above the point. If the pill would clip the top
+                // gridline, flip below.
+                const above = py - PADDING - PILL_H / 2;
+                const below = py + PADDING + PILL_H / 2;
+                const cy =
+                  above - PILL_H / 2 < PAD_T + 1 ? below : above;
                 all.push({
                   key: `vl-${s.label}-${idx}`,
-                  cx: PAD_L + idx * step,
+                  cx: px,
+                  cy,
                   halfW: (text.length * CHAR_PX) / 2 + PILL_PAD_X,
                   text,
                 });
               }
             }
-            // Sort left-to-right and keep only labels that don't overlap
-            // the last accepted one. 4px breathing space between pills.
+
+            // Drop labels whose pill would overlap one already placed
+            // (4px gap). Two labels can sit close vertically without
+            // colliding only if they sit on opposite sides of a row;
+            // for simplicity we treat the row as horizontal-only.
             all.sort((a, b) => a.cx - b.cx);
             const placed: Candidate[] = [];
-            let lastRight = -Infinity;
+            const overlapsAny = (c: Candidate): boolean =>
+              placed.some((p) => {
+                const horizOverlap =
+                  Math.abs(p.cx - c.cx) < p.halfW + c.halfW + 4;
+                const vertOverlap = Math.abs(p.cy - c.cy) < PILL_H + 2;
+                return horizOverlap && vertOverlap;
+              });
             for (const c of all) {
-              if (c.cx - c.halfW < lastRight + 4) continue;
+              if (overlapsAny(c)) continue;
               placed.push(c);
-              lastRight = c.cx + c.halfW;
             }
 
             return placed.map((c) => (
-              <g key={c.key}>
-                {/* Background pill so the text stays readable even when
-                    the chart re-skins to a dark or saturated accent. */}
+              <g key={c.key} pointerEvents="none">
                 <rect
                   x={c.cx - c.halfW}
-                  y={LABEL_Y - FONT_PX + PILL_PAD_Y}
+                  y={c.cy - PILL_H / 2}
                   width={c.halfW * 2}
-                  height={FONT_PX + PILL_PAD_Y * 2}
+                  height={PILL_H}
                   rx={3}
                   fill="var(--surface)"
-                  opacity={0.85}
+                  opacity={0.92}
                 />
                 <text
                   x={c.cx}
-                  y={LABEL_Y}
+                  y={c.cy + FONT_PX / 2 - 1}
                   fontSize={FONT_PX}
                   textAnchor="middle"
                   fill="var(--text-2)"
                   fontFamily="var(--mono, monospace)"
-                  pointerEvents="none"
                 >
                   {c.text}
                 </text>

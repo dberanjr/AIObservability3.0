@@ -36,7 +36,42 @@ interface TileShellProps {
   visual?: React.ReactNode;
   /** Visual variant — extra caption rendered under the centered visual. */
   visualCaption?: string;
+  /** Short explanation shown when the user hovers the info glyph. */
+  info?: string;
 }
+
+/**
+ * Small circled-i in the top-right of each tile. Hover/focus surfaces a
+ * native tooltip explaining what the metric measures and where it comes
+ * from. Renders as a span with `title` so it works without JS popovers and
+ * stays accessible to keyboard / screen-reader users.
+ */
+const TileInfo = ({ text }: { text: string }) => (
+  <span
+    role="img"
+    aria-label={text}
+    title={text}
+    tabIndex={0}
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: 14,
+      height: 14,
+      borderRadius: "50%",
+      border: "1px solid var(--text-4)",
+      color: "var(--text-3)",
+      fontSize: 9,
+      fontWeight: 700,
+      fontFamily: "serif",
+      cursor: "help",
+      flex: "0 0 auto",
+      lineHeight: 1,
+    }}
+  >
+    i
+  </span>
+);
 
 const Tile = ({
   label,
@@ -46,6 +81,7 @@ const Tile = ({
   bottom,
   visual,
   visualCaption,
+  info,
 }: TileShellProps) => {
   const { density, tileStyle } = useTweaks();
   const pad = density === "minimal" ? 4 : density === "compact" ? 8 : 12;
@@ -75,20 +111,27 @@ const Tile = ({
         gap={6}
         style={{ minWidth: 0, flexGrow: 1, height: "100%" }}
       >
-        <Text
-          style={{
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-            color: "var(--text-3)",
-            minHeight: 28,
-            whiteSpace: "normal",
-            lineHeight: 1.2,
-          }}
+        <Flex
+          alignItems="flex-start"
+          justifyContent="space-between"
+          gap={6}
+          style={{ minHeight: 28 }}
         >
-          {label}
-        </Text>
+          <Text
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+              whiteSpace: "normal",
+              lineHeight: 1.2,
+            }}
+          >
+            {label}
+          </Text>
+          {info && <TileInfo text={info} />}
+        </Flex>
 
         {variant === "visual" ? (
           <Flex
@@ -231,6 +274,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     <div ref={wrapRef} style={gridStyle}>
       <Tile
         label="Tokens"
+        info="Total tokens (input + output) consumed by GenAI calls in the current scope. Counts/sums are extrapolated to the unsampled population when sampling is on."
         value={fmtTokens(summary.tokens)}
         sub={
           summary.requests != null
@@ -241,23 +285,27 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       />
       <Tile
         label="Spend"
+        info="Blended USD estimate computed by applying default per-model pricing to the input/output token counts. Useful as a directional cost signal; the FinOps tab is authoritative."
         value={fmtUSDCompact(summary.spend)}
         sub="Blended est."
         bottom={renderSpark("var(--purple)")}
       />
       <Tile
         label="P95 latency"
+        info="95th percentile request duration across all GenAI spans in scope. Percentile statistics are sampling-invariant — toggling sampling won't change this number."
         value={fmtMs(summary.p95Ms)}
         bottom={renderSpark("var(--cyan)")}
       />
       <Tile
         label="Error rate"
+        info="Percentage of GenAI spans with a non-null exception.type field. A ratio (not a count) — sampling-invariant."
         value={fmtPercent(summary.errorRatePct)}
         bottom={renderSpark("var(--amber)")}
       />
 
       <Tile
         label="Models"
+        info="Number of distinct gen_ai.request.model values observed in scope. The donut breaks down by request volume; model version suffixes are collapsed so e.g. claude-sonnet-4-5-20250114 and claude-sonnet-4-5 count as one model."
         variant="visual"
         visual={
           <MiniDonut
@@ -272,6 +320,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       />
       <Tile
         label="MCP servers"
+        info="Distinct MCP servers detected via traceloop.workflow.name matching `*.mcp` (the convention this tenant's SDKs use). Donut breaks down by workflow request volume."
         variant="visual"
         visual={
           <MiniDonut
@@ -288,6 +337,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       />
       <Tile
         label="MCP tools"
+        info="Distinct MCP tools invoked within MCP workflows. Tool name comes from gen_ai.tool.name with a fallback to traceloop.entity.name. Donut sized by call count."
         variant="visual"
         visual={
           <MiniDonut
@@ -305,6 +355,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
       <Tile
         label="Cost / request"
+        info="Total blended spend divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (green = cheap, red = expensive). Ratio is sampling-invariant."
         value={fmtUSD(summary.costPerRequest)}
         sub="blended, all models"
         bottom={
@@ -321,6 +372,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
       <Tile
         label="Token efficiency"
+        info="Output tokens as a share of total tokens (input + output). Higher means more of your token spend is going toward generated content vs prompt overhead. Filled arc follows the active accent color."
         variant="visual"
         visual={
           <MiniPartialDonut

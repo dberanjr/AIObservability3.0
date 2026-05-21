@@ -21,10 +21,13 @@ export type Accent =
   | "red"
   | "indigo"
   | "lime"
+  | "teal"
+  | "purpleDeep"
   | "gray25"
   | "gray50"
   | "gray75"
-  | "black";
+  | "black"
+  | "custom";
 export type ChartStyle = "line" | "area" | "gradient";
 /** Linear (straight segments) or smooth (cubic Bezier) line interpolation. */
 export type ChartCurve = "linear" | "smooth";
@@ -35,15 +38,26 @@ export type ChartLabels =
   | "minmax"
   | "interesting"
   | "all";
+/** Color-blindness simulation. Renders the whole app through an SVG color
+ * matrix matching the named deficiency. */
+export type ColorBlindFilter =
+  | "none"
+  | "protanopia"
+  | "deuteranopia"
+  | "tritanopia"
+  | "achromatopsia";
 
 export interface TweaksState {
   theme: Theme;
   density: Density;
   tileStyle: TileStyle;
   accent: Accent;
+  /** Hex color stored for the "custom" accent — preserved across toggles. */
+  customAccent: string;
   chartStyle: ChartStyle;
   chartCurve: ChartCurve;
   chartLabels: ChartLabels;
+  colorBlindFilter: ColorBlindFilter;
 }
 
 export const DEFAULT_TWEAKS: TweaksState = {
@@ -51,9 +65,11 @@ export const DEFAULT_TWEAKS: TweaksState = {
   density: "comfortable",
   tileStyle: "card",
   accent: "blue",
+  customAccent: "#1C5BE5",
   chartStyle: "area",
   chartCurve: "linear",
   chartLabels: "none",
+  colorBlindFilter: "none",
 };
 
 export interface TweaksContextValue extends TweaksState {
@@ -61,9 +77,11 @@ export interface TweaksContextValue extends TweaksState {
   setDensity: (v: Density) => void;
   setTileStyle: (v: TileStyle) => void;
   setAccent: (v: Accent) => void;
+  setCustomAccent: (v: string) => void;
   setChartStyle: (v: ChartStyle) => void;
   setChartCurve: (v: ChartCurve) => void;
   setChartLabels: (v: ChartLabels) => void;
+  setColorBlindFilter: (v: ColorBlindFilter) => void;
   resetTweaks: () => void;
   isPanelOpen: boolean;
   openPanel: () => void;
@@ -92,6 +110,21 @@ export const TweaksProvider = ({
     root.setAttribute("data-aiobs-density", tweaks.density);
     root.setAttribute("data-aiobs-tile", tweaks.tileStyle);
     root.setAttribute("data-aiobs-accent", tweaks.accent);
+    // Custom accent: write --blue inline on root, which beats the
+    // CSS data-aiobs-accent selectors (those are :root scoped too, but
+    // the inline declaration has higher specificity by the cascade
+    // tie-breaker rule).
+    if (tweaks.accent === "custom") {
+      root.style.setProperty("--blue", tweaks.customAccent);
+    } else {
+      root.style.removeProperty("--blue");
+    }
+    // Colorblind filter on the app body so SVG / canvas / IMG all get
+    // remapped through the matrix.
+    document.body.style.filter =
+      tweaks.colorBlindFilter === "none"
+        ? ""
+        : `url(#aiobs-cb-${tweaks.colorBlindFilter})`;
     // Also poke Strato's own data-theme so its tokens follow our pick — the
     // platform normally writes this based on user prefs, but our toggle wins.
     root.setAttribute("data-theme", tweaks.theme);
@@ -112,9 +145,11 @@ export const TweaksProvider = ({
       setDensity: merge("density"),
       setTileStyle: merge("tileStyle"),
       setAccent: merge("accent"),
+      setCustomAccent: merge("customAccent"),
       setChartStyle: merge("chartStyle"),
       setChartCurve: merge("chartCurve"),
       setChartLabels: merge("chartLabels"),
+      setColorBlindFilter: merge("colorBlindFilter"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),
       isPanelOpen,
       openPanel: () => setPanelOpen(true),

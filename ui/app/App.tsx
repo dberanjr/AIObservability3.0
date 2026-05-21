@@ -20,6 +20,7 @@ import { ScopeProvider } from "./scope/ScopeContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
 import { TweaksPanel } from "./tweaks/TweaksPanel";
+import { ColorBlindFilters } from "./tweaks/ColorBlindFilters";
 
 export const App = () => {
   return (
@@ -61,6 +62,7 @@ export const App = () => {
         </Page.Main>
       </Page>
       <TweaksPanel />
+      <ColorBlindFilters />
     </ScopeProvider>
     </ScanLimitProvider>
     </SamplingProvider>

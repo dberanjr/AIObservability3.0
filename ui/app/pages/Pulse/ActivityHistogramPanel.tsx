@@ -4,6 +4,10 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Histogram } from "../../components/charts/Histogram";
 import type { ChartTimeDomain } from "../../components/charts/AreaChart";
+import {
+  ChartModal,
+  useChartExpander,
+} from "../../components/charts/ChartExpander";
 import { fmtCount } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
 import type { UseActivityHistogramResult } from "./useActivityHistogram";
@@ -33,6 +37,40 @@ export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) 
     return { startMs: now - 24 * 60 * 60 * 1000, endMs: now };
   }, []);
 
+  const expander = useChartExpander();
+  const stats = useMemo(() => {
+    if (bars.length === 0) return [];
+    const values = bars.map((b) => b.value);
+    const total = values.reduce((a, b) => a + b, 0);
+    const min = values.reduce((a, b) => Math.min(a, b), Infinity);
+    const max = values.reduce((a, b) => Math.max(a, b), -Infinity);
+    const avg = total / values.length;
+    return [
+      { label: "Total requests", value: fmtCount(total) },
+      {
+        label: "Peak",
+        value:
+          result.peakHour != null
+            ? `${fmtCount(result.peakRequests)} req`
+            : "—",
+        sub: result.peakHour != null ? formatHour(result.peakHour) : undefined,
+      },
+      { label: "Quietest hour", value: fmtCount(min) },
+      { label: "Avg per hour", value: fmtCount(avg) },
+      { label: "Max per hour", value: fmtCount(max) },
+    ];
+  }, [bars, result.peakHour, result.peakRequests]);
+
+  const renderChart = (height: number) => (
+    <Histogram
+      bars={bars}
+      height={height}
+      valueFormatter={(n) => `${fmtCount(n)} req`}
+      xDomain={xDomain}
+      onBrushSelect={(range) => setTimeframe(range)}
+    />
+  );
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
@@ -45,26 +83,32 @@ export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) 
               Requests per hour, last 24 hours
             </Text>
           </Flex>
-          {result.peakHour != null && (
-            <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-              Peak {formatHour(result.peakHour)} ·{" "}
-              <strong>{fmtCount(result.peakRequests)}</strong> req
-            </Text>
-          )}
+          <Flex alignItems="center" gap={8}>
+            {result.peakHour != null && (
+              <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+                Peak {formatHour(result.peakHour)} ·{" "}
+                <strong>{fmtCount(result.peakRequests)}</strong> req
+              </Text>
+            )}
+            {expander.expandButton("Expand 24h activity chart")}
+          </Flex>
         </Flex>
 
         {result.isLoading ? (
           <Skeleton style={{ height: 180 }} />
         ) : (
-          <Histogram
-            bars={bars}
-            height={180}
-            valueFormatter={(n) => `${fmtCount(n)} req`}
-            xDomain={xDomain}
-            onBrushSelect={(range) => setTimeframe(range)}
-          />
+          renderChart(180)
         )}
       </Flex>
+      <ChartModal
+        open={expander.open}
+        onClose={() => expander.setOpen(false)}
+        title="24h activity"
+        subtitle="Requests per hour, last 24 hours"
+        stats={stats}
+      >
+        {renderChart(440)}
+      </ChartModal>
     </Surface>
   );
 };
