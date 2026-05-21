@@ -56,7 +56,7 @@ export const TopFindingsStrip = ({
               whiteSpace: "nowrap",
             }}
           >
-            Dynatrace Intelligence in production
+            Dynatrace Intelligence
           </span>
         </Flex>
 
