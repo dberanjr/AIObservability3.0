@@ -16,7 +16,7 @@ describe("normalizeModelKey", () => {
 
   it("leaves keys without a date suffix alone (apart from case)", () => {
     expect(normalizeModelKey("GPT-4o")).toBe("gpt-4o");
-    expect(normalizeModelKey("gemini-2.5-pro")).toBe("gemini-2.5-pro");
+    expect(normalizeModelKey("gemini-2-5-pro")).toBe("gemini-2-5-pro");
   });
 
   it("trims whitespace", () => {
@@ -34,7 +34,7 @@ describe("getPricing", () => {
   it("returns the canonical record for known models", () => {
     expect(getPricing("claude-sonnet-4-6").provider).toBe("Anthropic");
     expect(getPricing("gpt-4o").provider).toBe("OpenAI");
-    expect(getPricing("gemini-2.5-pro").provider).toBe("Google");
+    expect(getPricing("gemini-2-5-pro").provider).toBe("Google");
   });
 
   it("normalizes the lookup so dated suffixes still resolve", () => {
@@ -50,7 +50,7 @@ describe("getPricing", () => {
   it("encodes context windows that the Models tab depends on", () => {
     expect(getPricing("claude-sonnet-4-6").contextWindow).toBe(200_000);
     expect(getPricing("gpt-4o").contextWindow).toBe(128_000);
-    expect(getPricing("gemini-2.5-pro").contextWindow).toBe(1_048_576);
+    expect(getPricing("gemini-2-5-pro").contextWindow).toBe(1_048_576);
     expect(getPricing("text-embedding-3-large").contextWindow).toBe(8_191);
   });
 });

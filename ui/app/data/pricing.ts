@@ -56,9 +56,51 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "Anthropic",
     tier: "mid",
   },
+  "claude-opus-4-6": {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "frontier",
+  },
+  "claude-3-7-sonnet": {
+    inputPerMTok: 3,
+    outputPerMTok: 15,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "high",
+  },
+  "claude-3-5-sonnet": {
+    inputPerMTok: 3,
+    outputPerMTok: 15,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "high",
+  },
+  "claude-3-5-haiku": {
+    inputPerMTok: 0.8,
+    outputPerMTok: 4,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "mid",
+  },
+  "claude-3-haiku": {
+    inputPerMTok: 0.25,
+    outputPerMTok: 1.25,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "low",
+  },
+  "claude-3-opus": {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "frontier",
+  },
 
   // OpenAI
-  "gpt-4.1": {
+  "gpt-4-1": {
     inputPerMTok: 2,
     outputPerMTok: 8,
     contextWindow: 128_000,
@@ -81,14 +123,14 @@ export const PRICING: Record<string, ModelPricing> = {
   },
 
   // Google
-  "gemini-2.5-pro": {
+  "gemini-2-5-pro": {
     inputPerMTok: 1.25,
     outputPerMTok: 10,
     contextWindow: 1_048_576,
     provider: "Google",
     tier: "high",
   },
-  "gemini-2.5-flash": {
+  "gemini-2-5-flash": {
     inputPerMTok: 0.075,
     outputPerMTok: 0.3,
     contextWindow: 1_048_576,
@@ -113,9 +155,36 @@ export const PRICING: Record<string, ModelPricing> = {
   },
 };
 
-/** Normalize a model name to its lookup key. Trims version suffixes like `-20250114`. */
-export const normalizeModelKey = (model: string): string =>
-  model.trim().toLowerCase().replace(/-\d{8}$/, "");
+/**
+ * Normalize a model name to its lookup key. Handles the variants seen in
+ * the wild on Bedrock-fronted deployments:
+ *   us.anthropic.claude-sonnet-4-5-20250114-v1:0  → claude-sonnet-4-5
+ *   anthropic.claude-3-7-sonnet-20250219-v1:0     → claude-3-7-sonnet
+ *   global.anthropic.claude-haiku-4-5             → claude-haiku-4-5
+ *   gpt-4o-2024-08-06                             → gpt-4o
+ *   Claude-Sonnet-4.5                             → claude-sonnet-4-5
+ */
+export const normalizeModelKey = (model: string): string => {
+  let s = model.trim().toLowerCase();
+  // Strip Bedrock region prefix (us., eu., apac., ap., sa., global.)
+  s = s.replace(/^(us|eu|apac|ap|sa|global)\./, "");
+  // Strip vendor prefix
+  s = s.replace(
+    /^(anthropic|amazon|meta|cohere|mistral|ai21|openai|google)\./,
+    "",
+  );
+  // Strip trailing Bedrock revision `:N`
+  s = s.replace(/:\d+$/, "");
+  // Strip trailing version segment `-v1` or `:v1`
+  s = s.replace(/[-:]v\d+$/, "");
+  // Strip trailing dates: `-YYYYMMDD` (Anthropic style) and
+  // `-YYYY-MM-DD` (OpenAI style).
+  s = s.replace(/-\d{8}$/, "");
+  s = s.replace(/-\d{4}-\d{2}-\d{2}$/, "");
+  // Normalize friendly periods to canonical hyphens (4.5 → 4-5).
+  s = s.replace(/\./g, "-");
+  return s;
+};
 
 export const getPricing = (model: string | undefined | null): ModelPricing => {
   if (!model) return UNKNOWN_PRICE;

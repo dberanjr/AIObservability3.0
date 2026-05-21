@@ -17,8 +17,8 @@ ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | fieldsAdd
     kind = if(isNotNull(gen_ai.provider.name), "LLM", else: "Agent"),
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     duration_ms = duration / 1000000,
     prompt_text = coalesce(
       gen_ai.prompt.0.content,
@@ -69,8 +69,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     pii = if(coalesce(toBoolean(gen_ai.privacy.pii_detected), false), 1, else: 0),
     warn = if(coalesce(toBoolean(gen_ai.response.warning), false), 1, else: 0),
     err = if(isNotNull(exception.type), 1, else: 0)

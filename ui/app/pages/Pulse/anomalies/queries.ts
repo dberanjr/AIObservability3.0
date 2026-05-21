@@ -39,7 +39,7 @@ fetch spans, samplingRatio: 1, from: now()-6h, to: now(), scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries
-    tokens = sum(toLong(gen_ai.usage.input_tokens) + toLong(gen_ai.usage.output_tokens)),
+    tokens = sum(toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)) + toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))),
     interval: 1h
 | fieldsAdd current = arrayLast(tokens), avg = arrayAvg(tokens)
 | fieldsAdd ratio = if(avg > 0, toDouble(current) / toDouble(avg), else: 0)
@@ -60,7 +60,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries
-    tokens = sum(toLong(gen_ai.usage.input_tokens) + toLong(gen_ai.usage.output_tokens)),
+    tokens = sum(toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)) + toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))),
     interval: 1h,
     by: { service = entityName(dt.entity.service), service_id = dt.entity.service }
 | fieldsAdd current = arrayLast(tokens), avg = arrayAvg(tokens)

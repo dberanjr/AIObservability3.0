@@ -24,8 +24,8 @@ ${scopeFilterClause(serviceIds)}
     has_gen_ai_error = if(isNotNull(gen_ai.error.type), 1, else: 0),
     has_guardrail = if(isNotNull(gen_ai.guardrail.action) or isNotNull(gen_ai.moderation.action), 1, else: 0),
     has_refusal = if(isNotNull(gen_ai.response.refusal_reason), 1, else: 0),
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | summarize
     requests = count(),
     tokens = sum(in_tok + out_tok),
@@ -53,8 +53,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | summarize
     requests = count(),
     tokens = sum(in_tok + out_tok),

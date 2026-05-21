@@ -20,8 +20,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     is_error = if(isNotNull(exception.type), 1, else: 0),
     mcp_server = if(matchesValue(traceloop.workflow.name, "*.mcp"), traceloop.workflow.name),
     mcp_tool   = if(matchesValue(traceloop.workflow.name, "*.mcp"), coalesce(gen_ai.tool.name, traceloop.entity.name))
@@ -57,8 +57,8 @@ ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | filter isNotNull(gen_ai.usage.input_tokens) or isNotNull(gen_ai.usage.output_tokens)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     model = coalesce(gen_ai.request.model, "unknown")
 | summarize
     invocations = count(),
@@ -82,7 +82,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries
-    tokens = sum(toLong(gen_ai.usage.input_tokens) + toLong(gen_ai.usage.output_tokens)),
+    tokens = sum(toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)) + toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))),
     interval: ${intervalSec}s
 `.trim();
 
@@ -123,8 +123,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     is_error = if(isNotNull(exception.type), 1, else: 0)
 | makeTimeseries
     tokens = sum(in_tok + out_tok),
@@ -161,8 +161,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | summarize
     requests = count(),
     input_tokens = sum(in_tok),
@@ -186,8 +186,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | summarize
     requests = count(),
     input_tokens = sum(in_tok),
@@ -211,8 +211,8 @@ ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
 | fieldsAdd
     tool = coalesce(gen_ai.tool.name, traceloop.entity.name),
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | filter isNotNull(tool)
 | summarize
     calls = count(),
@@ -241,7 +241,7 @@ ${scopeFilterClause(serviceIds)}
     via_bedrock = if(${dqlViaBedrock()}, 1, else: 0)
 | summarize
     requests = count(),
-    tokens = sum(toLong(gen_ai.usage.input_tokens) + toLong(gen_ai.usage.output_tokens)),
+    tokens = sum(toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)) + toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))),
     via_bedrock_count = sum(via_bedrock),
     by: { provider }
 | sort requests desc

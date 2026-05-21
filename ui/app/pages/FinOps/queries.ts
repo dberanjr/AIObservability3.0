@@ -14,8 +14,8 @@ fetch spans, samplingRatio: 1, from: now()-7d, to: now(), scanLimitGBytes: 1000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | makeTimeseries
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
@@ -35,8 +35,8 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | fieldsAdd
-    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
-    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | summarize
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
