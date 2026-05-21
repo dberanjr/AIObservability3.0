@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useScopedDql } from "../scope/useScopedDql";
 import { useScope } from "./ScopeContext";
-import { canQueryScope, useResolvedServices } from "./useResolvedServices";
 import {
   FLEET_SERVICE_COUNT_QUERY,
   buildAgentCountQuery,
@@ -15,7 +14,6 @@ export interface ResolvedCounts {
   isLoading: boolean;
   isFetching: boolean;
   lastRefreshed: number | null;
-  isFleetWide: boolean;
 }
 
 interface CountRecord {
@@ -24,63 +22,45 @@ interface CountRecord {
   services?: number;
 }
 
+/**
+ * Fleet-wide rollups for the status line. AppCI / Application scoping was
+ * removed in favour of platform Segments — those filter the underlying
+ * queries via filterSegments rather than a service-id list, so all three
+ * counts (services / agents / tools) are simple fleet-wide aggregations.
+ */
 export const useResolvedCounts = (): ResolvedCounts => {
   const { scope } = useScope();
-  const resolution = useResolvedServices();
-  const canQuery = canQueryScope(resolution);
 
   const agentResult = useScopedDql<CountRecord>(
-    canQuery ? buildAgentCountQuery(resolution.serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    buildAgentCountQuery(null, scope.timeframe),
+    { staleTime: 60_000 },
   );
   const toolResult = useScopedDql<CountRecord>(
-    canQuery ? buildToolCountQuery(resolution.serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    buildToolCountQuery(null, scope.timeframe),
+    { staleTime: 60_000 },
   );
-
-  // Fleet-wide service count needs its own query — there's no resolved list.
-  const fleetServiceResult = useScopedDql<CountRecord>(
-    resolution.isFleetWide ? FLEET_SERVICE_COUNT_QUERY : "",
-    { enabled: resolution.isFleetWide, staleTime: 60_000 },
-  );
+  const serviceResult = useScopedDql<CountRecord>(FLEET_SERVICE_COUNT_QUERY, {
+    staleTime: 60_000,
+  });
 
   const lastRefreshedRef = useRef<number | null>(null);
   const isFetching =
     agentResult.isFetching ||
     toolResult.isFetching ||
-    fleetServiceResult.isFetching;
+    serviceResult.isFetching;
   useEffect(() => {
-    if (
-      !isFetching &&
-      (agentResult.data || toolResult.data || fleetServiceResult.data)
-    ) {
+    if (!isFetching && (agentResult.data || toolResult.data || serviceResult.data)) {
       lastRefreshedRef.current = Date.now();
     }
-  }, [
-    isFetching,
-    agentResult.data,
-    toolResult.data,
-    fleetServiceResult.data,
-  ]);
-
-  const agents = agentResult.data?.records?.[0]?.agents ?? null;
-  const tools = toolResult.data?.records?.[0]?.tools ?? null;
-
-  const services = resolution.isFleetWide
-    ? fleetServiceResult.data?.records?.[0]?.services ?? null
-    : resolution.serviceIds?.length ?? 0;
+  }, [isFetching, agentResult.data, toolResult.data, serviceResult.data]);
 
   return {
-    services,
-    agents,
-    tools,
+    services: serviceResult.data?.records?.[0]?.services ?? null,
+    agents: agentResult.data?.records?.[0]?.agents ?? null,
+    tools: toolResult.data?.records?.[0]?.tools ?? null,
     isLoading:
-      resolution.isLoading ||
-      agentResult.isLoading ||
-      toolResult.isLoading ||
-      fleetServiceResult.isLoading,
+      agentResult.isLoading || toolResult.isLoading || serviceResult.isLoading,
     isFetching,
     lastRefreshed: lastRefreshedRef.current,
-    isFleetWide: resolution.isFleetWide,
   };
 };

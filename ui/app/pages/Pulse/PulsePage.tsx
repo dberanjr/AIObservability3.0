@@ -6,7 +6,6 @@ import type { Finding } from "../../components/drawers/types";
 import { useModels } from "../Models/useModels";
 import { ActivityHistogramPanel } from "./ActivityHistogramPanel";
 import { AgentCostBarList } from "./AgentCostBarList";
-import { AnomalyPanel } from "./AnomalyPanel";
 import { PlatformHealthCard } from "./PlatformHealthCard";
 import { ProviderMixDonut } from "./ProviderMixDonut";
 import { SummaryTilesRow } from "./SummaryTilesRow";
@@ -61,11 +60,6 @@ export const PulsePage = () => {
       >
         {firstError && <ErrorBanner error={firstError} />}
         <SummaryTilesRow summary={summary} />
-        <AnomalyPanel
-          anomalies={anomalies}
-          isLoading={anomaliesLoading}
-          onSelect={setSelectedFinding}
-        />
         <TopFindingsStrip
           findings={anomalies}
           isLoading={anomaliesLoading}

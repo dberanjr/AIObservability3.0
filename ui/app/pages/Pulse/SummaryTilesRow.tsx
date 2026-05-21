@@ -98,15 +98,18 @@ export interface SummaryTilesRowProps {
  * Sparklines appear on the first four tiles (volume-style metrics).
  */
 export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
+  // auto-fit lets tiles flow into multiple rows when the viewport is narrower
+  // than 9 * minTileWidth, so labels + values + sparklines stay readable
+  // regardless of width. Each tile is at least 160px wide.
+  const gridStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 10,
+  };
+
   if (summary.isLoading && summary.tokens == null) {
     return (
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(9, minmax(0, 1fr))",
-          gap: 10,
-        }}
-      >
+      <div style={gridStyle}>
         {Array.from({ length: 9 }).map((_, i) => (
           <TileSkeleton key={i} />
         ))}
@@ -115,13 +118,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
   }
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(9, minmax(0, 1fr))",
-        gap: 10,
-      }}
-    >
+    <div style={gridStyle}>
       <Tile
         label="Tokens"
         value={fmtTokens(summary.tokens)}

@@ -1,71 +1,35 @@
-import { useMemo } from "react";
-import { useScopedDql } from "../scope/useScopedDql";
-import { useScope } from "./ScopeContext";
-import { buildResolvedServicesQuery } from "./queries";
-
-interface ResolvedServiceRecord {
-  id?: string;
-  "entity.name"?: string;
-}
-
 export interface UseResolvedServicesResult {
   /**
-   * Resolved service ids for the current AppCI/env scope. `null` means
-   * "no AppCI selected — query fleet-wide". An empty array means "AppCI set
-   * but the resolution is still loading or returned no matches".
+   * Resolved service ids for the current scope. Now permanently `null`
+   * (fleet-wide) since the AppCI / Application dropdowns were retired in
+   * favour of Dynatrace platform Segments — those carry the entity scope
+   * via filterSegments on the underlying DqlQueryParams, not via a
+   * service-id list embedded in the DQL string.
+   *
+   * Hook signature is preserved so existing page hooks keep working
+   * without changes; build*Query(null, ...) already emits no filter via
+   * scopeFilterClause(null) → "".
    */
   serviceIds: string[] | null;
   serviceNames: string[];
   isLoading: boolean;
   error?: Error;
-  /** Convenience flag: true when the app is running without an AppCI filter. */
   isFleetWide: boolean;
 }
 
-export const useResolvedServices = (): UseResolvedServicesResult => {
-  const { scope } = useScope();
-  const isFleetWide = !scope.appCi;
-  const query = scope.appCi
-    ? buildResolvedServicesQuery(scope.appCi, scope.env)
-    : "";
-
-  const { data, isLoading, error } = useScopedDql<ResolvedServiceRecord>(query, {
-    enabled: !isFleetWide,
-    staleTime: 60_000,
-  });
-
-  return useMemo<UseResolvedServicesResult>(() => {
-    if (isFleetWide) {
-      return {
-        serviceIds: null,
-        serviceNames: [],
-        isLoading: false,
-        error: undefined,
-        isFleetWide: true,
-      };
-    }
-    const records = data?.records ?? [];
-    const serviceIds = records
-      .map((r) => r.id)
-      .filter((v): v is string => typeof v === "string" && v.length > 0);
-    const serviceNames = records
-      .map((r) => r["entity.name"])
-      .filter((v): v is string => typeof v === "string" && v.length > 0);
-    return {
-      serviceIds,
-      serviceNames,
-      isLoading,
-      error: error ?? undefined,
-      isFleetWide: false,
-    };
-  }, [isFleetWide, data, isLoading, error]);
-};
-
 /**
- * True when downstream page queries are safe to fire:
- *   - Fleet-wide mode: always safe.
- *   - Resolved mode: only after the resolution query finishes and yields ids.
+ * Returns a stable fleet-wide stub. Kept as a hook (vs a constant) so call
+ * sites' dependency arrays stay correct — and so we can re-introduce
+ * scope-derived service resolution later without changing all callers.
  */
-export const canQueryScope = (result: UseResolvedServicesResult): boolean =>
-  result.isFleetWide ||
-  (!result.isLoading && (result.serviceIds?.length ?? 0) > 0);
+export const useResolvedServices = (): UseResolvedServicesResult => ({
+  serviceIds: null,
+  serviceNames: [],
+  isLoading: false,
+  error: undefined,
+  isFleetWide: true,
+});
+
+/** Always true now — segments handle scoping at the request level. */
+export const canQueryScope = (_result: UseResolvedServicesResult): boolean =>
+  true;

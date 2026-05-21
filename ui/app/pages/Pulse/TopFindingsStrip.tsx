@@ -15,8 +15,9 @@ export interface TopFindingsStripProps {
 
 /**
  * Top-issues strip on Pulse — up to 5 finding cards laid out across the row.
- * Same Finding shape as AnomalyPanel rows so we can render both views from a
- * single source.
+ * Renders nothing when there are no findings and nothing is loading (per the
+ * "hide when empty" UX rule). Inherits the Dynatrace Intelligence framing
+ * since this absorbed the role of the legacy AnomalyPanel.
  */
 export const TopFindingsStrip = ({
   findings,
@@ -24,16 +25,39 @@ export const TopFindingsStrip = ({
   onSelect,
 }: TopFindingsStripProps) => {
   const cards = findings.slice(0, MAX_CARDS);
+
+  // Hide the entire surface when there's nothing to show — empty-state copy
+  // here was visually noisy when the platform is healthy.
+  if (!isLoading && cards.length === 0) return null;
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Top issues requiring attention
-          </Heading>
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            Surfaced by Dynatrace Intelligence · click any card to investigate
-          </Text>
+        <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
+          <Flex flexDirection="column" gap={2}>
+            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+              Top issues requiring attention
+            </Heading>
+            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+              Threshold-based detection · click any card to investigate
+            </Text>
+          </Flex>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--purple-2)",
+              background: "var(--intel-soft)",
+              border: "1px solid var(--purple-2)",
+              borderRadius: 999,
+              padding: "3px 10px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Dynatrace Intelligence in production
+          </span>
         </Flex>
 
         {isLoading && cards.length === 0 ? (
@@ -48,10 +72,6 @@ export const TopFindingsStrip = ({
               <Skeleton key={i} style={{ height: 110, borderRadius: 10 }} />
             ))}
           </div>
-        ) : cards.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No issues surfaced in the current scope. All thresholds healthy.
-          </Text>
         ) : (
           <div
             style={{

@@ -1,9 +1,13 @@
 /**
- * DQL string builders for scope resolution. Mirrors SPEC.md §5 and the CMDB
- * cascade convention from the Quality Engineering Performance Testing dashboard.
+ * DQL string builders that participate in scope resolution.
  *
- * NOTE: Queries should be validated against the United Airlines nonprod tenant
- * (`dtctl query run --tenant ualpre --dql ...`) before being relied upon.
+ * AppCI / Application / Env scoping was retired in favour of Dynatrace
+ * platform Segments — those scope queries at the request level via
+ * `filterSegments` on DqlQueryParams. As a result `scopeFilterClause`
+ * always receives `null` from the (now-stubbed) `useResolvedServices`
+ * hook and emits the empty string. The function is kept so existing
+ * page query builders continue to compile and stay forward-compatible
+ * if per-service filtering is reintroduced later.
  */
 
 /** Escape a value for safe interpolation inside a DQL double-quoted string. */
@@ -15,60 +19,19 @@ export const dqlIdArray = (ids: string[]): string =>
   ids.map((id) => `"${dqlEscape(id)}"`).join(", ");
 
 /**
- * Emit a service-id filter clause when an AppCI scope is active. When
- * `serviceIds` is `null` the app is running fleet-wide and no filter is added.
- * Hooks must guard so this is never called with `[]` — that path would scan
- * everything despite the user expecting "nothing in scope".
+ * Emit a service-id filter clause when a resolved service list is provided.
+ * `null` (the only value passed today) yields an empty clause so the query
+ * runs fleet-wide. The signature preserves the option of reintroducing
+ * service-id filtering later.
  */
 export const scopeFilterClause = (serviceIds: string[] | null): string =>
   serviceIds === null
     ? ""
     : `| filter in(dt.entity.service, array(${dqlIdArray(serviceIds)}))`;
 
-/** CMDB AppCI <-> owner mapping lookup table path. */
-export const CMDB_LOOKUP_PATH = "/lookups/dynatrace/cmdb_appci_owner_mapping";
-
-export const APPCI_OPTIONS_QUERY = `
-load "${CMDB_LOOKUP_PATH}"
-| filter operational_status != "Retired"
-| sort applicationci asc
-| fields applicationci
-| dedup applicationci
-| limit 10000
-`.trim();
-
-export const buildApplicationOptionsQuery = (appCi: string): string => `
-load "${CMDB_LOOKUP_PATH}"
-| filter operational_status != "Retired"
-| filter matchesValue(applicationci, "${dqlEscape(appCi)}")
-| fieldsAdd label = concat(upper(applicationci), " - ", name)
-| sort applicationci asc
-| fields label
-`.trim();
-
-export const buildResolvedServicesQuery = (
-  appCi: string,
-  env: string | undefined,
-): string => {
-  const envClause = env
-    ? `| filter matchesValue(tagstr, "*env:${dqlEscape(env)}*")`
-    : "";
-  return `
-fetch dt.entity.service
-| fieldsAdd tagstr = toString(tags)
-| filter matchesValue(tagstr, "*applicationci:${dqlEscape(appCi)}*")
-${envClause}
-| fields id, entity.name
-| dedup id
-| sort entity.name asc
-| limit 10000
-`.trim();
-};
-
 /**
- * Cheap aggregation: count of distinct agent names. Filtered by the resolved
- * service list when an AppCI is active, otherwise runs fleet-wide. The
- * attribute path will graduate into detection/attributes.ts in a later session.
+ * Cheap distinct-agent count for the fleet-wide status line. `serviceIds`
+ * is accepted for signature compatibility but always passes through as null.
  */
 export const buildAgentCountQuery = (
   serviceIds: string[] | null,
@@ -96,7 +59,7 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 };
 
-/** Cheap distinct-services count used by the status line in fleet-wide mode. */
+/** Distinct-services count for the status line. */
 export const FLEET_SERVICE_COUNT_QUERY = `
 fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 200
 | filter isNotNull(gen_ai.provider.name)

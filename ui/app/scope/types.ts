@@ -3,12 +3,14 @@ export interface Timeframe {
   to?: string;
 }
 
+/**
+ * Global scope shared across pages. Reduced to timeframe-only after the
+ * AppCI / Application / Env dropdown filters were retired in favour of
+ * Dynatrace platform Segments — those handle entity scoping via
+ * filterSegments on the underlying DqlQueryParams.
+ */
 export interface Scope {
-  appCi?: string;
-  application?: string;
-  env?: string;
   timeframe: Timeframe;
-  scanLimitGBytes?: number;
 }
 
 export interface TimePreset {
@@ -24,15 +26,6 @@ export const TIME_PRESETS: TimePreset[] = [
   { value: "now()-7d", label: "Last 7 days" },
   { value: "now()-14d", label: "Last 14 days" },
   { value: "now()-30d", label: "Last 30 days" },
-];
-
-export const ENV_OPTIONS: string[] = [
-  "dev",
-  "qa",
-  "stg",
-  "nonprod",
-  "preprod",
-  "production",
 ];
 
 export const DEFAULT_SCOPE: Scope = {

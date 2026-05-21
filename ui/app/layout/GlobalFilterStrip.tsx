@@ -6,15 +6,10 @@ import { Select } from "@dynatrace/strato-components/forms";
 import { SegmentSelector } from "@dynatrace/strato-components/filters";
 import { ResetIcon } from "@dynatrace/strato-icons";
 import { useScope } from "../scope/ScopeContext";
-import { useAppCiOptions } from "../scope/useAppCiOptions";
-import { useApplicationOptions } from "../scope/useApplicationOptions";
-import { ENV_OPTIONS, TIME_PRESETS } from "../scope/types";
+import { TIME_PRESETS } from "../scope/types";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
 import { ScanLimitSegmented } from "./ScanLimitSegmented";
 import { SamplingSegmented } from "./SamplingSegmented";
-
-const ALL_APPLICATIONS = "__all__";
-const ALL_ENVS = "__all__";
 
 interface LabeledFieldProps {
   label: string;
@@ -22,7 +17,7 @@ interface LabeledFieldProps {
 }
 
 const LabeledField = ({ label, children }: LabeledFieldProps) => (
-  <Flex flexDirection="column" gap={2} style={{ minWidth: 160 }}>
+  <Flex flexDirection="column" gap={2} style={{ minWidth: 140 }}>
     <Text
       style={{
         fontSize: 10,
@@ -39,17 +34,9 @@ const LabeledField = ({ label, children }: LabeledFieldProps) => (
 );
 
 export const GlobalFilterStrip = () => {
-  const { scope, setAppCi, setApplication, setEnv, setTimeframe, reset } =
-    useScope();
-  const { options: appCiOptions, isLoading: appCiLoading } = useAppCiOptions();
-  const { options: applicationOptions, isLoading: applicationLoading } =
-    useApplicationOptions(scope.appCi);
+  const { scope, setTimeframe, reset } = useScope();
 
-  const isDefaultScope =
-    !scope.appCi &&
-    !scope.application &&
-    !scope.env &&
-    scope.timeframe.from === "now()-24h";
+  const isDefaultScope = scope.timeframe.from === "now()-24h";
 
   return (
     <Flex
@@ -61,83 +48,14 @@ export const GlobalFilterStrip = () => {
       }}
     >
       <Flex
-        gap={16}
+        gap={12}
         alignItems="flex-end"
-        style={{ padding: "8px 20px", minHeight: 48 }}
+        style={{
+          padding: "8px 20px",
+          minHeight: 48,
+          flexWrap: "wrap",
+        }}
       >
-        <LabeledField label="AppCI">
-          <Select<string>
-            name="appCi"
-            value={scope.appCi ?? null}
-            onChange={(v) => setAppCi(v ?? undefined)}
-            clearable
-          >
-            <Select.Trigger
-              placeholder={appCiLoading ? "Loading..." : "Select AppCI"}
-            />
-            <Select.Content>
-              {appCiOptions.map((ci) => (
-                <Select.Option key={ci} value={ci}>
-                  {ci}
-                </Select.Option>
-              ))}
-            </Select.Content>
-          </Select>
-        </LabeledField>
-
-        <LabeledField label="Application">
-          <Select<string>
-            name="application"
-            value={scope.application ?? ALL_APPLICATIONS}
-            onChange={(v) =>
-              setApplication(v === ALL_APPLICATIONS ? undefined : v ?? undefined)
-            }
-            disabled={!scope.appCi}
-          >
-            <Select.Trigger
-              placeholder={
-                !scope.appCi
-                  ? "Select AppCI first"
-                  : applicationLoading
-                    ? "Loading..."
-                    : `All applications under ${scope.appCi}`
-              }
-            />
-            <Select.Content>
-              <Select.Option value={ALL_APPLICATIONS}>
-                {scope.appCi
-                  ? `All applications under ${scope.appCi}`
-                  : "All"}
-              </Select.Option>
-              {applicationOptions.map((label) => (
-                <Select.Option key={label} value={label}>
-                  {label}
-                </Select.Option>
-              ))}
-            </Select.Content>
-          </Select>
-        </LabeledField>
-
-        <LabeledField label="Env">
-          <Select<string>
-            name="env"
-            value={scope.env ?? ALL_ENVS}
-            onChange={(v) =>
-              setEnv(v === ALL_ENVS ? undefined : v ?? undefined)
-            }
-          >
-            <Select.Trigger placeholder="All envs" />
-            <Select.Content>
-              <Select.Option value={ALL_ENVS}>All envs</Select.Option>
-              {ENV_OPTIONS.map((env) => (
-                <Select.Option key={env} value={env}>
-                  {env}
-                </Select.Option>
-              ))}
-            </Select.Content>
-          </Select>
-        </LabeledField>
-
         <LabeledField label="Time">
           <Select<string>
             name="time"
@@ -159,11 +77,15 @@ export const GlobalFilterStrip = () => {
           <SegmentSelector variant="compact" />
         </LabeledField>
 
-        <Flex flexGrow={1} />
+        <Flex flexGrow={1} style={{ minWidth: 0 }} />
 
-        <SamplingSegmented />
+        <LabeledField label="Sampling">
+          <SamplingSegmented />
+        </LabeledField>
 
-        <ScanLimitSegmented />
+        <LabeledField label="Scan limit">
+          <ScanLimitSegmented />
+        </LabeledField>
 
         <Button
           variant="default"

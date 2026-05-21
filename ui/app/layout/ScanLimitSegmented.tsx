@@ -1,65 +1,41 @@
 import React from "react";
-import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
+import { Select } from "@dynatrace/strato-components/forms";
 import {
   SCAN_LIMITS_GB,
   SCAN_LIMIT_LABELS,
   useScanLimit,
+  type ScanLimitGb,
 } from "../scope/ScanLimitContext";
 
+/**
+ * Compact dropdown for the global scan-limit setting. (Originally a segmented
+ * control — switched to a Select so it stays visible in narrow toolbars.)
+ */
 export const ScanLimitSegmented = () => {
   const { scanLimitGb, setScanLimit } = useScanLimit();
   return (
-    <Flex alignItems="center" gap={6}>
-      <Text
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "var(--text-3)",
+    <div style={{ minWidth: 110 }}>
+      <Select<string>
+        name="scan-limit"
+        value={String(scanLimitGb)}
+        onChange={(v) => {
+          if (!v) return;
+          const next = Number(v) as ScanLimitGb;
+          if (SCAN_LIMITS_GB.includes(next)) setScanLimit(next);
         }}
       >
-        Scan limit
-      </Text>
-      <div
-        role="radiogroup"
-        aria-label="Scan limit"
-        style={{
-          display: "inline-flex",
-          padding: 2,
-          background: "var(--surface-2)",
-          border: "1px solid var(--border)",
-          borderRadius: 999,
-        }}
-      >
-        {SCAN_LIMITS_GB.map((value) => {
-          const active = value === scanLimitGb;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              aria-label={`Set scan limit to ${SCAN_LIMIT_LABELS[value]}`}
-              onClick={() => setScanLimit(value)}
-              style={{
-                all: "unset",
-                cursor: "pointer",
-                padding: "4px 10px",
-                borderRadius: 999,
-                fontSize: 11.5,
-                fontWeight: active ? 600 : 500,
-                color: active ? "var(--text)" : "var(--text-2)",
-                background: active ? "var(--surface)" : "transparent",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
+        <Select.Trigger
+          placeholder={SCAN_LIMIT_LABELS[scanLimitGb]}
+          aria-label="Scan limit"
+        />
+        <Select.Content>
+          {SCAN_LIMITS_GB.map((value) => (
+            <Select.Option key={value} value={String(value)}>
               {SCAN_LIMIT_LABELS[value]}
-            </button>
-          );
-        })}
-      </div>
-    </Flex>
+            </Select.Option>
+          ))}
+        </Select.Content>
+      </Select>
+    </div>
   );
 };

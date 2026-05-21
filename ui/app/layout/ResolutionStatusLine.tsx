@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
-import { useScope } from "../scope/ScopeContext";
 import { useResolvedCounts } from "../scope/useResolvedCounts";
-import { CMDB_LOOKUP_PATH } from "../scope/queries";
 
 const formatRelative = (ms: number): string => {
   if (ms < 1000) return "just now";
@@ -18,7 +16,6 @@ const formatRelative = (ms: number): string => {
 const formatCount = (n: number | null): string => (n == null ? "—" : String(n));
 
 export const ResolutionStatusLine = () => {
-  const { scope } = useScope();
   const counts = useResolvedCounts();
   const [now, setNow] = useState(() => Date.now());
 
@@ -32,32 +29,6 @@ export const ResolutionStatusLine = () => {
       ? "refreshing..."
       : formatRelative(now - counts.lastRefreshed);
 
-  const scopeLabel = scope.appCi ? (
-    <>
-      Resolved: <strong>{formatCount(counts.services)}</strong> services ·{" "}
-      <strong>{formatCount(counts.agents)}</strong> agents ·{" "}
-      <strong>{formatCount(counts.tools)}</strong> tools
-    </>
-  ) : (
-    <>
-      <strong>Fleet-wide</strong> ·{" "}
-      <strong>{formatCount(counts.services)}</strong> services with AI spans ·{" "}
-      <strong>{formatCount(counts.agents)}</strong> agents ·{" "}
-      <strong>{formatCount(counts.tools)}</strong> tools
-    </>
-  );
-
-  const sourceLabel = scope.appCi ? (
-    <>
-      Source:{" "}
-      <span style={{ fontFamily: "var(--mono, monospace)" }}>
-        {CMDB_LOOKUP_PATH}
-      </span>
-    </>
-  ) : (
-    "Filter by AppCI in the strip above to narrow scope."
-  );
-
   return (
     <Flex
       alignItems="center"
@@ -66,14 +37,18 @@ export const ResolutionStatusLine = () => {
         padding: "4px 20px",
         borderTop: "1px solid var(--border)",
         background: "var(--surface-2)",
+        flexWrap: "wrap",
       }}
     >
       <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-        {scopeLabel}
+        <strong>Fleet-wide</strong> ·{" "}
+        <strong>{formatCount(counts.services)}</strong> services with AI spans ·{" "}
+        <strong>{formatCount(counts.agents)}</strong> agents ·{" "}
+        <strong>{formatCount(counts.tools)}</strong> tools
       </Text>
       <Flex flexGrow={1} />
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-        {sourceLabel}
+        Scope further with Segments in the toolbar above.
       </Text>
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
         Last refreshed {refreshedLabel}
