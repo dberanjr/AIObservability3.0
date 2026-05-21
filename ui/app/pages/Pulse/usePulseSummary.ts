@@ -48,14 +48,18 @@ export interface PulseSummary {
 }
 
 /**
- * Target bucket count for the sparkline series. The actual interval is
- * sized from the active timeframe so a 24h window gives ~5.5-minute
- * buckets, a 7d window gives ~67-minute buckets, etc. Clamped against a
- * 30-second floor below to keep Grail's `makeTimeseries` happy on very
- * short windows.
+ * Sparkline bucket interval per timeframe. Tiered so the chart density
+ * lines up with what the user specified for 24h / 7d / 30d, with smooth
+ * coverage either side.
+ *
+ *   <= 30m   → 30s   (~60 buckets)
+ *   <= 1h    → 60s   (~60 buckets)
+ *   <= 6h    → 120s  (~180 buckets)
+ *   <= 24h   → 300s  (~288 buckets — user spec: 5 min)
+ *   <= 7d    → 3600s (~168 buckets — user spec: 60 min)
+ *   <= 30d   → 21600s (~120 buckets — user spec: 6 hours)
+ *   else     → 1 day
  */
-const SPARK_TARGET_BUCKETS = 150;
-
 const parseSparkScopeMs = (from: string): number => {
   const m = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
   if (!m) return 24 * 60 * 60 * 1000;
@@ -70,6 +74,19 @@ const parseSparkScopeMs = (from: string): number => {
     default:
       return 24 * 60 * 60 * 1000;
   }
+};
+
+const pickSparkIntervalSec = (totalMs: number): number => {
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (totalMs <= 30 * minute) return 30;
+  if (totalMs <= 1 * hour) return 60;
+  if (totalMs <= 6 * hour) return 120;
+  if (totalMs <= 1 * day) return 300; // 5 min
+  if (totalMs <= 7 * day) return 3600; // 60 min
+  if (totalMs <= 30 * day) return 21600; // 6 hours
+  return 86400; // 1 day
 };
 
 /**
@@ -95,14 +112,11 @@ export const usePulseSummary = (): PulseSummary => {
     { enabled: canQuery, staleTime: 60_000 },
   );
 
-  // Bucket interval scales with the active timeframe so sparklines stay
-  // smooth at any scope without overshooting Grail's `makeTimeseries`
-  // minimum interval.
+  // Bucket interval picked from a tiered map (24h → 5min, 7d → 60min,
+  // 30d → 6h, with sensible defaults either side) so sparklines stay
+  // smooth at any scope.
   const sparkTotalMs = parseSparkScopeMs(scope.timeframe.from);
-  const sparkIntervalSec = Math.max(
-    30,
-    Math.floor(sparkTotalMs / SPARK_TARGET_BUCKETS / 1000),
-  );
+  const sparkIntervalSec = pickSparkIntervalSec(sparkTotalMs);
 
   const spark = useScopedDql<SeriesRecord>(
     canQuery

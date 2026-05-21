@@ -94,6 +94,53 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
+ * Per-model request counts for the Models tile donut. Stripped of the model
+ * version suffix client-side so "claude-sonnet-4-5-20250114" and
+ * "claude-sonnet-4-5" collapse to one slice.
+ */
+export const buildModelsBreakdownQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.request.model)
+| summarize requests = count(), by: { model = gen_ai.request.model }
+| sort requests desc
+| limit 12
+`.trim();
+
+/**
+ * Per-MCP-server request counts for the MCP Servers tile donut.
+ */
+export const buildMcpServersBreakdownQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(mcp.server.name)
+| summarize requests = count(), by: { server = mcp.server.name }
+| sort requests desc
+| limit 12
+`.trim();
+
+/**
+ * Per-MCP-tool call counts for the MCP Tools tile donut.
+ */
+export const buildMcpToolsBreakdownQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${to(timeframe)}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.tool.name)
+| summarize calls = count(), by: { tool = gen_ai.tool.name }
+| sort calls desc
+| limit 12
+`.trim();
+
+/**
  * Provider share of requests. Bedrock-proxied calls are unwrapped to their
  * upstream vendor (anthropic / cohere / mistral / etc.) server-side via
  * dqlNormalizedProvider so the donut buckets canonical providers rather than
