@@ -23,8 +23,54 @@ import {
   fmtUSD,
   fmtUSDCompact,
 } from "../../data/format";
+import { useScope } from "../../scope/ScopeContext";
 import type { PulseSummary } from "./usePulseSummary";
-import { useTileBreakdowns } from "./useTileBreakdowns";
+import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
+
+/**
+ * Friendly label for the active timeframe. Relative expressions like
+ * "now()-1h" get a readable "Last 1 hour" caption; ISO timestamps render
+ * as "MMM dd HH:MM → MMM dd HH:MM" for explicit ranges (brush-zoom result).
+ */
+const formatTimeframe = (from: string, to: string | undefined): string => {
+  const relMatch = /^now\(\)-(\d+)([smhd])$/i.exec(from);
+  const isNow = !to || to === "now()";
+  if (relMatch && isNow) {
+    const n = Number(relMatch[1]);
+    const unit = relMatch[2].toLowerCase();
+    const unitLabel =
+      unit === "s"
+        ? n === 1
+          ? "second"
+          : "seconds"
+        : unit === "m"
+          ? n === 1
+            ? "minute"
+            : "minutes"
+          : unit === "h"
+            ? n === 1
+              ? "hour"
+              : "hours"
+            : n === 1
+              ? "day"
+              : "days";
+    return `Last ${n} ${unitLabel}`;
+  }
+  const fmt = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const fromIso = from.replace(/^"|"$/g, "");
+  const toIso = (to ?? "now()").replace(/^"|"$/g, "");
+  const fromDate = new Date(fromIso);
+  const toDate = toIso === "now()" ? new Date() : new Date(toIso);
+  if (!Number.isNaN(fromDate.getTime()) && !Number.isNaN(toDate.getTime())) {
+    return `${fmt.format(fromDate)} → ${fmt.format(toDate)}`;
+  }
+  return `${from} → ${to ?? "now()"}`;
+};
 
 type TileVariant = "value" | "visual";
 
@@ -256,6 +302,8 @@ const pickColumns = (width: number): number => {
 
 export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
   const breakdowns = useTileBreakdowns();
+  const { scope } = useScope();
+  const timeframeLabel = formatTimeframe(scope.timeframe.from, scope.timeframe.to);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   // Default to 9 columns until the observer fires — avoids a jarring
   // reflow on first mount on wide viewports.
@@ -361,21 +409,25 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     };
   };
 
-  // Reusable "expanded donut" — bigger donut + a legend listing every
-  // segment with its name, value, and percent. Sorted by value desc.
+  // Reusable "expanded donut" — bigger donut + a full segment table with
+  // primary metric, total tokens, derived cost, and share. Slice cost is
+  // computed in useTileBreakdowns via the same blended-pricing helper as
+  // the Spend tile (per-model pricing where known).
   const donutExpanded = (
     title: string,
     info: string,
     centerCount: number | null,
     centerLabel: string,
-    slices: { label: string; value: number }[],
+    slices: BreakdownSlice[],
     fmt: (n: number) => string,
   ) => {
     const total = slices.reduce((a, b) => a + b.value, 0);
+    const totalTokens = slices.reduce((a, b) => a + b.tokens, 0);
+    const totalCost = slices.reduce((a, b) => a + b.cost, 0);
     const sorted = [...slices].sort((a, b) => b.value - a.value);
     return {
       title,
-      subtitle: info,
+      subtitle: `${info} · ${timeframeLabel}`,
       body: (
         <Flex gap={32} alignItems="center" style={{ minHeight: 360 }}>
           <MiniDonut
@@ -419,6 +471,24 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                     }}
                   >
                     Value
+                  </th>
+                  <th
+                    style={{
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                      textAlign: "right",
+                    }}
+                  >
+                    Tokens
+                  </th>
+                  <th
+                    style={{
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                      textAlign: "right",
+                    }}
+                  >
+                    Cost
                   </th>
                   <th
                     style={{
@@ -478,6 +548,12 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                       <td style={{ padding: "8px", textAlign: "right" }}>
                         {fmt(s.value)}
                       </td>
+                      <td style={{ padding: "8px", textAlign: "right" }}>
+                        {fmtTokens(s.tokens)}
+                      </td>
+                      <td style={{ padding: "8px", textAlign: "right" }}>
+                        {fmtUSD(s.cost)}
+                      </td>
                       <td
                         style={{
                           padding: "8px",
@@ -502,11 +578,14 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             centerCount != null ? String(Math.round(centerCount)) : "—",
         },
         { label: "Total events", value: fmt(total) },
+        { label: "Total tokens", value: fmtTokens(totalTokens) },
+        { label: "Total cost", value: fmtUSDCompact(totalCost) },
         {
           label: "Top",
           value: sorted[0]?.label ?? "—",
           sub: sorted[0] ? fmt(sorted[0].value) : undefined,
         },
+        { label: "Timeframe", value: timeframeLabel },
       ],
     };
   };
@@ -609,7 +688,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Distinct models invoked, sized by request volume. Version suffixes collapsed.",
             summary.models,
             "Model",
-            breakdowns.models.map((m) => ({ label: m.label, value: m.value })),
+            breakdowns.models,
             (n) => `${fmtCount(n)} req`,
           )
         }
@@ -638,7 +717,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Distinct MCP workflows (traceloop.workflow.name ending in .mcp).",
             summary.mcpServers,
             "Server",
-            breakdowns.mcpServers.map((s) => ({ label: s.label, value: s.value })),
+            breakdowns.mcpServers,
             (n) => `${fmtCount(n)} req`,
           )
         }
@@ -667,7 +746,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Distinct tools invoked within MCP workflows, sized by call count.",
             summary.mcpTools,
             "Tool",
-            breakdowns.mcpTools.map((t) => ({ label: t.label, value: t.value })),
+            breakdowns.mcpTools,
             (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
           )
         }

@@ -150,7 +150,8 @@ ${scopeFilterClause(serviceIds)}
 /**
  * Per-model request counts for the Models tile donut. Stripped of the model
  * version suffix client-side so "claude-sonnet-4-5-20250114" and
- * "claude-sonnet-4-5" collapse to one slice.
+ * "claude-sonnet-4-5" collapse to one slice. Also returns input/output
+ * token sums so the maximized table can show tokens + derived cost per row.
  */
 export const buildModelsBreakdownQuery = (
   serviceIds: string[] | null,
@@ -159,7 +160,14 @@ export const buildModelsBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
-| summarize requests = count(), by: { model = gen_ai.request.model }
+| fieldsAdd
+    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
+    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+| summarize
+    requests = count(),
+    input_tokens = sum(in_tok),
+    output_tokens = sum(out_tok),
+    by: { model = gen_ai.request.model }
 | sort requests desc
 | limit 12
 `.trim();
@@ -177,7 +185,14 @@ export const buildMcpServersBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
-| summarize requests = count(), by: { server = traceloop.workflow.name }
+| fieldsAdd
+    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
+    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
+| summarize
+    requests = count(),
+    input_tokens = sum(in_tok),
+    output_tokens = sum(out_tok),
+    by: { server = traceloop.workflow.name }
 | sort requests desc
 | limit 12
 `.trim();
@@ -194,9 +209,16 @@ export const buildMcpToolsBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
-| fieldsAdd tool = coalesce(gen_ai.tool.name, traceloop.entity.name)
+| fieldsAdd
+    tool = coalesce(gen_ai.tool.name, traceloop.entity.name),
+    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
+    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0)
 | filter isNotNull(tool)
-| summarize calls = count(), by: { tool }
+| summarize
+    calls = count(),
+    input_tokens = sum(in_tok),
+    output_tokens = sum(out_tok),
+    by: { tool }
 | sort calls desc
 | limit 12
 `.trim();

@@ -4,6 +4,7 @@ import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
 import { stripModelVersion } from "../../detection/attributes";
+import { estimateCost, getPricing } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import {
   buildMcpServersBreakdownQuery,
@@ -14,7 +15,14 @@ import {
 export interface BreakdownSlice {
   key: string;
   label: string;
+  /** Primary metric used for donut sizing (requests for models/servers,
+   * call count for tools). */
   value: number;
+  /** Total input + output tokens summed across the slice's spans. */
+  tokens: number;
+  /** Blended USD estimate derived from the tokens via pricing.ts. For
+   * model slices we use the model-specific pricing when known. */
+  cost: number;
 }
 
 export interface UseTileBreakdownsResult {
@@ -28,14 +36,20 @@ export interface UseTileBreakdownsResult {
 interface ModelRec {
   model?: string;
   requests?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 interface ServerRec {
   server?: string;
   requests?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 interface ToolRec {
   tool?: string;
   calls?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 const num = (v: unknown): number => {
@@ -44,10 +58,17 @@ const num = (v: unknown): number => {
 };
 
 /**
+ * Blended pricing used for non-model rows (MCP servers/tools, mixed
+ * traffic). Matches the headline Spend tile so per-row cost on the
+ * donut tables stays consistent with the rest of the page.
+ */
+const BLENDED_PRICING = getPricing("claude-sonnet-4-6");
+
+/**
  * Donut data for the Models / MCP Servers / MCP Tools summary tiles.
- * Each breakdown is a sorted list of {label, value} slices, already
- * extrapolated by the active samplingRatio so the donut proportions
- * match the unsampled population.
+ * Each breakdown is a sorted list of {label, value, tokens, cost} slices,
+ * already extrapolated by the active samplingRatio so the donut
+ * proportions and the per-row tokens/cost match the unsampled population.
  */
 export const useTileBreakdowns = (): UseTileBreakdownsResult => {
   const { scope } = useScope();
@@ -72,17 +93,43 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
   return useMemo<UseTileBreakdownsResult>(() => {
     // Group model variants (date suffixes etc.) under their canonical name
     // so the donut doesn't fragment one model across N suffixed slices.
-    const modelAcc = new Map<string, number>();
+    // Accumulate the per-variant tokens into the canonical bucket too so
+    // the table row totals are accurate.
+    interface ModelAgg {
+      requests: number;
+      inputTokens: number;
+      outputTokens: number;
+      // Track one representative raw model id so we can look up
+      // per-model pricing instead of blending.
+      pricingKey: string;
+    }
+    const modelAcc = new Map<string, ModelAgg>();
     for (const r of modelsRes.data?.records ?? []) {
       if (typeof r.model !== "string" || !r.model) continue;
       const canonical = stripModelVersion(r.model) || r.model;
-      modelAcc.set(
-        canonical,
-        (modelAcc.get(canonical) ?? 0) + num(r.requests) * samplingRatio,
-      );
+      const cur =
+        modelAcc.get(canonical) ?? {
+          requests: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          pricingKey: r.model,
+        };
+      cur.requests += num(r.requests) * samplingRatio;
+      cur.inputTokens += num(r.input_tokens) * samplingRatio;
+      cur.outputTokens += num(r.output_tokens) * samplingRatio;
+      modelAcc.set(canonical, cur);
     }
     const models: BreakdownSlice[] = Array.from(modelAcc.entries())
-      .map(([label, value]) => ({ key: label, label, value }))
+      .map(([label, agg]) => {
+        const pricing = getPricing(agg.pricingKey);
+        return {
+          key: label,
+          label,
+          value: agg.requests,
+          tokens: agg.inputTokens + agg.outputTokens,
+          cost: estimateCost(agg.inputTokens, agg.outputTokens, pricing),
+        };
+      })
       .sort((a, b) => b.value - a.value);
 
     const mcpServers: BreakdownSlice[] = (serversRes.data?.records ?? [])
@@ -90,22 +137,34 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
         (r): r is Required<Pick<ServerRec, "server">> & ServerRec =>
           typeof r.server === "string" && r.server.length > 0,
       )
-      .map((r) => ({
-        key: r.server,
-        label: r.server,
-        value: num(r.requests) * samplingRatio,
-      }));
+      .map((r) => {
+        const inTok = num(r.input_tokens) * samplingRatio;
+        const outTok = num(r.output_tokens) * samplingRatio;
+        return {
+          key: r.server,
+          label: r.server,
+          value: num(r.requests) * samplingRatio,
+          tokens: inTok + outTok,
+          cost: estimateCost(inTok, outTok, BLENDED_PRICING),
+        };
+      });
 
     const mcpTools: BreakdownSlice[] = (toolsRes.data?.records ?? [])
       .filter(
         (r): r is Required<Pick<ToolRec, "tool">> & ToolRec =>
           typeof r.tool === "string" && r.tool.length > 0,
       )
-      .map((r) => ({
-        key: r.tool,
-        label: r.tool,
-        value: num(r.calls) * samplingRatio,
-      }));
+      .map((r) => {
+        const inTok = num(r.input_tokens) * samplingRatio;
+        const outTok = num(r.output_tokens) * samplingRatio;
+        return {
+          key: r.tool,
+          label: r.tool,
+          value: num(r.calls) * samplingRatio,
+          tokens: inTok + outTok,
+          cost: estimateCost(inTok, outTok, BLENDED_PRICING),
+        };
+      });
 
     return {
       models,
