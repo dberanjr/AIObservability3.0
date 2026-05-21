@@ -55,7 +55,7 @@ export const PulsePage = () => {
     <>
       <Flex
         flexDirection="column"
-        gap={16}
+        gap={24}
         style={{ padding: "18px 20px 80px" }}
       >
         {firstError && <ErrorBanner error={firstError} />}

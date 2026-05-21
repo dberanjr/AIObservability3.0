@@ -20,21 +20,33 @@ import {
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns } from "./useTileBreakdowns";
 
+type TileVariant = "value" | "visual";
+
 interface TileShellProps {
   label: string;
-  value: string;
+  /** Variant "value" shows a big number + optional bottom chart; variant
+   * "visual" centers a single visualization (e.g., a big donut) and skips
+   * the redundant left-side number. */
+  variant?: TileVariant;
+  value?: string;
   sub?: string;
-  /** Chart that pins to the bottom of the tile. */
+  /** Bottom-pinned chart, used by "value" variant. */
   bottom?: React.ReactNode;
-  /**
-   * When set, the chart renders to the right of the value (e.g. for
-   * donuts that read better next to the big number). When unset the chart
-   * goes below via the `bottom` slot.
-   */
-  side?: React.ReactNode;
+  /** Centered visualization, used by "visual" variant. */
+  visual?: React.ReactNode;
+  /** Visual variant — extra caption rendered under the centered visual. */
+  visualCaption?: string;
 }
 
-const Tile = ({ label, value, sub, bottom, side }: TileShellProps) => {
+const Tile = ({
+  label,
+  variant = "value",
+  value,
+  sub,
+  bottom,
+  visual,
+  visualCaption,
+}: TileShellProps) => {
   const { density, tileStyle } = useTweaks();
   const pad = density === "minimal" ? 4 : density === "compact" ? 8 : 12;
   const tileOverride: React.CSSProperties =
@@ -78,9 +90,24 @@ const Tile = ({ label, value, sub, bottom, side }: TileShellProps) => {
           {label}
         </Text>
 
-        {side ? (
-          <Flex alignItems="center" justifyContent="space-between" gap={8}>
-            <Flex flexDirection="column" gap={4} style={{ minWidth: 0 }}>
+        {variant === "visual" ? (
+          <Flex
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            gap={4}
+            style={{ flexGrow: 1, minHeight: 0, width: "100%" }}
+          >
+            {visual}
+            {visualCaption && (
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {visualCaption}
+              </Text>
+            )}
+          </Flex>
+        ) : (
+          <>
+            {value !== undefined && (
               <Text
                 style={{
                   fontSize: 22,
@@ -92,34 +119,15 @@ const Tile = ({ label, value, sub, bottom, side }: TileShellProps) => {
               >
                 {value}
               </Text>
-              {sub && (
-                <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-                  {sub}
-                </Text>
-              )}
-            </Flex>
-            {side}
-          </Flex>
-        ) : (
-          <>
-            <Text
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                fontVariantNumeric: "tabular-nums",
-                lineHeight: 1,
-                color: "var(--text)",
-              }}
-            >
-              {value}
-            </Text>
-            {sub && (
-              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>
             )}
+            {sub && (
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {sub}
+              </Text>
+            )}
+            {bottom && <div style={{ marginTop: "auto" }}>{bottom}</div>}
           </>
         )}
-
-        {bottom && <div style={{ marginTop: "auto" }}>{bottom}</div>}
       </Flex>
     </Surface>
   );
@@ -214,9 +222,11 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
       <Tile
         label="Models"
-        value={fmtCount(summary.models)}
-        side={
+        variant="visual"
+        visual={
           <MiniDonut
+            size={96}
+            thickness={14}
             values={breakdowns.models.map((m) => m.value)}
             centerValue={
               summary.models != null ? String(Math.round(summary.models)) : "—"
@@ -226,9 +236,11 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       />
       <Tile
         label="MCP servers"
-        value={fmtCount(summary.mcpServers)}
-        side={
+        variant="visual"
+        visual={
           <MiniDonut
+            size={96}
+            thickness={14}
             values={breakdowns.mcpServers.map((s) => s.value)}
             centerValue={
               summary.mcpServers != null
@@ -240,9 +252,11 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       />
       <Tile
         label="MCP tools"
-        value={fmtCount(summary.mcpTools)}
-        side={
+        variant="visual"
+        visual={
           <MiniDonut
+            size={96}
+            thickness={14}
             values={breakdowns.mcpTools.map((t) => t.value)}
             centerValue={
               summary.mcpTools != null
@@ -271,14 +285,17 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
       <Tile
         label="Token efficiency"
-        value={fmtPercent(summary.tokenEfficiencyPct, 0)}
-        sub="output / total"
-        side={
+        variant="visual"
+        visual={
           <MiniPartialDonut
+            size={96}
+            thickness={14}
             percent={summary.tokenEfficiencyPct ?? 0}
             color={efficiencyColor}
+            centerValue={fmtPercent(summary.tokenEfficiencyPct, 0)}
           />
         }
+        visualCaption="output / total"
       />
     </div>
   );

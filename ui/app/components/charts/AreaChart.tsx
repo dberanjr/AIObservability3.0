@@ -40,6 +40,23 @@ export interface ForecastBand {
   axis?: "left" | "right";
 }
 
+/**
+ * Time domain for brush-zoom. Caller provides the timestamps (in ms) that
+ * correspond to series index 0 and `length - 1`; the chart interpolates
+ * intermediate positions and emits ISO ranges on brush release.
+ */
+export interface ChartTimeDomain {
+  startMs: number;
+  endMs: number;
+}
+
+export interface BrushRange {
+  /** ISO datetime string (or DQL `now()-Nh` expression) for the brush start. */
+  from: string;
+  /** ISO datetime string for the brush end. */
+  to: string;
+}
+
 export interface AreaChartProps {
   series: AreaSeries[];
   height?: number;
@@ -55,6 +72,14 @@ export interface AreaChartProps {
   axisTicks?: AxisTick[];
   /** Optional forecast overlay rendered to the right of the historical data. */
   forecast?: ForecastBand;
+  /** Time domain mapped onto the series. Required for brush-zoom to work. */
+  xDomain?: ChartTimeDomain;
+  /**
+   * Fires on mouse-up after a click-and-drag brush. Receives ISO timestamps
+   * for the selected range. The chart enforces a minimum drag distance so
+   * accidental clicks don't trigger a zoom.
+   */
+  onBrushSelect?: (range: BrushRange) => void;
 }
 
 // VIEW_W is the fallback width used before the ResizeObserver has measured
@@ -93,13 +118,19 @@ export const AreaChart = ({
   xLabels,
   axisTicks,
   forecast,
+  xDomain,
+  onBrushSelect,
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tipPx, setTipPx] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
+  const [brush, setBrush] = useState<{ startPx: number; endPx: number } | null>(
+    null,
+  );
   const { chartStyle } = useTweaks();
   const gradientId = useId();
+  const brushable = Boolean(xDomain && onBrushSelect);
 
   // Track the container's actual pixel width so the SVG viewBox matches
   // 1:1 and text doesn't get stretched by aspect-ratio scaling.
@@ -209,28 +240,89 @@ export const AreaChart = ({
   const yTicks = Array.from({ length: yTickCount + 1 }, (_, i) => i / yTickCount);
   const yPos = (frac: number) => PAD_T + innerH - frac * innerH;
 
-  const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const cursorPx = (clientX: number): number | null => {
     const wrap = wrapRef.current;
-    if (!wrap) return;
+    if (!wrap) return null;
     const rect = wrap.getBoundingClientRect();
-    if (rect.width <= 0 || length <= 1) return;
-    // viewBox now matches container width 1:1, so plot-area bounds are
-    // expressed directly in container pixels — no aspect-ratio scaling.
-    const cursor = e.clientX - rect.left;
-    const clamped = Math.max(PAD_L, Math.min(VIEW_W - PAD_R, cursor));
+    if (rect.width <= 0) return null;
+    const cursor = clientX - rect.left;
+    return Math.max(PAD_L, Math.min(VIEW_W - PAD_R, cursor));
+  };
+
+  const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const clamped = cursorPx(e.clientX);
+    if (clamped == null || length <= 1) return;
+    if (brush) {
+      setBrush({ ...brush, endPx: clamped });
+      // Suppress the hover tooltip while brushing so the selection rect is
+      // the only thing the user is reading.
+      setHoverIdx(null);
+      return;
+    }
     const innerWPx = VIEW_W - PAD_L - PAD_R;
     const idx = Math.round(((clamped - PAD_L) / innerWPx) * (length - 1));
     setHoverIdx(idx);
     setTipPx(clamped);
   };
-  const handleLeave = () => setHoverIdx(null);
+  const handleLeave = () => {
+    setHoverIdx(null);
+    // Cancel an in-progress brush if the cursor leaves the chart entirely.
+    setBrush(null);
+  };
+
+  /** Map a container pixel position to an ISO timestamp using xDomain. */
+  const pixelToTime = (px: number): string | null => {
+    if (!xDomain) return null;
+    const innerWPx = VIEW_W - PAD_L - PAD_R;
+    const frac = Math.max(0, Math.min(1, (px - PAD_L) / innerWPx));
+    const ms = xDomain.startMs + frac * (xDomain.endMs - xDomain.startMs);
+    return new Date(ms).toISOString();
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!brushable || e.button !== 0) return;
+    const px = cursorPx(e.clientX);
+    if (px == null) return;
+    setBrush({ startPx: px, endPx: px });
+    setHoverIdx(null);
+    e.preventDefault();
+  };
+
+  const handleMouseUp = () => {
+    if (!brush || !brushable || !onBrushSelect || !xDomain) {
+      setBrush(null);
+      return;
+    }
+    const lo = Math.min(brush.startPx, brush.endPx);
+    const hi = Math.max(brush.startPx, brush.endPx);
+    // Require ~12px drag to count as a brush — anything smaller is treated
+    // as an accidental click and ignored.
+    if (hi - lo < 12) {
+      setBrush(null);
+      return;
+    }
+    const from = pixelToTime(lo);
+    const to = pixelToTime(hi);
+    setBrush(null);
+    if (from && to && from !== to) {
+      onBrushSelect({ from, to });
+    }
+  };
 
   return (
     <div
       ref={wrapRef}
-      style={{ position: "relative", width: "100%", height }}
+      style={{
+        position: "relative",
+        width: "100%",
+        height,
+        cursor: brushable ? (brush ? "ew-resize" : "crosshair") : "default",
+        userSelect: brush ? "none" : undefined,
+      }}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
     >
       <svg
         width={VIEW_W}
@@ -516,6 +608,42 @@ export const AreaChart = ({
             })}
           </>
         )}
+
+        {brush &&
+          (() => {
+            const lo = Math.min(brush.startPx, brush.endPx);
+            const hi = Math.max(brush.startPx, brush.endPx);
+            return (
+              <g>
+                <rect
+                  x={lo}
+                  y={PAD_T}
+                  width={Math.max(0, hi - lo)}
+                  height={innerH}
+                  fill="var(--blue)"
+                  opacity={0.12}
+                />
+                <line
+                  x1={lo}
+                  x2={lo}
+                  y1={PAD_T}
+                  y2={PAD_T + innerH}
+                  stroke="var(--blue)"
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line
+                  x1={hi}
+                  x2={hi}
+                  y1={PAD_T}
+                  y2={PAD_T + innerH}
+                  stroke="var(--blue)"
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            );
+          })()}
       </svg>
 
       {hoverIdx != null && (

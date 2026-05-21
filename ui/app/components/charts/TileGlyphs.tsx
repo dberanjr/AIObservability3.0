@@ -132,7 +132,7 @@ export const MiniDonut = ({
           {centerValue && (
             <span
               style={{
-                fontSize: 16,
+                fontSize: Math.max(14, Math.round(size * 0.28)),
                 fontWeight: 700,
                 lineHeight: 1,
                 fontVariantNumeric: "tabular-nums",
@@ -143,7 +143,13 @@ export const MiniDonut = ({
             </span>
           )}
           {centerLabel && (
-            <span style={{ fontSize: 8, color: "var(--text-3)", marginTop: 1 }}>
+            <span
+              style={{
+                fontSize: Math.max(9, Math.round(size * 0.13)),
+                color: "var(--text-3)",
+                marginTop: 2,
+              }}
+            >
               {centerLabel}
             </span>
           )}
@@ -196,11 +202,10 @@ export const MiniPartialDonut = ({
       }}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-        <circle cx={cx} cy={cy} r={r} fill="var(--text-4)" opacity={0.15} />
+        {/* No visible "track" — the unfilled portion is the tile background. */}
         {clamped > 0 && (
           <path d={arcPath(cx, cy, r, rInner, start, end)} fill={color} />
         )}
-        <circle cx={cx} cy={cy} r={rInner} fill="var(--surface)" />
       </svg>
       {centerValue && (
         <div
@@ -211,7 +216,7 @@ export const MiniPartialDonut = ({
             alignItems: "center",
             justifyContent: "center",
             pointerEvents: "none",
-            fontSize: 13,
+            fontSize: Math.max(13, Math.round(size * 0.22)),
             fontWeight: 700,
             lineHeight: 1,
             fontVariantNumeric: "tabular-nums",

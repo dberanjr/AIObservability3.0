@@ -5,9 +5,11 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   AreaChart,
   type AxisTick,
+  type ChartTimeDomain,
   type ForecastBand,
 } from "../../components/charts/AreaChart";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
+import { useScope } from "../../scope/ScopeContext";
 import type { UseTokenConsumptionResult } from "./useTokenConsumption";
 import type { UseTokenForecastResult } from "./useTokenForecast";
 
@@ -85,6 +87,7 @@ export const TokenConsumptionChart = ({
   forecastEnabled,
   onToggleForecast,
 }: TokenConsumptionChartProps) => {
+  const { setTimeframe } = useScope();
   const historicalTokens = result.points.map((p) => p.tokens);
   const historicalCosts = result.points.map((p) => p.estCost);
   const histLen = historicalTokens.length;
@@ -134,6 +137,17 @@ export const TokenConsumptionChart = ({
     };
   }, [forecastEnabled, fc, histLen]);
 
+  // Time domain spans `now - histLen*intervalMs` (historical start) through
+  // the last forecast bucket if present, otherwise `now`. Brush emits ISO
+  // timestamps so the resulting scope is fully reproducible.
+  const xDomain: ChartTimeDomain | undefined = useMemo(() => {
+    if (histLen === 0) return undefined;
+    const now = Date.now();
+    const startMs = now - histLen * result.intervalMs;
+    const endMs = now + forecastLen * result.intervalMs;
+    return { startMs, endMs };
+  }, [histLen, forecastLen, result.intervalMs]);
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
@@ -177,6 +191,8 @@ export const TokenConsumptionChart = ({
             xLabels={xLabels}
             axisTicks={axisTicks}
             forecast={forecastBand}
+            xDomain={xDomain}
+            onBrushSelect={(range) => setTimeframe(range)}
             series={[
               {
                 label: "Tokens",
