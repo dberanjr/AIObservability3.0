@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -154,25 +154,54 @@ export interface SummaryTilesRowProps {
  * accent color; Cost/request uses a horizontal intensity scale so every
  * tile has its own visualization.
  */
+// Explicit column counts at decreasing container widths. With 124px tile
+// minimum and 10px gap, the math is `cols * 124 + (cols - 1) * 10`.
+// Steps are picked so the row wraps in deliberate chunks (9 → 6 → 3 → 2)
+// rather than dropping one tile at a time.
+//   1196px  → 9 cols  (one row)
+//    794px  → 6 cols  (6 + 3)
+//    392px  → 3 cols  (3 + 3 + 3)
+//    258px  → 2 cols
+//   below   → 1 col
+const COLUMN_BREAKPOINTS: Array<{ minPx: number; cols: number }> = [
+  { minPx: 1196, cols: 9 },
+  { minPx: 794, cols: 6 },
+  { minPx: 392, cols: 3 },
+  { minPx: 258, cols: 2 },
+];
+
+const pickColumns = (width: number): number => {
+  for (const bp of COLUMN_BREAKPOINTS) {
+    if (width >= bp.minPx) return bp.cols;
+  }
+  return 1;
+};
+
 export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
   const breakdowns = useTileBreakdowns();
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Default to 9 columns until the observer fires — avoids a jarring
+  // reflow on first mount on wide viewports.
+  const [columns, setColumns] = useState(9);
+
+  useEffect(() => {
+    if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      setColumns(pickColumns(entry.contentRect.width));
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   const gridStyle: React.CSSProperties = {
     display: "grid",
-    // Min width sized to keep all 9 tiles on one row down to ~1200px of
-    // content width (≈1280px viewport with the platform sidebar, which is
-    // about 2/3 of a 1920px desktop). The donut tiles drive the floor:
-    // 96px donut + 12px tile padding on each side = 120px hard minimum;
-    // we bump to 124px so the donut has a little breathing room.
-    // When the row finally wraps, auto-fit guarantees at least 4 tiles
-    // per row down to ~530px content width before wrapping again.
-    gridTemplateColumns: "repeat(auto-fit, minmax(124px, 1fr))",
+    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
     gap: 10,
   };
 
   if (summary.isLoading && summary.tokens == null) {
     return (
-      <div style={gridStyle}>
+      <div ref={wrapRef} style={gridStyle}>
         {Array.from({ length: 9 }).map((_, i) => (
           <TileSkeleton key={i} />
         ))}
@@ -199,7 +228,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
   const efficiencyColor = "var(--blue)";
 
   return (
-    <div style={gridStyle}>
+    <div ref={wrapRef} style={gridStyle}>
       <Tile
         label="Tokens"
         value={fmtTokens(summary.tokens)}
