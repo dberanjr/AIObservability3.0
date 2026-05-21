@@ -4,6 +4,7 @@ import { AppHeader } from "@dynatrace/strato-components-preview/layouts";
 import { SettingIcon } from "@dynatrace/strato-icons";
 import { HeaderTimeframe } from "./HeaderTimeframe";
 import { useTweaks } from "../tweaks/TweaksContext";
+import { ModelPricingButton } from "../pricing/ModelPricingButton";
 
 export const Header = () => {
   const { isPanelOpen, togglePanel } = useTweaks();
@@ -39,6 +40,7 @@ export const Header = () => {
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         <HeaderTimeframe />
+        <ModelPricingButton />
         <AppHeader.ActionButton
           prefixIcon={<SettingIcon />}
           isSelected={isPanelOpen}

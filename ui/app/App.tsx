@@ -21,10 +21,13 @@ import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
 import { TweaksPanel } from "./tweaks/TweaksPanel";
 import { ColorBlindFilters } from "./tweaks/ColorBlindFilters";
+import { ModelPricingProvider } from "./pricing/ModelPricingContext";
+import { ModelPricingPanel } from "./pricing/ModelPricingPanel";
 
 export const App = () => {
   return (
     <TweaksProvider>
+    <ModelPricingProvider>
     <SegmentsProvider>
     <SamplingProvider>
     <ScanLimitProvider>
@@ -62,11 +65,13 @@ export const App = () => {
         </Page.Main>
       </Page>
       <TweaksPanel />
+      <ModelPricingPanel />
       <ColorBlindFilters />
     </ScopeProvider>
     </ScanLimitProvider>
     </SamplingProvider>
     </SegmentsProvider>
+    </ModelPricingProvider>
     </TweaksProvider>
   );
 };

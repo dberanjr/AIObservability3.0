@@ -186,9 +186,56 @@ export const normalizeModelKey = (model: string): string => {
   return s;
 };
 
+/**
+ * Mutable runtime override registry, populated by ModelPricingContext when
+ * a user edits prices in the Model Pricing panel. Saved org-wide via
+ * state:app-states so the same numbers apply to every viewer.
+ *
+ * Kept as a module-level Map (not React state) so existing call sites of
+ * `getPricing()` outside of React (hooks, derived numbers, query helpers)
+ * pick up edits without each one needing to be retrofitted to a context.
+ */
+const PRICING_OVERRIDES = new Map<string, ModelPricing>();
+const PRICING_OVERRIDE_LISTENERS = new Set<() => void>();
+
+/**
+ * Replace the entire override set. Called from ModelPricingContext on
+ * load and after every save.
+ */
+export const setPricingOverrides = (
+  next: Record<string, ModelPricing> | null | undefined,
+): void => {
+  PRICING_OVERRIDES.clear();
+  if (next) {
+    for (const [key, val] of Object.entries(next)) {
+      PRICING_OVERRIDES.set(normalizeModelKey(key), val);
+    }
+  }
+  for (const listener of PRICING_OVERRIDE_LISTENERS) listener();
+};
+
+/** Subscribe to override changes — used by tests / debug surfaces. */
+export const subscribePricingOverrides = (cb: () => void): (() => void) => {
+  PRICING_OVERRIDE_LISTENERS.add(cb);
+  return () => PRICING_OVERRIDE_LISTENERS.delete(cb);
+};
+
 export const getPricing = (model: string | undefined | null): ModelPricing => {
   if (!model) return UNKNOWN_PRICE;
-  return PRICING[normalizeModelKey(model)] ?? UNKNOWN_PRICE;
+  const key = normalizeModelKey(model);
+  return PRICING_OVERRIDES.get(key) ?? PRICING[key] ?? UNKNOWN_PRICE;
+};
+
+/**
+ * Snapshot of the merged pricing table (built-ins + overrides). Used by
+ * the config panel to display the current effective rates.
+ */
+export const getEffectivePricing = (): Record<string, ModelPricing> => {
+  const merged: Record<string, ModelPricing> = { ...PRICING };
+  for (const [key, val] of PRICING_OVERRIDES.entries()) {
+    merged[key] = val;
+  }
+  return merged;
 };
 
 /** Estimated USD cost given token counts and a pricing record. */

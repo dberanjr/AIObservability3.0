@@ -425,6 +425,12 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     const totalTokens = slices.reduce((a, b) => a + b.tokens, 0);
     const totalCost = slices.reduce((a, b) => a + b.cost, 0);
     const sorted = [...slices].sort((a, b) => b.value - a.value);
+    // Pluralize the center label when the count is anything other than 1
+    // (Model/Models, Server/Servers, Tool/Tools). The column header in
+    // the table follows the same form so it stays in sync with the
+    // donut's caption.
+    const pluralCenterLabel =
+      centerCount === 1 ? centerLabel : `${centerLabel}s`;
     return {
       title,
       subtitle: `${info} · ${timeframeLabel}`,
@@ -439,7 +445,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             centerValue={
               centerCount != null ? String(Math.round(centerCount)) : "—"
             }
-            centerLabel={centerLabel}
+            centerLabel={pluralCenterLabel}
           />
           <div
             style={{
@@ -461,7 +467,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                 <tr style={{ color: "var(--text-3)", textAlign: "left" }}>
                   <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>
                   <th style={{ padding: "6px 8px", fontWeight: 600 }}>
-                    {centerLabel}
+                    {pluralCenterLabel}
                   </th>
                   <th
                     style={{
