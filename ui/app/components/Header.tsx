@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppHeader } from "@dynatrace/strato-components-preview/layouts";
 import { SettingIcon } from "@dynatrace/strato-icons";
+import { HeaderTimeframe } from "./HeaderTimeframe";
 
 const ACTIVATE_EVENT = "__activate_edit_mode";
 const DEACTIVATE_EVENT = "__deactivate_edit_mode";
@@ -59,6 +60,7 @@ export const Header = () => {
         </AppHeader.NavigationItem>
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
+        <HeaderTimeframe />
         <AppHeader.ActionButton
           prefixIcon={<SettingIcon />}
           isSelected={tweaksOpen}
