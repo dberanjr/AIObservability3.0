@@ -39,7 +39,7 @@ export interface PulseSummary {
   mcpServers: number | null;
   mcpTools: number | null;
   tokenEfficiencyPct: number | null;
-  /** Per-tile sparkline (first 4 tiles only). 24 points = 1h buckets over 24h. */
+  /** Per-tile sparkline (first 4 tiles only). Length ≈ SPARK_TARGET_BUCKETS. */
   spark: {
     tokens: number[];
   };
@@ -47,7 +47,30 @@ export interface PulseSummary {
   error?: Error;
 }
 
-const SPARK_BUCKET_SEC = 60 * 60; // 1h buckets
+/**
+ * Target bucket count for the sparkline series. The actual interval is
+ * sized from the active timeframe so a 24h window gives ~5.5-minute
+ * buckets, a 7d window gives ~67-minute buckets, etc. Clamped against a
+ * 30-second floor below to keep Grail's `makeTimeseries` happy on very
+ * short windows.
+ */
+const SPARK_TARGET_BUCKETS = 150;
+
+const parseSparkScopeMs = (from: string): number => {
+  const m = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
+  if (!m) return 24 * 60 * 60 * 1000;
+  const n = Number(m[1]);
+  switch (m[2].toLowerCase()) {
+    case "m":
+      return n * 60 * 1000;
+    case "h":
+      return n * 60 * 60 * 1000;
+    case "d":
+      return n * 24 * 60 * 60 * 1000;
+    default:
+      return 24 * 60 * 60 * 1000;
+  }
+};
 
 /**
  * Cheap blended cost estimate: spend = avg(price) × tokens. We don't have a
@@ -72,8 +95,19 @@ export const usePulseSummary = (): PulseSummary => {
     { enabled: canQuery, staleTime: 60_000 },
   );
 
+  // Bucket interval scales with the active timeframe so sparklines stay
+  // smooth at any scope without overshooting Grail's `makeTimeseries`
+  // minimum interval.
+  const sparkTotalMs = parseSparkScopeMs(scope.timeframe.from);
+  const sparkIntervalSec = Math.max(
+    30,
+    Math.floor(sparkTotalMs / SPARK_TARGET_BUCKETS / 1000),
+  );
+
   const spark = useScopedDql<SeriesRecord>(
-    canQuery ? buildTokenSeriesQuery(serviceIds, scope.timeframe, SPARK_BUCKET_SEC) : "",
+    canQuery
+      ? buildTokenSeriesQuery(serviceIds, scope.timeframe, sparkIntervalSec)
+      : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
