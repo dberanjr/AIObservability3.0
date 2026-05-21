@@ -1,4 +1,4 @@
-import { scopeFilterClause } from "../../../scope/queries";
+import { dqlTimeArg, scopeFilterClause } from "../../../scope/queries";
 import type { Timeframe } from "../../../scope/types";
 import { THRESHOLDS } from "./types";
 
@@ -15,7 +15,7 @@ export const buildLatencySpikeQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(toClause(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | summarize
@@ -56,7 +56,7 @@ export const buildTokenSurgeQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(toClause(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | makeTimeseries
@@ -78,7 +78,7 @@ export const buildRunawayAgentQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause(timeframe)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(toClause(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | summarize

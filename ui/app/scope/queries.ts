@@ -14,6 +14,20 @@
 export const dqlEscape = (value: string): string =>
   value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
+/**
+ * Format a timeframe `from` / `to` value for safe interpolation into a DQL
+ * `fetch` statement. Relative expressions (`now()-24h`, `@d`, `-30m`, etc.)
+ * pass through unquoted; ISO 8601 timestamps (which the brush-zoom emits)
+ * are wrapped in double quotes so the parser doesn't read `2026-05-20` as
+ * arithmetic on the leading-zero integer literal `05`.
+ */
+export const dqlTimeArg = (s: string): string => {
+  if (!s) return s;
+  if (s.startsWith('"')) return s;
+  if (/\d{4}-\d{2}-\d{2}T/.test(s)) return `"${dqlEscape(s)}"`;
+  return s;
+};
+
 /** Format a list of entity ids as a DQL array literal: `"id1", "id2", ...` */
 export const dqlIdArray = (ids: string[]): string =>
   ids.map((id) => `"${dqlEscape(id)}"`).join(", ");
@@ -37,9 +51,9 @@ export const buildAgentCountQuery = (
   serviceIds: string[] | null,
   timeframe: { from: string; to?: string },
 ): string => {
-  const toClause = timeframe.to ?? "now()";
+  const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
-fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | summarize agents = countDistinct(gen_ai.agent.name)
@@ -50,9 +64,9 @@ export const buildToolCountQuery = (
   serviceIds: string[] | null,
   timeframe: { from: string; to?: string },
 ): string => {
-  const toClause = timeframe.to ?? "now()";
+  const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
-fetch spans, samplingRatio: 1, from: ${timeframe.from}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.tool.name)
 | summarize tools = countDistinct(gen_ai.tool.name)

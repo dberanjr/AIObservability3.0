@@ -10,6 +10,7 @@ import {
 } from "../../components/charts/AreaChart";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
+import { estimateCost, getPricing } from "../../data/pricing";
 import type { UseTokenConsumptionResult } from "./useTokenConsumption";
 import type { UseTokenForecastResult } from "./useTokenForecast";
 
@@ -123,18 +124,40 @@ export const TokenConsumptionChart = ({
     [histLen, result.intervalMs, forecastLen],
   );
 
-  const forecastBand: ForecastBand | undefined = useMemo(() => {
-    if (!forecastEnabled || !fc || histLen === 0) return undefined;
+  // Per-bucket cost is derived from per-bucket tokens via the same blended
+  // pricing as the historical Est. cost line, so the forecasted cost band
+  // tracks the forecasted token band 1:1.
+  const blended = useMemo(() => getPricing("claude-sonnet-4-6"), []);
+  const tokensToCost = (n: number) =>
+    estimateCost(n / 2, n / 2, blended);
+
+  const forecastBands: ForecastBand[] = useMemo(() => {
+    if (!forecastEnabled || !fc || histLen === 0) return [];
     const leadingNulls = new Array<number | null>(histLen).fill(null);
-    return {
-      values: leadingNulls.concat(fc.values),
-      lower: leadingNulls.concat(fc.lower),
-      upper: leadingNulls.concat(fc.upper),
-      startIdx: histLen,
-      color: "var(--purple-2)",
-      label: "Forecast",
-      axis: "left",
-    };
+    const mapCost = (arr: number[]): (number | null)[] =>
+      leadingNulls.concat(arr.map((v) => tokensToCost(v)));
+
+    return [
+      {
+        values: leadingNulls.concat(fc.values),
+        lower: leadingNulls.concat(fc.lower),
+        upper: leadingNulls.concat(fc.upper),
+        startIdx: histLen,
+        color: "var(--purple-2)",
+        label: "Forecast tokens",
+        axis: "left",
+      },
+      {
+        values: mapCost(fc.values),
+        lower: mapCost(fc.lower),
+        upper: mapCost(fc.upper),
+        startIdx: histLen,
+        color: "var(--pink)",
+        label: "Forecast cost",
+        axis: "right",
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forecastEnabled, fc, histLen]);
 
   // Time domain spans `now - histLen*intervalMs` (historical start) through
@@ -190,7 +213,7 @@ export const TokenConsumptionChart = ({
             formatRight={(n) => fmtUSDCompact(n)}
             xLabels={xLabels}
             axisTicks={axisTicks}
-            forecast={forecastBand}
+            forecasts={forecastBands}
             xDomain={xDomain}
             onBrushSelect={(range) => setTimeframe(range)}
             series={[
