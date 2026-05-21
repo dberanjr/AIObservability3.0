@@ -331,8 +331,8 @@ export const AreaChart = ({
                 y1={0}
                 y2={1}
               >
-                <stop offset="0%" stopColor={s.color} stopOpacity={0.32} />
-                <stop offset="100%" stopColor={s.color} stopOpacity={0} />
+                <stop offset="0%" stopColor={s.color} stopOpacity={0.5} />
+                <stop offset="100%" stopColor={s.color} stopOpacity={0.1} />
               </linearGradient>
             ))}
           </defs>

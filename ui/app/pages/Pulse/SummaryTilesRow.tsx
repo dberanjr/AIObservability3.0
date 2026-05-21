@@ -23,15 +23,18 @@ interface TileProps {
 
 const Tile = ({ label, value, sub, spark }: TileProps) => {
   const { density, tileStyle } = useTweaks();
-  const pad = density === "compact" ? 8 : 12;
-  // tileStyle overrides — only "bordered" and "ghost" need to mask the
-  // default Strato raised surface; "card" leaves the defaults alone.
+  const pad =
+    density === "minimal" ? 4 : density === "compact" ? 8 : 12;
+  // Density "minimal" overrides tile style — minimalist mode always strips
+  // chrome regardless of which tileStyle the user picked.
   const tileOverride: React.CSSProperties =
-    tileStyle === "bordered"
-      ? { boxShadow: "none", border: "1px solid var(--border)" }
-      : tileStyle === "ghost"
-        ? { boxShadow: "none", border: "none", background: "transparent" }
-        : {};
+    density === "minimal"
+      ? { boxShadow: "none", border: "none", background: "transparent" }
+      : tileStyle === "bordered"
+        ? { boxShadow: "none", border: "1px solid var(--border)" }
+        : tileStyle === "ghost"
+          ? { boxShadow: "none", border: "none", background: "transparent" }
+          : {};
 
   return (
   <Surface

@@ -18,18 +18,42 @@ export interface FindingCardProps {
 /**
  * Standard top-findings card (DESIGN_HANDOFF §3). Category eyebrow + status dot,
  * mono entity, large severity-colored metric, secondary context line, hover arrow.
+ *
+ * Click/keyboard handlers live on the Surface itself rather than a wrapping
+ * <button> with `all: unset`. The old wrapper caused a sizing loop inside
+ * grid cells (`height: 100%` resolved circularly via the button + Surface)
+ * which left parent panels too short and let cards bleed out the bottom.
  */
 export const FindingCard = ({ finding, onClick }: FindingCardProps) => {
-  const interactive = Boolean(onClick);
-  const content = (
+  const handleClick = onClick ? () => onClick(finding) : undefined;
+  const interactive = Boolean(handleClick);
+
+  const handleKeyDown = handleClick
+    ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick();
+        }
+      }
+    : undefined;
+
+  return (
     <Surface
       elevation="raised"
       padding={12}
       style={{
         position: "relative",
         height: "100%",
+        boxSizing: "border-box",
         cursor: interactive ? "pointer" : "default",
       }}
+      onClick={handleClick}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={handleKeyDown}
+      aria-label={
+        interactive ? `${finding.category}: ${finding.entity}` : undefined
+      }
     >
       <Flex flexDirection="column" gap={6} style={{ minWidth: 0 }}>
         <Flex alignItems="center" gap={6}>
@@ -99,17 +123,5 @@ export const FindingCard = ({ finding, onClick }: FindingCardProps) => {
         />
       )}
     </Surface>
-  );
-
-  if (!interactive) return content;
-  return (
-    <button
-      type="button"
-      onClick={() => onClick?.(finding)}
-      style={{ all: "unset", display: "block", height: "100%" }}
-      aria-label={`${finding.category}: ${finding.entity}`}
-    >
-      {content}
-    </button>
   );
 };

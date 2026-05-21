@@ -90,46 +90,51 @@ const Segmented = <V extends string>({
   </div>
 );
 
-interface SwitchProps {
-  ariaLabel: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
+interface AccentSwatchesProps {
+  value: Accent;
+  onChange: (v: Accent) => void;
 }
 
-const Switch = ({ ariaLabel, checked, onChange }: SwitchProps) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    aria-label={ariaLabel}
-    onClick={() => onChange(!checked)}
+/**
+ * Row of colour swatches for the Accent tweak. Each swatch is a round
+ * button; the selected one gets a ring outline so the choice is obvious.
+ */
+const AccentSwatches = ({ value, onChange }: AccentSwatchesProps) => (
+  <div
+    role="radiogroup"
+    aria-label="Accent color"
     style={{
-      all: "unset",
-      cursor: "pointer",
-      width: 42,
-      height: 24,
-      borderRadius: 999,
-      background: checked ? "var(--green-2)" : "var(--text-4)",
-      position: "relative",
-      transition: "background 120ms ease",
-      flex: "0 0 auto",
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap",
     }}
   >
-    <span
-      aria-hidden
-      style={{
-        position: "absolute",
-        top: 2,
-        left: checked ? 20 : 2,
-        width: 20,
-        height: 20,
-        borderRadius: "50%",
-        background: "white",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-        transition: "left 120ms ease",
-      }}
-    />
-  </button>
+    {ACCENT_OPTIONS.map((opt) => {
+      const active = opt.value === value;
+      return (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={active}
+          aria-label={opt.label}
+          title={opt.label}
+          onClick={() => onChange(opt.value)}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            background: ACCENT_SWATCH[opt.value],
+            boxShadow: active
+              ? `0 0 0 2px var(--surface), 0 0 0 4px ${ACCENT_SWATCH[opt.value]}`
+              : "0 1px 2px rgba(0,0,0,0.08)",
+          }}
+        />
+      );
+    })}
+  </div>
 );
 
 const THEME_OPTIONS: SegmentOption<Theme>[] = [
@@ -139,6 +144,7 @@ const THEME_OPTIONS: SegmentOption<Theme>[] = [
 const DENSITY_OPTIONS: SegmentOption<Density>[] = [
   { value: "comfortable", label: "comfortable" },
   { value: "compact", label: "compact" },
+  { value: "minimal", label: "minimal" },
 ];
 const TILE_OPTIONS: SegmentOption<TileStyle>[] = [
   { value: "card", label: "card" },
@@ -148,12 +154,31 @@ const TILE_OPTIONS: SegmentOption<TileStyle>[] = [
 const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
   { value: "blue", label: "blue" },
   { value: "purple", label: "purple" },
+  { value: "cyan", label: "cyan" },
+  { value: "green", label: "green" },
+  { value: "pink", label: "pink" },
+  { value: "amber", label: "amber" },
+  { value: "red", label: "red" },
 ];
 const CHART_STYLE_OPTIONS: SegmentOption<ChartStyle>[] = [
   { value: "line", label: "line" },
   { value: "area", label: "area" },
   { value: "gradient", label: "gradient" },
 ];
+
+/**
+ * Accent options render as colour swatches so users can preview the
+ * mapping. Hex pulled from `theme/tokens.ts` brand palette.
+ */
+const ACCENT_SWATCH: Record<Accent, string> = {
+  blue: "#1C5BE5",
+  purple: "#B23BE4",
+  cyan: "#54C8E9",
+  green: "#73BE28",
+  pink: "#E436FF",
+  amber: "#B45F06",
+  red: "#C0291E",
+};
 
 export const TweaksPanel = () => {
   const t = useTweaks();
@@ -261,14 +286,6 @@ export const TweaksPanel = () => {
               />
             </Flex>
 
-            <Flex alignItems="center" justifyContent="space-between">
-              <FieldLabel>Left rail</FieldLabel>
-              <Switch
-                ariaLabel="Toggle left rail"
-                checked={t.leftRail}
-                onChange={t.setLeftRail}
-              />
-            </Flex>
           </Flex>
 
           <Flex flexDirection="column" gap={12}>
@@ -276,9 +293,7 @@ export const TweaksPanel = () => {
 
             <Flex flexDirection="column" gap={6}>
               <FieldLabel>Accent</FieldLabel>
-              <Segmented
-                ariaLabel="Accent color"
-                options={ACCENT_OPTIONS}
+              <AccentSwatches
                 value={t.accent}
                 onChange={t.setAccent}
               />

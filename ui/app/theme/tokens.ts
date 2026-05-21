@@ -157,6 +157,18 @@ ${toBlock(darkSurfaces)}
 :root[data-aiobs-density="compact"] [data-aiobs-tile-target] {
   padding: 10px 12px !important;
 }
+/* "minimal" — data-first read; strip chrome (shadows/borders) and shrink
+   padding so panels feel like reports, not cards. */
+:root[data-aiobs-density="minimal"] {
+  --d-row: 22px;
+  --d-row-compact: 20px;
+  --d-tile-pad-y: 4px;
+  --d-tile-pad-x: 6px;
+  --d-panel-pad: 8px;
+  --d-gap: 6px;
+  --shadow: none;
+  --shadow-lg: none;
+}
 
 /* ---- Tweaks: tile style ---- */
 :root[data-aiobs-tile="bordered"] [data-aiobs-tile-target] {
@@ -170,16 +182,18 @@ ${toBlock(darkSurfaces)}
   background: transparent !important;
 }
 
-/* ---- Tweaks: accent (swap brand-blue and brand-purple) ---- */
+/* ---- Tweaks: accent — overrides --blue (the primary accent token most
+   components use). The purple variant also swaps --purple-2 so the
+   secondary follows. Other accents leave --purple-2 alone. */
 :root[data-aiobs-accent="purple"] {
   --blue: ${brand.purple};
   --blue-pale: ${brand.purpleDark};
   --purple-2: ${brand.blue};
   --purple: ${brand.bluePurple};
 }
-
-/* ---- Tweaks: left rail ---- */
-:root[data-aiobs-rail="off"] nav[aria-label="Application"] {
-  display: none;
-}
+:root[data-aiobs-accent="cyan"]  { --blue: ${brand.cyan};  --blue-pale: ${brand.bluePale}; }
+:root[data-aiobs-accent="green"] { --blue: ${brand.green}; --blue-pale: ${brand.greenLime}; }
+:root[data-aiobs-accent="pink"]  { --blue: ${brand.pink};  --blue-pale: ${brand.purple}; }
+:root[data-aiobs-accent="amber"] { --blue: ${brand.amber}; --blue-pale: ${brand.red}; }
+:root[data-aiobs-accent="red"]   { --blue: ${brand.red};   --blue-pale: ${brand.amber}; }
 `;
