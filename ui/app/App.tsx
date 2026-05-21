@@ -2,7 +2,6 @@ import { Page } from "@dynatrace/strato-components-preview/layouts";
 import { SegmentsProvider } from "@dynatrace/strato-components/filters";
 import React from "react";
 import { Route, Routes } from "react-router-dom";
-import { Data } from "./pages/Data";
 import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
 import { Home } from "./pages/Home";
@@ -19,9 +18,12 @@ import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
 import { ScopeProvider } from "./scope/ScopeContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
+import { TweaksProvider } from "./tweaks/TweaksContext";
+import { TweaksPanel } from "./tweaks/TweaksPanel";
 
 export const App = () => {
   return (
+    <TweaksProvider>
     <SegmentsProvider>
     <SamplingProvider>
     <ScanLimitProvider>
@@ -52,16 +54,17 @@ export const App = () => {
                 <Route path="/models" element={<ModelsPage />} />
                 <Route path="/finops" element={<FinOpsPage />} />
                 <Route path="/home" element={<Home />} />
-                <Route path="/data" element={<Data />} />
               </Routes>
             </div>
             <AppFooter />
           </div>
         </Page.Main>
       </Page>
+      <TweaksPanel />
     </ScopeProvider>
     </ScanLimitProvider>
     </SamplingProvider>
     </SegmentsProvider>
+    </TweaksProvider>
   );
 };

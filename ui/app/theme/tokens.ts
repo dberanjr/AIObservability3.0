@@ -108,8 +108,29 @@ const toBlock = (vars: Record<string, string>) =>
     .join("\n");
 
 /**
- * Global CSS that overrides Strato AppRoot theming with our brand palette.
- * AppRoot sets `data-theme="light" | "dark"` on `:root`, so our overrides scope to the same selectors.
+ * Global CSS that overrides Strato AppRoot theming with our brand palette,
+ * plus visual rules driven by the Tweaks panel's data-aiobs-* attributes
+ * (see TweaksContext).
+ *
+ * AppRoot sets `data-theme="light" | "dark"` on `:root`. Tweaks mirrors the
+ * same data-theme override (and adds data-aiobs-theme for symmetry).
+ *
+ * Tile style:
+ *   data-aiobs-tile="card"     — default (Strato raised Surface)
+ *   data-aiobs-tile="bordered" — drop the elevation shadow, add a 1px border
+ *   data-aiobs-tile="ghost"    — strip elevation, border, and background
+ *
+ * Density: compact shrinks tile padding so more fits on screen.
+ *
+ * Accent: swaps the brand-blue and brand-purple tokens so primary accents
+ * (buttons, links, charts that read `var(--blue)`) follow the user's pick.
+ *
+ * Left rail (data-aiobs-rail="off") hides the top navigation items so users
+ * who already know the routes can free up vertical space.
+ *
+ * The tile-style selectors look for raised surfaces by their Strato data
+ * attribute. We can't predict the exact class hash, so we target the
+ * stable data-elevation marker the component sets.
  */
 export const themeCss = `
 :root {
@@ -122,5 +143,43 @@ ${toBlock(lightSurfaces)}
 }
 :root[data-theme="dark"] {
 ${toBlock(darkSurfaces)}
+}
+
+/* ---- Tweaks: density ---- */
+:root[data-aiobs-density="compact"] {
+  --d-row: 28px;
+  --d-row-compact: 24px;
+  --d-tile-pad-y: 10px;
+  --d-tile-pad-x: 12px;
+  --d-panel-pad: 12px;
+  --d-gap: 8px;
+}
+:root[data-aiobs-density="compact"] [data-aiobs-tile-target] {
+  padding: 10px 12px !important;
+}
+
+/* ---- Tweaks: tile style ---- */
+:root[data-aiobs-tile="bordered"] [data-aiobs-tile-target] {
+  box-shadow: none !important;
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+}
+:root[data-aiobs-tile="ghost"] [data-aiobs-tile-target] {
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* ---- Tweaks: accent (swap brand-blue and brand-purple) ---- */
+:root[data-aiobs-accent="purple"] {
+  --blue: ${brand.purple};
+  --blue-pale: ${brand.purpleDark};
+  --purple-2: ${brand.blue};
+  --purple: ${brand.bluePurple};
+}
+
+/* ---- Tweaks: left rail ---- */
+:root[data-aiobs-rail="off"] nav[aria-label="Application"] {
+  display: none;
 }
 `;

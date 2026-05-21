@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 export interface HistogramBar {
   label: string;
@@ -16,11 +16,15 @@ export interface HistogramProps {
   valueFormatter?: (n: number) => string;
 }
 
-const VIEW_W = 600;
+// Fallback width used before the ResizeObserver fires; real rendering uses
+// the observed container width so SVG text isn't aspect-stretched.
+const FALLBACK_VIEW_W = 600;
 const PAD_L = 28;
 const PAD_R = 8;
 const PAD_T = 8;
-const PAD_B = 22;
+// Just enough room for the 9px hour labels — earlier 22px left a visible
+// gap below the baseline that pushed bars up inside the Surface.
+const PAD_B = 14;
 
 export const Histogram = ({
   bars,
@@ -33,7 +37,19 @@ export const Histogram = ({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tipPx, setTipPx] = useState<number>(0);
+  const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
 
+  useEffect(() => {
+    if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = Math.max(200, Math.floor(entry.contentRect.width));
+      setContainerWidth(w);
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const VIEW_W = containerWidth;
   const innerW = VIEW_W - PAD_L - PAD_R;
   const innerH = height - PAD_T - PAD_B;
   const max = Math.max(1, ...bars.map((b) => b.value));
@@ -46,17 +62,15 @@ export const Histogram = ({
     if (!wrap || bars.length === 0) return;
     const rect = wrap.getBoundingClientRect();
     if (rect.width <= 0) return;
-    const containerL = (PAD_L / VIEW_W) * rect.width;
-    const containerR = ((VIEW_W - PAD_R) / VIEW_W) * rect.width;
     const cursor = e.clientX - rect.left;
-    if (cursor < containerL || cursor > containerR) {
+    if (cursor < PAD_L || cursor > VIEW_W - PAD_R) {
       setHoverIdx(null);
       return;
     }
-    const innerWPx = containerR - containerL;
+    const innerWPx = VIEW_W - PAD_L - PAD_R;
     const idx = Math.min(
       bars.length - 1,
-      Math.max(0, Math.floor(((cursor - containerL) / innerWPx) * bars.length)),
+      Math.max(0, Math.floor(((cursor - PAD_L) / innerWPx) * bars.length)),
     );
     setHoverIdx(idx);
     setTipPx(cursor);
@@ -71,10 +85,9 @@ export const Histogram = ({
       onMouseLeave={handleLeave}
     >
       <svg
-        width="100%"
+        width={VIEW_W}
         height={height}
         viewBox={`0 0 ${VIEW_W} ${height}`}
-        preserveAspectRatio="none"
         role="img"
         aria-label="24h activity histogram"
       >

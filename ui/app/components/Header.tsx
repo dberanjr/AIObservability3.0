@@ -1,31 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { AppHeader } from "@dynatrace/strato-components-preview/layouts";
 import { SettingIcon } from "@dynatrace/strato-icons";
 import { HeaderTimeframe } from "./HeaderTimeframe";
-
-const ACTIVATE_EVENT = "__activate_edit_mode";
-const DEACTIVATE_EVENT = "__deactivate_edit_mode";
-const DISMISSED_EVENT = "__edit_mode_dismissed";
+import { useTweaks } from "../tweaks/TweaksContext";
 
 export const Header = () => {
-  const [tweaksOpen, setTweaksOpen] = useState(false);
-
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      if (event.data === DISMISSED_EVENT) {
-        setTweaksOpen(false);
-      }
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
-
-  const onTweaksClick = useCallback(() => {
-    const next = !tweaksOpen;
-    setTweaksOpen(next);
-    window.postMessage(next ? ACTIVATE_EVENT : DEACTIVATE_EVENT, "*");
-  }, [tweaksOpen]);
+  const { isPanelOpen, togglePanel } = useTweaks();
 
   return (
     <AppHeader>
@@ -55,18 +36,16 @@ export const Header = () => {
         <AppHeader.NavigationItem as={Link} to="/finops">
           FinOps
         </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to="/data">
-          Explore Data
-        </AppHeader.NavigationItem>
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         <HeaderTimeframe />
         <AppHeader.ActionButton
           prefixIcon={<SettingIcon />}
-          isSelected={tweaksOpen}
-          onClick={onTweaksClick}
+          isSelected={isPanelOpen}
+          onClick={togglePanel}
           aria-label="Tweaks"
-          aria-pressed={tweaksOpen}
+          aria-pressed={isPanelOpen}
+          data-aiobs-tweaks-trigger=""
         >
           Tweaks
         </AppHeader.ActionButton>

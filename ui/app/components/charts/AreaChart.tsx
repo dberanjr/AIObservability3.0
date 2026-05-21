@@ -1,4 +1,5 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
+import { useTweaks } from "../../tweaks/TweaksContext";
 
 export interface AreaSeries {
   /**
@@ -56,7 +57,11 @@ export interface AreaChartProps {
   forecast?: ForecastBand;
 }
 
-const VIEW_W = 600;
+// VIEW_W is the fallback width used before the ResizeObserver has measured
+// the container. Real rendering uses the observed container width so the
+// viewBox matches the actual pixel space — that way text stays at native
+// font size instead of getting horizontally stretched by preserveAspectRatio="none".
+const FALLBACK_VIEW_W = 600;
 const PAD_L = 44;
 const PAD_R = 44;
 const PAD_T = 12;
@@ -92,6 +97,23 @@ export const AreaChart = ({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tipPx, setTipPx] = useState<number>(0);
+  const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
+  const { chartStyle } = useTweaks();
+  const gradientId = useId();
+
+  // Track the container's actual pixel width so the SVG viewBox matches
+  // 1:1 and text doesn't get stretched by aspect-ratio scaling.
+  useEffect(() => {
+    if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = Math.max(200, Math.floor(entry.contentRect.width));
+      setContainerWidth(w);
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const VIEW_W = containerWidth;
 
   const leftSeries = series.filter((s) => (s.axis ?? "left") === "left");
   const rightSeries = series.filter((s) => s.axis === "right");
@@ -192,14 +214,12 @@ export const AreaChart = ({
     if (!wrap) return;
     const rect = wrap.getBoundingClientRect();
     if (rect.width <= 0 || length <= 1) return;
-    // Plot area maps from PAD_L px to VIEW_W - PAD_R px in viewBox coords;
-    // since preserveAspectRatio="none", x scales linearly with container width.
-    const containerL = (PAD_L / VIEW_W) * rect.width;
-    const containerR = ((VIEW_W - PAD_R) / VIEW_W) * rect.width;
+    // viewBox now matches container width 1:1, so plot-area bounds are
+    // expressed directly in container pixels — no aspect-ratio scaling.
     const cursor = e.clientX - rect.left;
-    const clamped = Math.max(containerL, Math.min(containerR, cursor));
-    const innerWPx = containerR - containerL;
-    const idx = Math.round(((clamped - containerL) / innerWPx) * (length - 1));
+    const clamped = Math.max(PAD_L, Math.min(VIEW_W - PAD_R, cursor));
+    const innerWPx = VIEW_W - PAD_L - PAD_R;
+    const idx = Math.round(((clamped - PAD_L) / innerWPx) * (length - 1));
     setHoverIdx(idx);
     setTipPx(clamped);
   };
@@ -213,10 +233,9 @@ export const AreaChart = ({
       onMouseLeave={handleLeave}
     >
       <svg
-        width="100%"
+        width={VIEW_W}
         height={height}
         viewBox={`0 0 ${VIEW_W} ${height}`}
-        preserveAspectRatio="none"
         role="img"
         aria-label="Token consumption over time"
       >
@@ -298,14 +317,40 @@ export const AreaChart = ({
           );
         })}
 
-        {leftSeries.map((s, i) => (
-          <path
-            key={`a${i}`}
-            d={mkArea(s.values, leftMax)}
-            fill={s.color}
-            opacity={0.15}
-          />
-        ))}
+        {/* Per-series gradient defs only used when the Tweaks chart-style
+            is set to "gradient" — opacity fades from ~25% at the line to 0%
+            at the baseline. */}
+        {chartStyle === "gradient" && (
+          <defs>
+            {leftSeries.map((s, i) => (
+              <linearGradient
+                key={`g${i}`}
+                id={`${gradientId}-l-${i}`}
+                x1={0}
+                x2={0}
+                y1={0}
+                y2={1}
+              >
+                <stop offset="0%" stopColor={s.color} stopOpacity={0.32} />
+                <stop offset="100%" stopColor={s.color} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
+        )}
+
+        {chartStyle !== "line" &&
+          leftSeries.map((s, i) => (
+            <path
+              key={`a${i}`}
+              d={mkArea(s.values, leftMax)}
+              fill={
+                chartStyle === "gradient"
+                  ? `url(#${gradientId}-l-${i})`
+                  : s.color
+              }
+              opacity={chartStyle === "gradient" ? 1 : 0.15}
+            />
+          ))}
 
         {leftSeries.map((s, i) => (
           <path

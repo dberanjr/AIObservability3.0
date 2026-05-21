@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../../components/charts/Sparkline";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import {
   fmtCount,
   fmtMs,
@@ -20,15 +21,28 @@ interface TileProps {
   spark?: { values: number[]; color: string };
 }
 
-const Tile = ({ label, value, sub, spark }: TileProps) => (
+const Tile = ({ label, value, sub, spark }: TileProps) => {
+  const { density, tileStyle } = useTweaks();
+  const pad = density === "compact" ? 8 : 12;
+  // tileStyle overrides — only "bordered" and "ghost" need to mask the
+  // default Strato raised surface; "card" leaves the defaults alone.
+  const tileOverride: React.CSSProperties =
+    tileStyle === "bordered"
+      ? { boxShadow: "none", border: "1px solid var(--border)" }
+      : tileStyle === "ghost"
+        ? { boxShadow: "none", border: "none", background: "transparent" }
+        : {};
+
+  return (
   <Surface
     elevation="raised"
-    padding={12}
+    padding={pad}
     style={{
       minWidth: 0,
       height: "100%",
       display: "flex",
       flexDirection: "column",
+      ...tileOverride,
     }}
   >
     <Flex
@@ -76,7 +90,8 @@ const Tile = ({ label, value, sub, spark }: TileProps) => (
       )}
     </Flex>
   </Surface>
-);
+  );
+};
 
 const TileSkeleton = () => (
   <Surface elevation="raised" padding={12}>
