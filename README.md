@@ -2,7 +2,7 @@
 
 End-to-end observability for agentic AI workloads, built as a native Dynatrace AppEngine app.
 
-AI Observability 3.0 turns OpenTelemetry GenAI spans collected in Dynatrace Grail into an opinionated control plane for agents, tools, models, prompts, and spend. It works against the entire fleet by default — no application configuration required — and can be filtered down to any AppCI service set when you want a narrower view.
+AI Observability 3.0 turns OpenTelemetry GenAI spans collected in Dynatrace Grail into an opinionated control plane for agents, tools, models, prompts, and spend. It works against the entire fleet by default and supports Dynatrace Segments to slice activity by logical filters (teams, services, deployments, environments).
 
 ---
 
@@ -27,7 +27,7 @@ That's what this app provides: eight purpose-built tabs that read the same `gen_
 
 ### Cross-cutting capabilities
 
-- **Fleet-wide by default** — Opens against your entire AI footprint. AppCI scoping is opt-in, not required.
+- **Fleet-wide by default** — Opens against your entire AI footprint. Use Segments to filter down to any logical subset (teams, services, environments, deployments).
 - **Server-side provider normalization** — Bedrock invocations are unwrapped to their underlying vendor (Anthropic, Meta, etc.) directly in DQL, so charts reflect the real model, not the gateway.
 - **Built-in pricing for 11 models** with overrideable per-model rates.
 - **Scan-limit toggle** — Switch between 500 GB / 1 TB / 2 TB / 5 TB query budgets for the whole app from a single control. Every hook routes through `useScopedDql`, which rewrites `scanLimitGBytes` in the active query.
@@ -43,7 +43,7 @@ ui/app/
 ├── pages/               Eight feature tabs (Pulse, Explorer, Agents, Tools,
 │                        Prompts, Topology, Models, FinOps). Each page owns
 │                        its queries.ts + hooks + panel components.
-├── scope/               Fleet vs. AppCI resolution, scan-limit injection,
+├── scope/               Segments filter resolution, scan-limit injection,
 │                        useScopedDql wrapper.
 ├── state/               usePersistedState — useState-shaped hook backed by
 │                        @dynatrace-sdk/react-hooks user-app-state.
@@ -149,7 +149,7 @@ Where two attribute names exist for the same thing (the older OpenLLMetry name a
   | `storage:spans:read` | Agent / tool / model / prompt analysis |
   | `storage:bizevents:read` | Evaluation scores |
   | `storage:events:read` | Davis problems for the reliability score |
-  | `storage:entities:read` | Resolve AppCI entity IDs and service names |
+  | `storage:entities:read` | Resolve service entity IDs and names |
   | `storage:lookups:read` | CMDB lookups for scope resolution |
   | `storage:buckets:read` | Grail bucket-level access |
   | `davis:analyzers:execute` | Token-usage forecasting analyzer |
@@ -193,7 +193,7 @@ Point the app at your tenant by editing `environmentUrl` in `app.config.json`:
 User-configurable settings live in the app UI itself — there is nothing to set up in environment files:
 
 - **Scan limit** — Toolbar toggle (500 GB / 1 TB / 2 TB / 5 TB) injected into every DQL via `useScopedDql`.
-- **AppCI filter** — Optional. When empty, the app queries the whole fleet via `scopeFilterClause(null)`. Setting an AppCI resolves to a specific service list.
+- **Segments** — Optional. Use tenant-defined filter segments to slice activity by teams, deployments, environments, services, or custom dimensions. Empty selection queries the whole fleet.
 - **SLA thresholds** — Editable through the SLA config drawer; persisted per user.
 - **Privacy mode** — Suppresses prompt/response content rendering on the Prompts tab.
 
