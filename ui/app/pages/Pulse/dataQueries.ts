@@ -87,6 +87,33 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
+ * Multi-series timeseries used to feed the four summary-tile sparklines
+ * (Tokens / Spend / P95 latency / Error rate). Returns four parallel
+ * arrays, one bucket per element, all keyed to the same `interval`. The
+ * Spend spark is derived client-side from `tokens` so we don't have to
+ * pull pricing into DQL.
+ */
+export const buildSummarySparkSeriesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  intervalSec: number,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name)
+| fieldsAdd
+    in_tok = coalesce(toLong(gen_ai.usage.input_tokens), 0),
+    out_tok = coalesce(toLong(gen_ai.usage.output_tokens), 0),
+    is_error = if(isNotNull(exception.type), 1, else: 0)
+| makeTimeseries
+    tokens = sum(in_tok + out_tok),
+    p95_ns = percentile(duration, 95),
+    errors = sum(is_error),
+    requests = count(),
+    interval: ${intervalSec}s
+`.trim();
+
+/**
  * 24h activity histogram bucketed by hour, used as a quick visual of when
  * traffic peaks happen.
  */

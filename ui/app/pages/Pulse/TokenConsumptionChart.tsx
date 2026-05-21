@@ -12,6 +12,7 @@ import {
   ChartModal,
   useChartExpander,
 } from "../../components/charts/ChartExpander";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
 import { estimateCost, getPricing } from "../../data/pricing";
@@ -230,11 +231,14 @@ export const TokenConsumptionChart = ({
       <Flex flexDirection="column" gap={12}>
         <Flex alignItems="baseline" justifyContent="space-between">
           <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Token consumption
-            </Heading>
+            <Flex alignItems="center" gap={6}>
+              <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+                Token consumption
+              </Heading>
+              <InfoTooltip text="Token usage over the active timeframe, bucketed at a snapped interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per bucket; dashed line is blended estimated cost on the right axis. Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range." />
+            </Flex>
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Tokens (solid) · Est. cost (dashed, right axis)
+              Tokens (solid) · Est. cost (dashed, right axis) · {result.intervalLabel} buckets
               {forecastEnabled ? " · Forecast (dashed purple)" : ""}
             </Text>
           </Flex>
@@ -299,11 +303,7 @@ export const TokenConsumptionChart = ({
         open={expander.open}
         onClose={() => expander.setOpen(false)}
         title="Token consumption"
-        subtitle={
-          forecastEnabled
-            ? "Tokens (solid) · Est. cost (dashed, right axis) · Forecast (dashed)"
-            : "Tokens (solid) · Est. cost (dashed, right axis)"
-        }
+        subtitle={`Tokens (solid) · Est. cost (dashed, right axis) · ${result.intervalLabel} buckets${forecastEnabled ? " · Forecast (dashed)" : ""}`}
         stats={stats}
       >
         {chart(440)}

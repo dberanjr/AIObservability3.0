@@ -43,6 +43,10 @@ export interface MiniDonutProps {
   thickness?: number;
   /** Slices are taken as fractions of the sum. */
   values: number[];
+  /** Per-slice label (used in hover tooltip and legends). */
+  labels?: string[];
+  /** Format the value shown on hover. Defaults to integer + " %". */
+  valueFormatter?: (n: number) => string;
   /** Per-slice color. Cycled if fewer colors than values. */
   colors?: string[];
   /** Big number rendered in the center. */
@@ -71,6 +75,8 @@ export const MiniDonut = ({
   size = 56,
   thickness = 10,
   values,
+  labels,
+  valueFormatter,
   colors = DEFAULT_PALETTE,
   centerValue,
   centerLabel,
@@ -80,25 +86,33 @@ export const MiniDonut = ({
   const r = size / 2 - 1;
   const rInner = Math.max(0, r - thickness);
   const total = values.reduce((a, b) => a + b, 0);
+  const [hoverIdx, setHoverIdx] = React.useState<number | null>(null);
 
-  // -90° to start at 12 o'clock.
+  // -90° to start at 12 o'clock. The arc record keeps both the original
+  // index and the slice value so the hover tooltip can show meaningful
+  // labels / proportions.
   let angle = -Math.PI / 2;
   const arcs =
     total > 0
       ? values
-          .filter((v) => v > 0)
-          .map((v, i) => {
-            const frac = v / total;
+          .map((v, originalIdx) => ({ v, originalIdx }))
+          .filter((p) => p.v > 0)
+          .map((p, _, arr) => {
+            const frac = p.v / total;
             const start = angle;
-            // Small numerical guard so a single-slice donut still renders.
             const end = angle + Math.min(frac * Math.PI * 2, Math.PI * 2 - 0.0001);
             angle = end;
             return {
               d: arcPath(cx, cy, r, rInner, start, end),
-              color: colors[i % colors.length],
+              color: colors[p.originalIdx % colors.length],
+              value: p.v,
+              originalIdx: p.originalIdx,
+              percent: frac * 100,
             };
           })
       : [];
+
+  const fmt = valueFormatter ?? ((n: number) => String(Math.round(n)));
 
   return (
     <div
@@ -111,13 +125,23 @@ export const MiniDonut = ({
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
         {total > 0 ? (
-          arcs.map((a, i) => <path key={i} d={a.d} fill={a.color} />)
+          arcs.map((a, i) => (
+            <path
+              key={i}
+              d={a.d}
+              fill={a.color}
+              opacity={hoverIdx == null || hoverIdx === i ? 1 : 0.45}
+              onMouseEnter={() => setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(null)}
+              style={{ cursor: "pointer", transition: "opacity 100ms" }}
+            />
+          ))
         ) : (
           <circle cx={cx} cy={cy} r={r} fill="var(--text-4)" opacity={0.25} />
         )}
-        <circle cx={cx} cy={cy} r={rInner} fill="var(--surface)" />
+        <circle cx={cx} cy={cy} r={rInner} fill="var(--surface)" pointerEvents="none" />
       </svg>
-      {(centerValue || centerLabel) && (
+      {(centerValue || centerLabel) && hoverIdx == null && (
         <div
           style={{
             position: "absolute",
@@ -153,6 +177,58 @@ export const MiniDonut = ({
               {centerLabel}
             </span>
           )}
+        </div>
+      )}
+      {/* When the user hovers a slice, the center swaps to the slice's
+          % + raw value, with the label appearing below in the same
+          pop-out style as the donut chart tooltip pattern. */}
+      {hoverIdx != null && arcs[hoverIdx] && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            padding: 4,
+            textAlign: "center",
+          }}
+        >
+          <span
+            style={{
+              fontSize: Math.max(13, Math.round(size * 0.22)),
+              fontWeight: 700,
+              lineHeight: 1,
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--text)",
+            }}
+          >
+            {arcs[hoverIdx].percent.toFixed(1)}%
+          </span>
+          <span
+            style={{
+              fontSize: Math.max(8, Math.round(size * 0.11)),
+              color: "var(--text-3)",
+              marginTop: 2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: size - 12,
+            }}
+            title={labels?.[arcs[hoverIdx].originalIdx]}
+          >
+            {labels?.[arcs[hoverIdx].originalIdx] ?? `slice ${arcs[hoverIdx].originalIdx + 1}`}
+          </span>
+          <span
+            style={{
+              fontSize: Math.max(8, Math.round(size * 0.11)),
+              color: "var(--text-3)",
+            }}
+          >
+            {fmt(arcs[hoverIdx].value)}
+          </span>
         </div>
       )}
     </div>

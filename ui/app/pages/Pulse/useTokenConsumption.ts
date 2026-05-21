@@ -22,6 +22,8 @@ export interface TokenSeriesPoint {
 export interface UseTokenConsumptionResult {
   points: TokenSeriesPoint[];
   intervalMs: number;
+  /** Human-readable bucket label like "5m", "1h", "6h". */
+  intervalLabel: string;
   totalTokens: number;
   totalCost: number;
   isLoading: boolean;
@@ -29,12 +31,31 @@ export interface UseTokenConsumptionResult {
 }
 
 /**
- * Bucket count for the token-consumption series. Higher value = finer
- * granularity (smaller per-bucket time slice). Clamped against a 60-second
- * floor below, so very short timeframes don't try to bucket below the limit
- * Grail allows for `makeTimeseries`.
+ * Snapped bucket sizes, in seconds. The hook picks the smallest snapped
+ * value that's >= the ideal interval derived from the active timeframe
+ * (totalMs / TARGET_BUCKETS). Means a 24h window snaps to 5m, 7d to 1h,
+ * etc. — friendlier than the raw `floor(totalMs / 240 / 1000)` math.
  */
+const SNAPPED_BUCKETS_SEC: ReadonlyArray<{ sec: number; label: string }> = [
+  { sec: 60, label: "1m" },
+  { sec: 300, label: "5m" },
+  { sec: 900, label: "15m" },
+  { sec: 1800, label: "30m" },
+  { sec: 3600, label: "1h" },
+  { sec: 21600, label: "6h" },
+  { sec: 86400, label: "1d" },
+];
 const TARGET_BUCKETS = 240;
+
+const pickSnappedBucket = (
+  totalMs: number,
+): { sec: number; label: string } => {
+  const ideal = Math.max(60, Math.floor(totalMs / TARGET_BUCKETS / 1000));
+  for (const b of SNAPPED_BUCKETS_SEC) {
+    if (b.sec >= ideal) return b;
+  }
+  return SNAPPED_BUCKETS_SEC[SNAPPED_BUCKETS_SEC.length - 1];
+};
 
 const parseScopeMs = (from: string): number => {
   const m = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
@@ -60,7 +81,8 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
   const canQuery = canQueryScope(_resolution);
 
   const totalMs = parseScopeMs(scope.timeframe.from);
-  const intervalSec = Math.max(60, Math.floor(totalMs / TARGET_BUCKETS / 1000));
+  const bucket = pickSnappedBucket(totalMs);
+  const intervalSec = bucket.sec;
 
   const { data, isLoading, error } = useScopedDql<SeriesRecord>(
     canQuery ? buildTokenSeriesQuery(serviceIds, scope.timeframe, intervalSec) : "",
@@ -92,10 +114,19 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
     return {
       points,
       intervalMs,
+      intervalLabel: bucket.label,
       totalTokens,
       totalCost,
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading, intervalSec, samplingRatio]);
+  }, [
+    data,
+    isLoading,
+    error,
+    servicesLoading,
+    intervalSec,
+    samplingRatio,
+    bucket.label,
+  ]);
 };

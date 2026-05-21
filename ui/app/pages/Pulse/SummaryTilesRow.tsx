@@ -8,6 +8,11 @@ import {
   MiniPartialDonut,
   MiniScale,
 } from "../../components/charts/TileGlyphs";
+import {
+  ChartModal,
+  useChartExpander,
+} from "../../components/charts/ChartExpander";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { useTweaks } from "../../tweaks/TweaksContext";
 import {
   fmtCount,
@@ -38,40 +43,48 @@ interface TileShellProps {
   visualCaption?: string;
   /** Short explanation shown when the user hovers the info glyph. */
   info?: string;
+  /** When set, renders a maximize button that opens a ChartModal containing
+   * `expanded()`. The function is invoked with the modal's available
+   * inner width so the expanded view can size itself. */
+  expanded?: () => {
+    title: string;
+    subtitle?: string;
+    body: React.ReactNode;
+    stats?: { label: string; value: string; sub?: string }[];
+  };
 }
 
 /**
- * Small circled-i in the top-right of each tile. Hover/focus surfaces a
- * native tooltip explaining what the metric measures and where it comes
- * from. Renders as a span with `title` so it works without JS popovers and
- * stays accessible to keyboard / screen-reader users.
+ * Small "expand" icon button — used at the top-right of any tile that
+ * exposes a maximized view via the `expanded` prop.
  */
-const TileInfo = ({ text }: { text: string }) => (
-  <span
-    role="img"
-    aria-label={text}
-    title={text}
-    tabIndex={0}
+const TileExpandButton = ({ onClick }: { onClick: () => void }) => (
+  <button
+    type="button"
+    aria-label="Expand"
+    title="Expand"
+    onClick={onClick}
     style={{
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: 14,
-      height: 14,
-      borderRadius: "50%",
-      border: "1px solid var(--text-4)",
+      all: "unset",
+      cursor: "pointer",
+      padding: 2,
+      borderRadius: 4,
       color: "var(--text-3)",
-      fontSize: 9,
-      fontWeight: 700,
-      fontFamily: "serif",
-      cursor: "help",
-      flex: "0 0 auto",
-      lineHeight: 1,
+      lineHeight: 0,
     }}
   >
-    i
-  </span>
+    <svg width={12} height={12} viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </button>
 );
+
 
 const Tile = ({
   label,
@@ -82,6 +95,7 @@ const Tile = ({
   visual,
   visualCaption,
   info,
+  expanded,
 }: TileShellProps) => {
   const { density, tileStyle } = useTweaks();
   const pad = density === "minimal" ? 4 : density === "compact" ? 8 : 12;
@@ -93,6 +107,9 @@ const Tile = ({
         : tileStyle === "ghost"
           ? { boxShadow: "none", border: "none", background: "transparent" }
           : {};
+
+  const expander = useChartExpander();
+  const expandedContent = expanded && expander.open ? expanded() : null;
 
   return (
     <Surface
@@ -130,7 +147,12 @@ const Tile = ({
           >
             {label}
           </Text>
-          {info && <TileInfo text={info} />}
+          <Flex alignItems="center" gap={4}>
+            {expanded && (
+              <TileExpandButton onClick={() => expander.setOpen(true)} />
+            )}
+            {info && <InfoTooltip text={info} />}
+          </Flex>
         </Flex>
 
         {variant === "visual" ? (
@@ -172,6 +194,17 @@ const Tile = ({
           </>
         )}
       </Flex>
+      {expandedContent && (
+        <ChartModal
+          open={expander.open}
+          onClose={() => expander.setOpen(false)}
+          title={expandedContent.title}
+          subtitle={expandedContent.subtitle}
+          stats={expandedContent.stats}
+        >
+          {expandedContent.body}
+        </ChartModal>
+      )}
     </Surface>
   );
 };
@@ -252,16 +285,200 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     );
   }
 
-  const sparkValues = summary.spark.tokens;
-  const renderSpark = (color: string) =>
-    sparkValues.length > 1 ? (
-      <Sparkline
-        values={sparkValues}
-        color={color}
-        height={24}
-        valueFormatter={fmtTokens}
-      />
+  // Each tile has its own series now — previously they all read from
+  // summary.spark.tokens which was the same data per tile.
+  const renderSpark = (
+    values: number[],
+    color: string,
+    fmt: (n: number) => string,
+  ) =>
+    values.length > 1 ? (
+      <Sparkline values={values} color={color} height={24} valueFormatter={fmt} />
     ) : null;
+
+  // Reusable "expanded sparkline" — bigger render plus a stats grid
+  // derived from the same per-bucket series.
+  const sparklineExpanded = (
+    title: string,
+    info: string,
+    values: number[],
+    fmt: (n: number) => string,
+  ) => {
+    const nonZero = values.filter((v) => Number.isFinite(v) && v !== 0);
+    const min = nonZero.length ? Math.min(...nonZero) : 0;
+    const max = nonZero.length ? Math.max(...nonZero) : 0;
+    const sum = values.reduce((a, b) => a + b, 0);
+    const avg = values.length ? sum / values.length : 0;
+    return {
+      title,
+      subtitle: info,
+      body: (
+        <Sparkline
+          values={values}
+          color="var(--blue)"
+          height={420}
+          valueFormatter={fmt}
+        />
+      ),
+      stats: [
+        { label: "Total / sum", value: fmt(sum) },
+        { label: "Average", value: fmt(avg) },
+        { label: "Min (non-zero)", value: fmt(min) },
+        { label: "Max", value: fmt(max) },
+        { label: "Bucket count", value: String(values.length) },
+      ],
+    };
+  };
+
+  // Reusable "expanded donut" — bigger donut + a legend listing every
+  // segment with its name, value, and percent. Sorted by value desc.
+  const donutExpanded = (
+    title: string,
+    info: string,
+    centerCount: number | null,
+    centerLabel: string,
+    slices: { label: string; value: number }[],
+    fmt: (n: number) => string,
+  ) => {
+    const total = slices.reduce((a, b) => a + b.value, 0);
+    const sorted = [...slices].sort((a, b) => b.value - a.value);
+    return {
+      title,
+      subtitle: info,
+      body: (
+        <Flex gap={32} alignItems="center" style={{ minHeight: 360 }}>
+          <MiniDonut
+            size={320}
+            thickness={42}
+            values={sorted.map((s) => s.value)}
+            labels={sorted.map((s) => s.label)}
+            valueFormatter={fmt}
+            centerValue={
+              centerCount != null ? String(Math.round(centerCount)) : "—"
+            }
+            centerLabel={centerLabel}
+          />
+          <div
+            style={{
+              flexGrow: 1,
+              minWidth: 0,
+              maxHeight: 360,
+              overflowY: "auto",
+            }}
+          >
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 12.5,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              <thead>
+                <tr style={{ color: "var(--text-3)", textAlign: "left" }}>
+                  <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>
+                  <th style={{ padding: "6px 8px", fontWeight: 600 }}>
+                    {centerLabel}
+                  </th>
+                  <th
+                    style={{
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                      textAlign: "right",
+                    }}
+                  >
+                    Value
+                  </th>
+                  <th
+                    style={{
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                      textAlign: "right",
+                    }}
+                  >
+                    Share
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((s, idx) => {
+                  const pct = total > 0 ? (s.value / total) * 100 : 0;
+                  const color = [
+                    "var(--blue)",
+                    "var(--purple-2)",
+                    "var(--cyan)",
+                    "var(--green-2)",
+                    "var(--pink)",
+                    "var(--amber)",
+                    "var(--blue-purple)",
+                    "var(--purple-dark)",
+                    "var(--red)",
+                    "var(--green-lime)",
+                  ][idx % 10];
+                  return (
+                    <tr
+                      key={s.label}
+                      style={{ borderTop: "1px solid var(--border)" }}
+                    >
+                      <td style={{ padding: "8px" }}>
+                        <span
+                          aria-hidden
+                          style={{
+                            display: "inline-block",
+                            width: 10,
+                            height: 10,
+                            borderRadius: 2,
+                            background: color,
+                          }}
+                        />
+                      </td>
+                      <td
+                        style={{
+                          padding: "8px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 320,
+                        }}
+                        title={s.label}
+                      >
+                        {s.label}
+                      </td>
+                      <td style={{ padding: "8px", textAlign: "right" }}>
+                        {fmt(s.value)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "8px",
+                          textAlign: "right",
+                          color: "var(--text-3)",
+                        }}
+                      >
+                        {pct.toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Flex>
+      ),
+      stats: [
+        {
+          label: "Distinct",
+          value:
+            centerCount != null ? String(Math.round(centerCount)) : "—",
+        },
+        { label: "Total events", value: fmt(total) },
+        {
+          label: "Top",
+          value: sorted[0]?.label ?? "—",
+          sub: sorted[0] ? fmt(sorted[0].value) : undefined,
+        },
+      ],
+    };
+  };
 
   // Cost-per-request scale: a $0–$0.05 range is generous for blended LLM
   // pricing across common SOTA models. Values above clamp to the right.
@@ -281,26 +498,62 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             ? `${fmtCount(summary.requests)} req`
             : undefined
         }
-        bottom={renderSpark("var(--blue)")}
+        bottom={renderSpark(summary.spark.tokens, "var(--blue)", fmtTokens)}
+        expanded={() =>
+          sparklineExpanded(
+            "Tokens",
+            "Per-bucket sum of input + output tokens across the active timeframe.",
+            summary.spark.tokens,
+            fmtTokens,
+          )
+        }
       />
       <Tile
         label="Spend"
         info="Blended USD estimate computed by applying default per-model pricing to the input/output token counts. Useful as a directional cost signal; the FinOps tab is authoritative."
         value={fmtUSDCompact(summary.spend)}
         sub="Blended est."
-        bottom={renderSpark("var(--purple)")}
+        bottom={renderSpark(summary.spark.spend, "var(--blue)", fmtUSDCompact)}
+        expanded={() =>
+          sparklineExpanded(
+            "Spend",
+            "Per-bucket blended cost derived from token usage and default pricing.",
+            summary.spark.spend,
+            fmtUSDCompact,
+          )
+        }
       />
       <Tile
         label="P95 latency"
         info="95th percentile request duration across all GenAI spans in scope. Percentile statistics are sampling-invariant — toggling sampling won't change this number."
         value={fmtMs(summary.p95Ms)}
-        bottom={renderSpark("var(--cyan)")}
+        bottom={renderSpark(summary.spark.p95Ms, "var(--blue)", fmtMs)}
+        expanded={() =>
+          sparklineExpanded(
+            "P95 latency",
+            "Per-bucket 95th percentile of span duration.",
+            summary.spark.p95Ms,
+            fmtMs,
+          )
+        }
       />
       <Tile
         label="Error rate"
         info="Percentage of GenAI spans with a non-null exception.type field. A ratio (not a count) — sampling-invariant."
         value={fmtPercent(summary.errorRatePct)}
-        bottom={renderSpark("var(--amber)")}
+        bottom={renderSpark(
+          summary.spark.errorRatePct,
+          "var(--blue)",
+          (n) => fmtPercent(n, 1),
+        )}
+        expanded={() =>
+          sparklineExpanded(
+            "Error rate",
+            "Per-bucket fraction of spans with an exception.type set.",
+            summary.spark.errorRatePct,
+            (n) => fmtPercent(n, 1),
+          )
+        }
       />
 
       <Tile
@@ -312,10 +565,22 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             size={96}
             thickness={14}
             values={breakdowns.models.map((m) => m.value)}
+            labels={breakdowns.models.map((m) => m.label)}
+            valueFormatter={(n) => `${fmtCount(n)} req`}
             centerValue={
               summary.models != null ? String(Math.round(summary.models)) : "—"
             }
           />
+        }
+        expanded={() =>
+          donutExpanded(
+            "Models",
+            "Distinct models invoked, sized by request volume. Version suffixes collapsed.",
+            summary.models,
+            "Model",
+            breakdowns.models.map((m) => ({ label: m.label, value: m.value })),
+            (n) => `${fmtCount(n)} req`,
+          )
         }
       />
       <Tile
@@ -327,12 +592,24 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             size={96}
             thickness={14}
             values={breakdowns.mcpServers.map((s) => s.value)}
+            labels={breakdowns.mcpServers.map((s) => s.label)}
+            valueFormatter={(n) => `${fmtCount(n)} req`}
             centerValue={
               summary.mcpServers != null
                 ? String(Math.round(summary.mcpServers))
                 : "—"
             }
           />
+        }
+        expanded={() =>
+          donutExpanded(
+            "MCP servers",
+            "Distinct MCP workflows (traceloop.workflow.name ending in .mcp).",
+            summary.mcpServers,
+            "Server",
+            breakdowns.mcpServers.map((s) => ({ label: s.label, value: s.value })),
+            (n) => `${fmtCount(n)} req`,
+          )
         }
       />
       <Tile
@@ -344,12 +621,24 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             size={96}
             thickness={14}
             values={breakdowns.mcpTools.map((t) => t.value)}
+            labels={breakdowns.mcpTools.map((t) => t.label)}
+            valueFormatter={(n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`}
             centerValue={
               summary.mcpTools != null
                 ? String(Math.round(summary.mcpTools))
                 : "—"
             }
           />
+        }
+        expanded={() =>
+          donutExpanded(
+            "MCP tools",
+            "Distinct tools invoked within MCP workflows, sized by call count.",
+            summary.mcpTools,
+            "Tool",
+            breakdowns.mcpTools.map((t) => ({ label: t.label, value: t.value })),
+            (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
+          )
         }
       />
 

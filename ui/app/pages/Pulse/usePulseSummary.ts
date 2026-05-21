@@ -7,7 +7,10 @@ import {
   extrapolateSeries,
   useSampling,
 } from "../../scope/SamplingContext";
-import { buildSummaryQuery, buildTokenSeriesQuery } from "./dataQueries";
+import {
+  buildSummaryQuery,
+  buildSummarySparkSeriesQuery,
+} from "./dataQueries";
 import { estimateCost, getPricing } from "../../data/pricing";
 
 interface SummaryRecord {
@@ -24,7 +27,10 @@ interface SummaryRecord {
 }
 
 interface SeriesRecord {
-  tokens?: number[] | null;
+  tokens?: (number | null)[] | null;
+  p95_ns?: (number | null)[] | null;
+  errors?: (number | null)[] | null;
+  requests?: (number | null)[] | null;
   timeframe?: { start?: string; end?: string };
 }
 
@@ -39,9 +45,16 @@ export interface PulseSummary {
   mcpServers: number | null;
   mcpTools: number | null;
   tokenEfficiencyPct: number | null;
-  /** Per-tile sparkline (first 4 tiles only). Length ≈ SPARK_TARGET_BUCKETS. */
+  /**
+   * Per-tile sparkline series. Each is bucketed at the same interval
+   * (~150 buckets across the active timeframe). All four are derived from
+   * a single DQL call so the buckets line up exactly.
+   */
   spark: {
     tokens: number[];
+    spend: number[];
+    p95Ms: number[];
+    errorRatePct: number[];
   };
   isLoading: boolean;
   error?: Error;
@@ -120,7 +133,11 @@ export const usePulseSummary = (): PulseSummary => {
 
   const spark = useScopedDql<SeriesRecord>(
     canQuery
-      ? buildTokenSeriesQuery(serviceIds, scope.timeframe, sparkIntervalSec)
+      ? buildSummarySparkSeriesQuery(
+          serviceIds,
+          scope.timeframe,
+          sparkIntervalSec,
+        )
       : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
@@ -149,6 +166,39 @@ export const usePulseSummary = (): PulseSummary => {
     const costPerRequest =
       requests && requests > 0 ? spend / requests : null;
 
+    // Derive per-bucket spark series from the multi-series spark query.
+    // tokens / errors / requests are count-or-sum aggregates (extrapolate
+    // by samplingRatio); p95_ns / error-rate ratios are statistics
+    // (sampling-invariant). Spend per bucket follows from the per-bucket
+    // tokens via the same blended pricing as the headline.
+    const toNumArr = (arr: unknown): number[] =>
+      Array.isArray(arr)
+        ? arr.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : 0))
+        : [];
+    const tokensSeries = extrapolateSeries(
+      toNumArr(sparkRow?.tokens),
+      samplingRatio,
+    );
+    const p95NsSeries = toNumArr(sparkRow?.p95_ns);
+    const errorsSeries = toNumArr(sparkRow?.errors);
+    const requestsSeries = toNumArr(sparkRow?.requests);
+
+    const spendSeries = tokensSeries.map((bucketTokens) =>
+      estimateCost(bucketTokens / 2, bucketTokens / 2, {
+        inputPerMTok: BLENDED_PRICE_PER_MTOK.input,
+        outputPerMTok: BLENDED_PRICE_PER_MTOK.output,
+        contextWindow: null,
+        provider: "Blended",
+        tier: "mid",
+      }),
+    );
+    const p95MsSeries = p95NsSeries.map((ns) =>
+      ns > 0 ? ns / 1_000_000 : 0,
+    );
+    const errorRateSeries = requestsSeries.map((req, i) =>
+      req > 0 ? (errorsSeries[i] / req) * 100 : 0,
+    );
+
     return {
       tokens,
       requests,
@@ -161,12 +211,10 @@ export const usePulseSummary = (): PulseSummary => {
       mcpTools: row?.mcp_tools ?? null,
       tokenEfficiencyPct: row?.token_efficiency_pct ?? null,
       spark: {
-        tokens: Array.isArray(sparkRow?.tokens)
-          ? extrapolateSeries(
-              sparkRow.tokens.filter((v) => typeof v === "number"),
-              samplingRatio,
-            )
-          : [],
+        tokens: tokensSeries,
+        spend: spendSeries,
+        p95Ms: p95MsSeries,
+        errorRatePct: errorRateSeries,
       },
       isLoading:
         servicesLoading || summary.isLoading || spark.isLoading,

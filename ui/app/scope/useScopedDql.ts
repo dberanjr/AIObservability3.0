@@ -36,6 +36,16 @@ const applySampling = (query: string, samplingRatio: number): string => {
 };
 
 /**
+ * Extra options layered onto useDql's own options. `ignoreScanLimit` opts
+ * a particular query out of the toolbar's scan-limit rewrite — useful when
+ * a panel needs a fixed budget (e.g., the 24h activity histogram which
+ * always asks for 5 TB regardless of the user's toolbar pick).
+ */
+export interface UseScopedDqlExtra {
+  ignoreScanLimit?: boolean;
+}
+
+/**
  * Drop-in replacement for `useDql` that injects:
  *   - the global scan-limit (rewrites `scanLimitGBytes: N` in the query)
  *   - the global sampling ratio (rewrites `samplingRatio: N` in the query)
@@ -47,17 +57,18 @@ const applySampling = (query: string, samplingRatio: number): string => {
  */
 export function useScopedDql<T = ResultRecord>(
   query: string,
-  options?: UseDqlOptions<T>,
+  options?: UseDqlOptions<T> & UseScopedDqlExtra,
 ): UseDqlResult<T> {
   const { scanLimitGb } = useScanLimit();
   const { samplingRatio } = useSampling();
   const { segments } = useSegments();
+  const ignoreScanLimit = Boolean(options?.ignoreScanLimit);
 
   const queryInput = useMemo<string | DqlQueryParams>(() => {
-    const rewritten = applySampling(
-      applyScanLimit(query, scanLimitGb),
-      samplingRatio,
-    );
+    const scanRewritten = ignoreScanLimit
+      ? query
+      : applyScanLimit(query, scanLimitGb);
+    const rewritten = applySampling(scanRewritten, samplingRatio);
     if (!rewritten) return rewritten;
     if (!segments || segments.length === 0) return rewritten;
     return {
@@ -66,7 +77,15 @@ export function useScopedDql<T = ResultRecord>(
       // what ExecuteRequest.filterSegments expects.
       filterSegments: segments,
     };
-  }, [query, scanLimitGb, samplingRatio, segments]);
+  }, [query, scanLimitGb, samplingRatio, segments, ignoreScanLimit]);
 
-  return useDql<T>(queryInput, options);
+  // Strip the extension key before forwarding to the underlying hook.
+  const forwarded: UseDqlOptions<T> | undefined = options
+    ? (() => {
+        const { ignoreScanLimit: _drop, ...rest } = options;
+        return rest;
+      })()
+    : undefined;
+
+  return useDql<T>(queryInput, forwarded);
 }

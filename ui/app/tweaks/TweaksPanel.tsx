@@ -106,6 +106,39 @@ interface AccentSwatchesProps {
  * "custom" picker — clicking it opens the browser's color picker so the
  * user can choose any hex value.
  */
+const Swatch = ({
+  accent,
+  active,
+  onChange,
+}: {
+  accent: Exclude<Accent, "custom">;
+  active: boolean;
+  onChange: (a: Accent) => void;
+}) => {
+  const swatch = ACCENT_SWATCH[accent];
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={accent}
+      title={accent}
+      onClick={() => onChange(accent)}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        width: 26,
+        height: 26,
+        borderRadius: "50%",
+        background: swatch,
+        boxShadow: active
+          ? `0 0 0 2px var(--surface), 0 0 0 4px ${swatch}`
+          : "0 1px 2px rgba(0,0,0,0.08)",
+      }}
+    />
+  );
+};
+
 const AccentSwatches = ({
   value,
   customHex,
@@ -115,34 +148,43 @@ const AccentSwatches = ({
   <div
     role="radiogroup"
     aria-label="Accent color"
-    style={{ display: "flex", gap: 6, flexWrap: "nowrap" }}
+    style={{ display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center" }}
   >
-    {ACCENT_OPTIONS.map((opt) => {
-      const active = opt.value === value;
-      const swatch = ACCENT_SWATCH[opt.value];
-      return (
-        <button
-          key={opt.value}
-          type="button"
-          role="radio"
-          aria-checked={active}
-          aria-label={opt.label}
-          title={opt.label}
-          onClick={() => onChange(opt.value)}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            width: 26,
-            height: 26,
-            borderRadius: "50%",
-            background: swatch,
-            boxShadow: active
-              ? `0 0 0 2px var(--surface), 0 0 0 4px ${swatch}`
-              : "0 1px 2px rgba(0,0,0,0.08)",
-          }}
-        />
-      );
-    })}
+    {ACCENT_GROUPS.map((group, groupIdx) => (
+      <React.Fragment key={group.label}>
+        {groupIdx > 0 && (
+          <span
+            aria-hidden
+            style={{
+              width: 1,
+              height: 18,
+              background: "var(--border)",
+              margin: "0 2px",
+              flex: "0 0 auto",
+            }}
+          />
+        )}
+        {group.accents.map((a) => (
+          <Swatch
+            key={a}
+            accent={a}
+            active={a === value}
+            onChange={onChange}
+          />
+        ))}
+      </React.Fragment>
+    ))}
+    {/* Separator before the custom picker. */}
+    <span
+      aria-hidden
+      style={{
+        width: 1,
+        height: 18,
+        background: "var(--border)",
+        margin: "0 2px",
+        flex: "0 0 auto",
+      }}
+    />
     {/* Custom-color swatch + invisible native color input layered over it. */}
     <label
       title="Custom color"
@@ -205,22 +247,22 @@ const TILE_OPTIONS: SegmentOption<TileStyle>[] = [
   { value: "bordered", label: "bordered" },
   { value: "ghost", label: "ghost" },
 ];
+/**
+ * Accents grouped by color family so the swatch row reads naturally:
+ * blues / purples / greens / warms / greys, with `custom` always at the
+ * end. Renders with a small visual gap between groups.
+ */
+const ACCENT_GROUPS: Array<{ label: string; accents: Exclude<Accent, "custom">[] }> = [
+  { label: "Blues",   accents: ["blue", "cyan", "teal", "indigo"] },
+  { label: "Purples", accents: ["purple", "purpleDeep", "pink"] },
+  { label: "Greens",  accents: ["green", "lime"] },
+  { label: "Warm",    accents: ["amber", "red"] },
+  { label: "Grays",   accents: ["gray25", "gray50", "gray75", "black"] },
+];
 const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
-  { value: "blue", label: "blue" },
-  { value: "purple", label: "purple" },
-  { value: "cyan", label: "cyan" },
-  { value: "green", label: "green" },
-  { value: "pink", label: "pink" },
-  { value: "amber", label: "amber" },
-  { value: "red", label: "red" },
-  { value: "indigo", label: "indigo" },
-  { value: "lime", label: "lime" },
-  { value: "teal", label: "teal" },
-  { value: "purpleDeep", label: "purple deep" },
-  { value: "gray25", label: "25% gray" },
-  { value: "gray50", label: "50% gray" },
-  { value: "gray75", label: "75% gray" },
-  { value: "black", label: "black" },
+  ...ACCENT_GROUPS.flatMap((g) =>
+    g.accents.map((a) => ({ value: a, label: a })),
+  ),
 ];
 const COLORBLIND_OPTIONS: SegmentOption<ColorBlindFilter>[] = [
   { value: "none", label: "off" },
@@ -307,9 +349,9 @@ export const TweaksPanel = () => {
         position: "fixed",
         top: 64,
         right: 16,
-        // Wide enough that the 13 accent swatches + 5 value-label segments
-        // each fit on a single line without wrapping.
-        width: 520,
+        // Wide enough that the grouped accent swatches + 5 value-label
+        // segments each fit on a single line without wrapping.
+        width: 560,
         maxHeight: "calc(100vh - 96px)",
         overflowY: "auto",
         zIndex: 1000,

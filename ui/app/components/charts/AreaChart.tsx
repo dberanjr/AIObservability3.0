@@ -12,11 +12,13 @@ const pickLabelIndices = (
   mode: ChartLabels,
 ): number[] => {
   if (mode === "none") return [];
+  // Exclude zero values — labeling a flat "0" point isn't useful and
+  // mostly contributes to visual clutter at the chart baseline.
   const finite = values
     .map((v, i) => ({ v, i }))
     .filter(
       (p): p is { v: number; i: number } =>
-        p.v != null && Number.isFinite(p.v),
+        p.v != null && Number.isFinite(p.v) && p.v !== 0,
     );
   if (finite.length === 0) return [];
 
@@ -28,24 +30,27 @@ const pickLabelIndices = (
     return [sorted[0].i, sorted[sorted.length - 1].i];
   }
   if (mode === "interesting") {
-    // Local maxima above 1.3× the series mean. Falls back to the global max
-    // when nothing crosses the threshold.
+    // Local maxima above 1.3× the series mean. Capped at 6 — densely-
+    // spiky series otherwise produce a wall of labels. We sort the
+    // candidates by value desc and keep the top 6 so the *most*
+    // interesting peaks are the ones that show.
     const mean = finite.reduce((s, p) => s + p.v, 0) / finite.length;
     const thr = mean * 1.3;
-    const out: number[] = [];
+    const peaks: Array<{ v: number; i: number }> = [];
     for (let k = 1; k < finite.length - 1; k++) {
       if (
         finite[k].v > thr &&
         finite[k].v > finite[k - 1].v &&
         finite[k].v > finite[k + 1].v
       ) {
-        out.push(finite[k].i);
+        peaks.push(finite[k]);
       }
     }
-    if (out.length === 0) {
-      out.push(finite.reduce((a, b) => (b.v > a.v ? b : a)).i);
+    if (peaks.length === 0) {
+      return [finite.reduce((a, b) => (b.v > a.v ? b : a)).i];
     }
-    return out;
+    peaks.sort((a, b) => b.v - a.v);
+    return peaks.slice(0, 6).map((p) => p.i);
   }
   // "all" — cap at 12 evenly-spaced labels.
   const cap = 12;
@@ -602,22 +607,35 @@ export const AreaChart = ({
               }
             }
 
-            // Drop labels whose pill would overlap one already placed
-            // (4px gap). Two labels can sit close vertically without
-            // colliding only if they sit on opposite sides of a row;
-            // for simplicity we treat the row as horizontal-only.
+            // When two labels would overlap (dual-axis hits at the same
+            // x are the common case — token + cost on the same bucket),
+            // push the second one further above so both stay visible
+            // instead of dropping it. Each attempt steps up by one pill
+            // height + gap; if we run out of headroom inside the chart
+            // we drop the label.
+            const STACK_STEP = PILL_H + 4;
+            const overlapsPlaced = (c: Candidate, placed: Candidate[]) =>
+              placed.some(
+                (p) =>
+                  Math.abs(p.cx - c.cx) < p.halfW + c.halfW + 4 &&
+                  Math.abs(p.cy - c.cy) < PILL_H + 2,
+              );
+
             all.sort((a, b) => a.cx - b.cx);
             const placed: Candidate[] = [];
-            const overlapsAny = (c: Candidate): boolean =>
-              placed.some((p) => {
-                const horizOverlap =
-                  Math.abs(p.cx - c.cx) < p.halfW + c.halfW + 4;
-                const vertOverlap = Math.abs(p.cy - c.cy) < PILL_H + 2;
-                return horizOverlap && vertOverlap;
-              });
-            for (const c of all) {
-              if (overlapsAny(c)) continue;
-              placed.push(c);
+            for (const orig of all) {
+              let attempt: Candidate = orig;
+              let placedOK = false;
+              for (let i = 0; i < 5; i++) {
+                if (!overlapsPlaced(attempt, placed)) {
+                  placedOK = true;
+                  break;
+                }
+                const nextCy = attempt.cy - STACK_STEP;
+                if (nextCy - PILL_H / 2 < PAD_T + 1) break;
+                attempt = { ...attempt, cy: nextCy };
+              }
+              if (placedOK) placed.push(attempt);
             }
 
             return placed.map((c) => (

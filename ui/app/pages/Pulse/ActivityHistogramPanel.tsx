@@ -8,6 +8,7 @@ import {
   ChartModal,
   useChartExpander,
 } from "../../components/charts/ChartExpander";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
 import type { UseActivityHistogramResult } from "./useActivityHistogram";
@@ -76,11 +77,14 @@ export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) 
       <Flex flexDirection="column" gap={12}>
         <Flex alignItems="baseline" justifyContent="space-between">
           <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              24h activity
-            </Heading>
+            <Flex alignItems="center" gap={6}>
+              <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+                24h activity
+              </Heading>
+              <InfoTooltip text="Hourly request counts across all GenAI spans in the last 24 hours, regardless of the active scope timeframe. Always scans 5 TB so the rollup stays accurate even when the toolbar's scan limit is lowered. Click-and-drag to brush a narrower range; the peak hour is highlighted in purple." />
+            </Flex>
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Requests per hour, last 24 hours
+              Requests per hour, last 24 hours · 1h buckets
             </Text>
           </Flex>
           <Flex alignItems="center" gap={8}>

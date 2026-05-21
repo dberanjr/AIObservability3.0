@@ -72,13 +72,25 @@ const SelectedSegmentNames = () => {
   }, []);
 
   if (segments.length === 0) return null;
-  const labels = segments.map((s) => nameByUid.get(s.id) ?? s.id);
+  // Format each selection as "<segment name>: <var values>" when the
+  // segment has variables bound, otherwise just "<segment name>". Joins
+  // multi-value variable bindings with commas.
+  const formatSegment = (s: { id: string; variables?: Array<{ name: string; values: string[] }> }) => {
+    const name = nameByUid.get(s.id) ?? s.id;
+    const vars = s.variables ?? [];
+    const bound = vars
+      .flatMap((v) => v.values)
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (bound.length === 0) return name;
+    return `${name}: ${bound.join(", ")}`;
+  };
+  const labels = segments.map(formatSegment);
   return (
     <Text
       style={{
         fontSize: 11.5,
         color: "var(--text-2)",
-        maxWidth: 320,
+        maxWidth: 360,
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
