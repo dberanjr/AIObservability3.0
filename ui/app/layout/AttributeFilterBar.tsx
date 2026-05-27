@@ -78,7 +78,7 @@ const FilterDropdown = ({
             border: "1px solid var(--border)",
             borderRadius: 4,
             padding: 8,
-            zIndex: 1000,
+            zIndex: 10000,
             minWidth: 180,
             maxHeight: 300,
             overflow: "auto",
@@ -140,11 +140,7 @@ const FilterDropdown = ({
 export const AttributeFilterBar = () => {
   const { filters, setAgents, setModels, setProviders, clearAll, hasFilters } =
     useGlobalFilters();
-  const { agents, models, providers, isLoading } = useFilterOptions();
-
-  if (!isLoading && agents.length === 0 && models.length === 0 && providers.length === 0) {
-    return null;
-  }
+  const { agents, models, providers, isLoading, error } = useFilterOptions();
 
   return (
     <Flex

@@ -422,17 +422,21 @@ export const TweaksPanel = () => {
 
           </Flex>
 
-          <Flex flexDirection="column" gap={12}>
+          <Flex flexDirection="column" gap={12} style={{ position: "relative", zIndex: 100 }}>
             <SectionLabel>Data</SectionLabel>
 
-            <Flex flexDirection="column" gap={6}>
+            <Flex flexDirection="column" gap={6} style={{ position: "relative", zIndex: 101 }}>
               <FieldLabel>Sampling</FieldLabel>
-              <SamplingSegmented />
+              <div style={{ position: "relative", zIndex: 102 }}>
+                <SamplingSegmented />
+              </div>
             </Flex>
 
-            <Flex flexDirection="column" gap={6}>
+            <Flex flexDirection="column" gap={6} style={{ position: "relative", zIndex: 101 }}>
               <FieldLabel>Scan limit</FieldLabel>
-              <ScanLimitSegmented />
+              <div style={{ position: "relative", zIndex: 102 }}>
+                <ScanLimitSegmented />
+              </div>
             </Flex>
 
           </Flex>
