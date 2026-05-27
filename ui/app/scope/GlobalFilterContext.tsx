@@ -5,6 +5,8 @@ export interface GlobalFilters {
   agents: string[];
   models: string[];
   providers: string[];
+  tools: string[];
+  services: string[];
 }
 
 interface GlobalFilterContextValue {
@@ -12,6 +14,8 @@ interface GlobalFilterContextValue {
   setAgents: (agents: string[]) => void;
   setModels: (models: string[]) => void;
   setProviders: (providers: string[]) => void;
+  setTools?: (tools: string[]) => void;
+  setServices?: (services: string[]) => void;
   clearAll: () => void;
   hasFilters: boolean;
 }
@@ -23,6 +27,8 @@ export const GlobalFilterProvider = ({ children }: { children: React.ReactNode }
     agents: [],
     models: [],
     providers: [],
+    tools: [],
+    services: [],
   });
 
   const setAgents = (agents: string[]) =>
@@ -34,15 +40,25 @@ export const GlobalFilterProvider = ({ children }: { children: React.ReactNode }
   const setProviders = (providers: string[]) =>
     setFilters({ ...filters, providers });
 
+  const setTools = (tools: string[]) =>
+    setFilters({ ...filters, tools });
+
+  const setServices = (services: string[]) =>
+    setFilters({ ...filters, services });
+
   const clearAll = () =>
-    setFilters({ agents: [], models: [], providers: [] });
+    setFilters({ agents: [], models: [], providers: [], tools: [], services: [] });
 
   const hasFilters =
-    filters.agents.length > 0 || filters.models.length > 0 || filters.providers.length > 0;
+    filters.agents.length > 0 ||
+    filters.models.length > 0 ||
+    filters.providers.length > 0 ||
+    (filters.tools?.length || 0) > 0 ||
+    (filters.services?.length || 0) > 0;
 
   return (
     <GlobalFilterContext.Provider
-      value={{ filters, setAgents, setModels, setProviders, clearAll, hasFilters }}
+      value={{ filters, setAgents, setModels, setProviders, setTools, setServices, clearAll, hasFilters }}
     >
       {children}
     </GlobalFilterContext.Provider>

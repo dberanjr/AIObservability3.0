@@ -4,205 +4,215 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { ChevronDownIcon } from "@dynatrace/strato-icons";
 import { useGlobalFilters } from "../scope/GlobalFilterContext";
-import { useFilterOptions } from "../scope/useFilterOptions";
+import { useScopedDql } from "../scope/useScopedDql";
+import { useScope } from "../scope/ScopeContext";
+import { dqlTimeArg, dqlIdArray, scopeFilterClause } from "../scope/queries";
+import type { Timeframe } from "../scope/types";
 
-interface FilterItem {
+interface FilterCategory {
+  id: "agent" | "model" | "provider" | "tool" | "service";
   label: string;
-  type: "agent" | "model" | "provider";
-  isSelected: boolean;
+  attribute: string;
+  icon?: string;
 }
 
-export const AttributeFilterBar = () => {
-  const { filters, setAgents, setModels, setProviders, clearAll, hasFilters } =
-    useGlobalFilters();
-  const { agents, models, providers, isLoading } = useFilterOptions();
-  const [menuOpen, setMenuOpen] = useState(false);
+const FILTER_CATEGORIES: FilterCategory[] = [
+  { id: "agent", label: "Agent", attribute: "gen_ai.agent.name" },
+  { id: "model", label: "Model", attribute: "gen_ai.request.model" },
+  { id: "provider", label: "Provider", attribute: "gen_ai.provider.name" },
+  { id: "tool", label: "Tool", attribute: "gen_ai.tool.name" },
+  { id: "service", label: "Service", attribute: "service.name" },
+];
+
+const buildFilterValuesQuery = (
+  attribute: string,
+  timeframe: Timeframe,
+): string => {
+  const to = timeframe.to ?? "now()";
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 200
+| filter isNotNull(${attribute})
+| summarize values = collectDistinct(${attribute})
+`.trim();
+};
+
+interface FilterDropdownProps {
+  category: FilterCategory;
+  isSelected: boolean;
+  selectedCount: number;
+  onSelect: (values: string[]) => void;
+  currentValues: string[];
+  timeframe: Timeframe;
+}
+
+const FilterDropdown = ({
+  category,
+  isSelected,
+  selectedCount,
+  onSelect,
+  currentValues,
+  timeframe,
+}: FilterDropdownProps) => {
+  const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Build all filterable items
-  const allItems: FilterItem[] = [
-    ...agents.map((agent) => ({
-      label: `Agent: ${agent}`,
-      type: "agent" as const,
-      value: agent,
-      isSelected: filters.agents.includes(agent),
-    })),
-    ...models.map((model) => ({
-      label: `Model: ${model}`,
-      type: "model" as const,
-      value: model,
-      isSelected: filters.models.includes(model),
-    })),
-    ...providers.map((provider) => ({
-      label: `Provider: ${provider}`,
-      type: "provider" as const,
-      value: provider,
-      isSelected: filters.providers.includes(provider),
-    })),
-  ];
+  const query = buildFilterValuesQuery(category.attribute, timeframe);
+  const { data, isLoading } = useScopedDql<{ values?: Array<{ value: string }> }>(
+    open ? query : "",
+    { enabled: open, staleTime: 60_000 },
+  );
 
-  // Filter items based on search
-  const filteredItems = searchQuery
-    ? allItems.filter((item) =>
-        item.label.toLowerCase().includes(searchQuery.toLowerCase()),
+  const allValues = (data?.records?.[0]?.values ?? [])
+    .filter((v): v is { value: string } => !!v?.value)
+    .map((v) => v.value);
+
+  const filteredValues = searchQuery
+    ? allValues.filter((v) =>
+        v.toLowerCase().includes(searchQuery.toLowerCase()),
       )
-    : allItems;
+    : allValues;
 
-  // Sort: selected first, then by label
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    if (a.isSelected !== b.isSelected) return b.isSelected ? 1 : -1;
-    return a.label.localeCompare(b.label);
-  });
-
-  const handleItemToggle = (item: any) => {
-    if (item.type === "agent") {
-      if (filters.agents.includes(item.value)) {
-        setAgents(filters.agents.filter((a) => a !== item.value));
-      } else {
-        setAgents([...filters.agents, item.value]);
-      }
-    } else if (item.type === "model") {
-      if (filters.models.includes(item.value)) {
-        setModels(filters.models.filter((m) => m !== item.value));
-      } else {
-        setModels([...filters.models, item.value]);
-      }
-    } else if (item.type === "provider") {
-      if (filters.providers.includes(item.value)) {
-        setProviders(filters.providers.filter((p) => p !== item.value));
-      } else {
-        setProviders([...filters.providers, item.value]);
-      }
+  const handleValueToggle = (value: string) => {
+    if (currentValues.includes(value)) {
+      onSelect(currentValues.filter((v) => v !== value));
+    } else {
+      onSelect([...currentValues, value]);
     }
   };
 
-  // Close on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
       }
     };
-    if (menuOpen) {
+    if (open) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [menuOpen]);
+  }, [open]);
 
-  // Focus input when menu opens
   useEffect(() => {
-    if (menuOpen && inputRef.current) {
+    if (open && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [menuOpen]);
-
-  const selectedCount = filters.agents.length + filters.models.length + filters.providers.length;
+  }, [open]);
 
   return (
-    <Flex
-      gap={12}
-      alignItems="center"
+    <div
+      ref={dropdownRef}
       style={{
-        padding: "8px 20px",
-        background: "linear-gradient(90deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.01))",
-        borderBottom: "1px solid var(--border)",
+        position: "relative",
+        minWidth: 180,
       }}
     >
-      <div style={{ position: "relative", flex: 1, minWidth: 300 }} ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          padding: "6px 10px",
+          borderRadius: 4,
+          background: isSelected ? "var(--blue-surface)" : "transparent",
+          border: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 12,
+          color: "var(--text)",
+          fontWeight: 500,
+          whiteSpace: "nowrap",
+          transition: "all 0.2s",
+        }}
+      >
+        <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)" }}>
+          {category.icon || "ABC"}
+        </span>
+        <span>{category.label}</span>
+        {selectedCount > 0 && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 18,
+              height: 18,
+              borderRadius: "50%",
+              background: "var(--blue)",
+              color: "white",
+              fontSize: 10,
+              fontWeight: 600,
+            }}
+          >
+            {selectedCount}
+          </span>
+        )}
+        <ChevronDownIcon
+          size={12}
+          style={{
+            transition: "transform 0.2s",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          }}
+        />
+      </button>
+
+      {open && (
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 12px",
-            borderRadius: 6,
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            marginTop: 4,
             background: "var(--surface)",
             border: "1px solid var(--border)",
-            cursor: "pointer",
-            transition: "all 0.2s",
+            borderRadius: 4,
+            minWidth: 250,
+            maxHeight: 350,
+            zIndex: 10000,
+            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
           }}
-          onClick={() => setMenuOpen(!menuOpen)}
         >
           <input
             ref={inputRef}
             type="text"
-            placeholder="Type to filter"
+            placeholder={`Filter ${category.label.toLowerCase()}...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
             style={{
               all: "unset",
-              flex: 1,
-              fontSize: 13,
+              padding: "8px 12px",
+              borderBottom: "1px solid var(--border)",
+              fontSize: 12,
               color: "var(--text)",
             }}
           />
-          {selectedCount > 0 && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: 20,
-                height: 20,
-                borderRadius: "50%",
-                background: "var(--blue)",
-                color: "white",
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              {selectedCount}
-            </span>
-          )}
-          <ChevronDownIcon
-            size={14}
-            style={{
-              color: "var(--text-3)",
-              transition: "transform 0.2s",
-              transform: menuOpen ? "rotate(180deg)" : "rotate(0deg)",
-            }}
-          />
-        </div>
 
-        {menuOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: 0,
-              right: 0,
-              marginTop: 4,
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              maxHeight: 400,
-              overflow: "auto",
-              zIndex: 10000,
-              boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
-            }}
-          >
+          <div style={{ overflow: "auto", flex: 1 }}>
             {isLoading ? (
-              <Text style={{ fontSize: 12, color: "var(--text-3)", padding: "12px" }}>
+              <Text style={{ fontSize: 11, color: "var(--text-3)", padding: "12px" }}>
                 Loading…
               </Text>
-            ) : sortedItems.length === 0 ? (
-              <Text style={{ fontSize: 12, color: "var(--text-3)", padding: "12px" }}>
-                {searchQuery ? "No matching filters" : "No filters available"}
+            ) : filteredValues.length === 0 ? (
+              <Text style={{ fontSize: 11, color: "var(--text-3)", padding: "12px" }}>
+                {searchQuery ? "No matches" : "No options"}
               </Text>
             ) : (
-              sortedItems.map((item, idx) => (
+              filteredValues.map((value) => (
                 <label
-                  key={`${item.type}-${idx}`}
+                  key={value}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 10,
-                    padding: "8px 12px",
+                    gap: 8,
+                    padding: "6px 12px",
                     cursor: "pointer",
-                    borderBottom: idx < sortedItems.length - 1 ? "1px solid var(--border-subtle)" : "none",
+                    borderBottom: "1px solid var(--border-subtle)",
                     transition: "background 0.15s",
                   }}
                   onMouseEnter={(e) => {
@@ -214,46 +224,78 @@ export const AttributeFilterBar = () => {
                 >
                   <input
                     type="checkbox"
-                    checked={item.isSelected}
-                    onChange={() => handleItemToggle(item)}
+                    checked={currentValues.includes(value)}
+                    onChange={() => handleValueToggle(value)}
                     style={{
                       cursor: "pointer",
-                      width: 16,
-                      height: 16,
+                      width: 14,
+                      height: 14,
                     }}
                   />
-                  <span style={{ fontSize: 12, color: "var(--text)" }}>
-                    {item.label}
+                  <span style={{ fontSize: 11, color: "var(--text)" }}>
+                    {value || "(empty)"}
                   </span>
                 </label>
               ))
             )}
-
-            {hasFilters && sortedItems.length > 0 && (
-              <>
-                <div
-                  style={{
-                    borderTop: "1px solid var(--border)",
-                    padding: "8px 12px",
-                  }}
-                >
-                  <Button
-                    variant="default"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      clearAll();
-                      setSearchQuery("");
-                    }}
-                    style={{ width: "100%", fontSize: 12 }}
-                  >
-                    Clear all filters
-                  </Button>
-                </div>
-              </>
-            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const AttributeFilterBar = () => {
+  const { scope } = useScope();
+  const { filters, setAgents, setModels, setProviders, setTools, setServices, clearAll, hasFilters } =
+    useGlobalFilters();
+
+  const filterMap = {
+    agent: { values: filters.agents, setter: setAgents },
+    model: { values: filters.models, setter: setModels },
+    provider: { values: filters.providers, setter: setProviders },
+    tool: { values: filters.tools || [], setter: setTools || (() => {}) },
+    service: { values: filters.services || [], setter: setServices || (() => {}) },
+  };
+
+  return (
+    <Flex
+      gap={8}
+      alignItems="center"
+      style={{
+        padding: "8px 20px",
+        background: "linear-gradient(90deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.01))",
+        borderBottom: "1px solid var(--border)",
+        flexWrap: "wrap",
+      }}
+    >
+      {FILTER_CATEGORIES.map((category) => {
+        const filterData = filterMap[category.id as keyof typeof filterMap];
+        const selectedCount = filterData?.values?.length || 0;
+
+        return (
+          <FilterDropdown
+            key={category.id}
+            category={category}
+            isSelected={selectedCount > 0}
+            selectedCount={selectedCount}
+            onSelect={filterData?.setter || (() => {})}
+            currentValues={filterData?.values || []}
+            timeframe={scope.timeframe}
+          />
+        );
+      })}
+
+      {hasFilters && (
+        <Button
+          variant="default"
+          onClick={clearAll}
+          style={{ marginLeft: "auto", fontSize: 11 }}
+          aria-label="Clear all filters"
+        >
+          Clear all
+        </Button>
+      )}
     </Flex>
   );
 };

@@ -88,6 +88,8 @@ export interface GlobalFilters {
   agents: string[];
   models: string[];
   providers: string[];
+  tools: string[];
+  services: string[];
 }
 
 export const globalFilterClauses = (f?: GlobalFilters): string =>
@@ -100,6 +102,12 @@ export const globalFilterClauses = (f?: GlobalFilters): string =>
       : "",
     f?.providers?.length
       ? `| filter in(gen_ai.provider.name, array(${dqlIdArray(f.providers)}))`
+      : "",
+    f?.tools?.length
+      ? `| filter in(gen_ai.tool.name, array(${dqlIdArray(f.tools)}))`
+      : "",
+    f?.services?.length
+      ? `| filter in(service.name, array(${dqlIdArray(f.services)}))`
       : "",
   ]
     .filter(Boolean)
