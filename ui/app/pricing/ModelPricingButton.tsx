@@ -36,10 +36,10 @@ export const ModelPricingButton = () => {
       }
       isSelected={isPanelOpen}
       onClick={togglePanel}
-      aria-label="Model pricing"
+      aria-label="Model rates"
       aria-pressed={isPanelOpen}
     >
-      Pricing
+      Model Rates
     </AppHeader.ActionButton>
   );
 };
