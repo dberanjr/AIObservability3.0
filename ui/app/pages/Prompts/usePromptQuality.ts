@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
@@ -53,10 +54,11 @@ export interface PromptQuality {
 export const usePromptQuality = (): PromptQuality => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
+  const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<QualityRecord>(
-    canQuery ? buildPromptQualityQuery(resolution.serviceIds, scope.timeframe) : "",
+    canQuery ? buildPromptQualityQuery(resolution.serviceIds, scope.timeframe, filters) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -95,5 +97,5 @@ export const usePromptQuality = (): PromptQuality => {
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading]);
+  }, [data, isLoading, error, resolution.isLoading, filters]);
 };

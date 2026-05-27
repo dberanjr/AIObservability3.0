@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
@@ -33,9 +34,14 @@ export interface PromptRow {
   durationMs: number;
   promptText: string;
   responseText: string;
+  systemPrompt: string | null;
   piiDetected: boolean;
   hasWarning: boolean;
   hasError: boolean;
+  evalHallucination: number | null;
+  evalCorrectness: number | null;
+  evalFaithfulness: number | null;
+  evalRelevance: number | null;
   traceId: string | null;
   spanId: string | null;
 }
@@ -53,9 +59,14 @@ interface PromptRecord {
   duration_ms?: number;
   prompt_text?: string;
   response_text?: string;
+  system_prompt?: string | null;
   pii_detected?: boolean | string;
   has_warning?: boolean | string;
   has_error?: boolean | string;
+  eval_hallucination?: number | null;
+  eval_correctness?: number | null;
+  eval_faithfulness?: number | null;
+  eval_relevance?: number | null;
   trace_id?: string | null;
   span_id?: string | null;
 }
@@ -88,6 +99,7 @@ export interface UsePromptsResult {
   facets: PromptsFacets;
   isLoading: boolean;
   error?: Error;
+  refetch: () => void;
 }
 
 const countBy = <T>(
@@ -106,18 +118,46 @@ const countBy = <T>(
 export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
+  const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const { data, isLoading, error } = useScopedDql<PromptRecord>(
-    canQuery ? buildPromptsListQuery(resolution.serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+  const refetch = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  const query = useMemo(
+    () =>
+      canQuery
+        ? buildPromptsListQuery(resolution.serviceIds, scope.timeframe, filters) +
+          ` /* r${refreshKey} */`
+        : "",
+    [canQuery, resolution.serviceIds, scope.timeframe, filters, refreshKey],
   );
+
+  const { data, isLoading, error } = useScopedDql<PromptRecord>(query, {
+    enabled: canQuery,
+    staleTime: 60_000,
+  });
 
   return useMemo<UsePromptsResult>(() => {
     const prompts: PromptRow[] = [];
     for (const r of data?.records ?? []) {
       const spanId = typeof r.span_id === "string" ? r.span_id : null;
       const traceId = typeof r.trace_id === "string" ? r.trace_id : null;
+      const evalHallucination =
+        typeof r.eval_hallucination === "number"
+          ? r.eval_hallucination
+          : null;
+      const evalCorrectness =
+        typeof r.eval_correctness === "number" ? r.eval_correctness : null;
+      const evalFaithfulness =
+        typeof r.eval_faithfulness === "number"
+          ? r.eval_faithfulness
+          : null;
+      const evalRelevance =
+        typeof r.eval_relevance === "number" ? r.eval_relevance : null;
+
       prompts.push({
         id: spanId ?? `${traceId ?? "?"}-${prompts.length}`,
         timestampMs: parseTimestamp(r.timestamp),
@@ -132,9 +172,14 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
         durationMs: num(r.duration_ms),
         promptText: str(r.prompt_text),
         responseText: str(r.response_text),
+        systemPrompt: r.system_prompt ?? null,
         piiDetected: bool(r.pii_detected),
         hasWarning: bool(r.has_warning),
         hasError: bool(r.has_error),
+        evalHallucination,
+        evalCorrectness,
+        evalFaithfulness,
+        evalRelevance,
         traceId,
         spanId,
       });
@@ -179,6 +224,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       },
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
+      refetch,
     };
   }, [
     data,
@@ -189,5 +235,6 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     filter.kinds,
     filter.services,
     filter.models,
+    refetch,
   ]);
 };

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildAgentsQuery } from "./queries";
 import { estimateCost, getPricing } from "../../data/pricing";
@@ -90,10 +91,11 @@ export const useAgents = (): UseAgentsResult => {
   const { scope } = useScope();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
+  const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(_resolution);
 
   const { data, isLoading, error } = useScopedDql<AgentRecord>(
-    canQuery ? buildAgentsQuery(serviceIds, scope.timeframe) : "",
+    canQuery ? buildAgentsQuery(serviceIds, scope.timeframe, filters) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -167,5 +169,5 @@ export const useAgents = (): UseAgentsResult => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading]);
+  }, [data, isLoading, error, servicesLoading, filters]);
 };

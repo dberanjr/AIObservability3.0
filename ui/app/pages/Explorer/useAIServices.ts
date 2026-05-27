@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildAIServicesQuery } from "./queries";
 import {
@@ -108,12 +109,13 @@ const countFacet = <T>(rows: AIService[], pick: (s: AIService) => T[]) => {
 
 export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult => {
   const { scope } = useScope();
+  const { filters } = useGlobalFilters();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
 
   const { data, isLoading, error } = useScopedDql<ServiceRecord>(
-    canQuery ? buildAIServicesQuery(serviceIds, scope.timeframe) : "",
+    canQuery ? buildAIServicesQuery(serviceIds, scope.timeframe, filters) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -179,5 +181,6 @@ export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult 
     filter.providers,
     filter.frameworks,
     filter.models,
+    filters,
   ]);
 };

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildUpstreamServicesQuery } from "./queries";
 
@@ -24,12 +25,13 @@ export interface UseUpstreamServicesResult {
 
 export const useUpstreamServices = (): UseUpstreamServicesResult => {
   const { scope } = useScope();
+  const { filters } = useGlobalFilters();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
 
   const { data, isLoading, error } = useScopedDql<UpstreamRecord>(
-    canQuery ? buildUpstreamServicesQuery(serviceIds, scope.timeframe) : "",
+    canQuery ? buildUpstreamServicesQuery(serviceIds, scope.timeframe, filters) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -48,5 +50,5 @@ export const useUpstreamServices = (): UseUpstreamServicesResult => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading]);
+  }, [data, isLoading, error, servicesLoading, filters]);
 };

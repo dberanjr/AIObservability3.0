@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildAgentEvalQuery } from "./queries";
 
@@ -35,10 +36,11 @@ export const useAgentEval = (): AgentEvalSnapshot => {
   const { scope } = useScope();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
+  const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(_resolution);
 
   const { data, isLoading, error } = useScopedDql<EvalRecord>(
-    canQuery ? buildAgentEvalQuery(serviceIds, scope.timeframe) : "",
+    canQuery ? buildAgentEvalQuery(serviceIds, scope.timeframe, filters) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -62,5 +64,5 @@ export const useAgentEval = (): AgentEvalSnapshot => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading]);
+  }, [data, isLoading, error, servicesLoading, filters]);
 };

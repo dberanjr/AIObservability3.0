@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause } from "../../scope/queries";
+import { dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -14,9 +14,11 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
 export const buildToolsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
+  filters?: GlobalFilters,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name)
 | fieldsAdd
     is_error = if(isNotNull(exception.type), 1, else: 0),
@@ -32,7 +34,7 @@ ${scopeFilterClause(serviceIds)}
     calling_agents = collectDistinct(gen_ai.agent.name),
     by: {
       tool = gen_ai.tool.name,
-      service = entityName(dt.entity.service),
+      service = service.name,
       mcp_server
     }
 | fieldsAdd

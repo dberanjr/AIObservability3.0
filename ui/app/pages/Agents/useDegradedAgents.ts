@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
@@ -30,6 +31,7 @@ const arrAvg = (a: number[]): number =>
 export const useDegradedAgents = (
   agents: AgentRow[],
 ): UseDegradedAgentsResult => {
+  const { filters } = useGlobalFilters();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
   const { thresholds, hasActive } = useSLA();
@@ -46,7 +48,7 @@ export const useDegradedAgents = (
 
   const { data, isLoading, error } = useScopedDql<TrendRecord>(
     canQuery && topNames.length > 0
-      ? buildDegradedTrendQuery(resolution.serviceIds, topNames)
+      ? buildDegradedTrendQuery(resolution.serviceIds, topNames, filters)
       : "",
     {
       enabled: canQuery && topNames.length > 0,
@@ -98,5 +100,5 @@ export const useDegradedAgents = (
       isLoading,
       error: error ?? undefined,
     };
-  }, [slow, data, isLoading, error, hasActive, thresholds.p90Ms]);
+  }, [slow, data, isLoading, error, hasActive, thresholds.p90Ms, filters]);
 };

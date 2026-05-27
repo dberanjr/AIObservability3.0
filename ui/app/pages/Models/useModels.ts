@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
@@ -115,10 +116,11 @@ export interface UseModelsResult {
 export const useModels = (): UseModelsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
+  const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<ModelRecord>(
-    canQuery ? buildModelsQuery(resolution.serviceIds, scope.timeframe) : "",
+    canQuery ? buildModelsQuery(resolution.serviceIds, scope.timeframe, filters) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -194,5 +196,5 @@ export const useModels = (): UseModelsResult => {
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading]);
+  }, [data, isLoading, error, resolution.isLoading, filters]);
 };

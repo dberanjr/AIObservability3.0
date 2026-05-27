@@ -88,7 +88,7 @@ export const PromptsTilesRow = ({ summary }: PromptsTilesRowProps) => {
       <Tile
         label="Prompts"
         value={fmtCount(summary.total)}
-        sub={`${fmtCount(summary.sampleSize)} sampled in view`}
+        sub={`${fmtCount(summary.sampleSize)} shown`}
       />
       <Tile label="Avg duration" value={fmtMs(summary.avgDurationMs)} />
       <Tile

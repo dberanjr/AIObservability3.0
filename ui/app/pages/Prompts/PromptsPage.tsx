@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
-import { PromptDetailPanel } from "./PromptDetailPanel";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
 import { PromptsTable, type PromptView } from "./PromptsTable";
 import { PromptsTilesRow } from "./PromptsTilesRow";
 import { usePersistedState } from "../../state/usePersistedState";
-import { usePrompts, type PromptRow, type PromptsFilter } from "./usePrompts";
+import { usePrompts, type PromptsFilter } from "./usePrompts";
 import { usePromptQuality } from "./usePromptQuality";
 import { usePromptSummary } from "./usePromptSummary";
 
@@ -18,21 +17,11 @@ export const PromptsPage = () => {
     "ai-obs.prompts-privacy",
     "mask",
   );
-  const [selected, setSelected] = useState<PromptRow | null>(null);
 
   const summary = usePromptSummary();
   const quality = usePromptQuality();
-  const { filtered, facets, isLoading, error: promptsError } = usePrompts(filter);
-
-  // Escape key closes the open detail panel.
-  useEffect(() => {
-    if (!selected) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelected(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [selected]);
+  const { filtered, facets, isLoading, error: promptsError, refetch } =
+    usePrompts(filter);
 
   const firstError =
     summary.error ?? quality.error ?? promptsError ?? null;
@@ -58,6 +47,7 @@ export const PromptsPage = () => {
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
         {firstError && <ErrorBanner error={firstError} />}
         <PromptsTilesRow summary={summary} />
+        <PromptQualityAnalytics quality={quality} />
 
         <PromptsTable
           view={view}
@@ -65,20 +55,8 @@ export const PromptsPage = () => {
           prompts={filtered}
           isLoading={isLoading}
           privacy={privacy}
-          onRowClick={(p) =>
-            setSelected((current) => (current?.id === p.id ? null : p))
-          }
+          onRefresh={refetch}
         />
-
-        {selected && (
-          <PromptDetailPanel
-            prompt={selected}
-            privacy={privacy}
-            onClose={() => setSelected(null)}
-          />
-        )}
-
-        <PromptQualityAnalytics quality={quality} />
       </Flex>
     </div>
   );

@@ -1,12 +1,18 @@
-import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import React, { useState, useMemo } from "react";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { WarningIcon } from "@dynatrace/strato-icons";
+import { sendIntent } from "@dynatrace-sdk/navigation";
 import { fmtMs, fmtTokens } from "../../data/format";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
+import { useTraceSpans } from "./useTraceSpans";
+import { TraceTree } from "./TraceTree";
+import { openInTraces } from "../../lib/intents";
+
+type DetailTab = "trace" | "prompts" | "eval" | "info";
 
 const Bubble = ({
   label,
@@ -40,6 +46,8 @@ const Bubble = ({
         color: "var(--text)",
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
+        maxHeight: 200,
+        overflow: "auto",
       }}
     >
       {text || (
@@ -47,6 +55,49 @@ const Bubble = ({
       )}
     </div>
   </Flex>
+);
+
+const TabSegmented = ({
+  value,
+  onChange,
+  options,
+}: {
+  value: DetailTab;
+  onChange: (tab: DetailTab) => void;
+  options: Array<{ value: DetailTab; label: string }>;
+}) => (
+  <div
+    role="radiogroup"
+    style={{
+      display: "inline-flex",
+      padding: 2,
+      background: "var(--surface-2)",
+      border: "1px solid var(--border)",
+      borderRadius: 999,
+    }}
+  >
+    {options.map((opt) => (
+      <button
+        key={opt.value}
+        type="button"
+        role="radio"
+        aria-checked={opt.value === value}
+        onClick={() => onChange(opt.value)}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          padding: "4px 12px",
+          borderRadius: 999,
+          fontSize: 12,
+          fontWeight: opt.value === value ? 600 : 500,
+          color: opt.value === value ? "var(--text)" : "var(--text-2)",
+          background: opt.value === value ? "var(--surface)" : "transparent",
+        }}
+      >
+        {opt.label}
+      </button>
+    ))}
+  </div>
 );
 
 const PIIBanner = () => (
@@ -71,61 +122,41 @@ const PIIBanner = () => (
   </Flex>
 );
 
-const TraceTreePlaceholder = ({ prompt }: { prompt: PromptRow }) => (
-  <Flex
-    flexDirection="column"
-    gap={8}
+const ScoreCard = ({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number | null;
+  color: string;
+}) => (
+  <div
     style={{
       padding: 12,
       borderRadius: 6,
       background: "var(--surface-2)",
-      border: "1px dashed var(--border)",
+      border: "1px solid var(--border)",
     }}
   >
-    <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-      Trace tree · arrives with the Topology session
+    <Text style={{ fontSize: 10.5, fontWeight: 600, color: "var(--text-3)" }}>
+      {label}
     </Text>
-    <Flex flexDirection="column" gap={4}>
-      <Flex alignItems="center" gap={8}>
-        <span
-          aria-hidden
-          style={{
-            width: 4,
-            height: 16,
-            borderRadius: 2,
-            background: "var(--blue)",
-          }}
-        />
-        <Text
-          style={{
-            fontFamily: "var(--mono, monospace)",
-            fontSize: 12,
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {prompt.kind === "LLM"
-            ? `chat.completion (${prompt.model ?? "model"})`
-            : `agent.invoke (${prompt.agent ?? "agent"})`}
-        </Text>
-        <Text
-          style={{
-            fontFamily: "var(--mono, monospace)",
-            fontSize: 11,
-            color: "var(--text-3)",
-          }}
-        >
-          {fmtMs(prompt.durationMs)}
-        </Text>
-      </Flex>
-    </Flex>
-  </Flex>
+    <Text
+      style={{
+        fontSize: 20,
+        fontWeight: 600,
+        color: value === null ? "var(--text-3)" : color,
+        marginTop: 4,
+      }}
+    >
+      {value === null ? "—" : value.toFixed(2)}
+    </Text>
+  </div>
 );
 
 export interface PromptDetailPanelProps {
-  prompt: PromptRow | null;
+  prompt: PromptRow;
   privacy: PrivacyMode;
   onClose: () => void;
 }
@@ -135,62 +166,211 @@ export const PromptDetailPanel = ({
   privacy,
   onClose,
 }: PromptDetailPanelProps) => {
-  if (!prompt) return null;
+  const [activeTab, setActiveTab] = useState<DetailTab>("trace");
+  const { spans, isLoading, error } = useTraceSpans(prompt.traceId);
+
   const inputText =
     privacy === "mask" ? maskPII(prompt.promptText) : prompt.promptText;
   const outputText =
     privacy === "mask" ? maskPII(prompt.responseText) : prompt.responseText;
+  const systemText =
+    privacy === "mask" && prompt.systemPrompt
+      ? maskPII(prompt.systemPrompt)
+      : prompt.systemPrompt;
+
+  const sessionId = useMemo(
+    () => spans.find((s) => s.sessionId)?.sessionId ?? null,
+    [spans],
+  );
+
+  const handleViewTrace = () => {
+    if (prompt.traceId) {
+      openInTraces({
+        traceId: prompt.traceId,
+        spanId: prompt.spanId ?? undefined,
+      });
+    }
+  };
+
+  const handleUserSession = () => {
+    if (sessionId) {
+      sendIntent({ "dt.rum.session.id": sessionId });
+    }
+  };
 
   return (
-    <Surface elevation="raised" padding={16}>
+    <div style={{ padding: "16px 20px", background: "var(--surface)" }}>
       <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Prompt detail
-            </Heading>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              {prompt.service} · {prompt.model ?? "model unknown"} ·{" "}
-              {fmtMs(prompt.durationMs)} · in {fmtTokens(prompt.inTokens)} / out{" "}
-              {fmtTokens(prompt.outTokens)}
-            </Text>
-          </Flex>
-          <Button variant="default" onClick={onClose}>
-            Close
-          </Button>
+        <Flex alignItems="center" justifyContent="space-between">
+          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+            Trace details
+          </Heading>
+          <TabSegmented
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              { value: "trace", label: "Trace" },
+              { value: "prompts", label: "Prompts" },
+              { value: "eval", label: "Eval" },
+              { value: "info", label: "Info" },
+            ]}
+          />
         </Flex>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1.4fr)",
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
+        {activeTab === "trace" && (
           <Flex flexDirection="column" gap={8}>
-            <TraceTreePlaceholder prompt={prompt} />
+            <TraceTree spans={spans} isLoading={isLoading} />
+            {error && (
+              <Text style={{ fontSize: 11, color: "var(--red)" }}>
+                Error loading trace: {error.message}
+              </Text>
+            )}
             <Flex gap={6}>
-              <Button variant="default" disabled>
-                View trace
-              </Button>
-              <Button variant="default" disabled>
+              <Button onClick={handleViewTrace}>View trace</Button>
+              <Button onClick={handleUserSession} disabled={!sessionId}>
                 User session
               </Button>
             </Flex>
-            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-              Intent buttons activate once the Topology session wires{" "}
-              <code>sendIntent</code> for Distributed Traces and Sessions.
-            </Text>
           </Flex>
+        )}
 
+        {activeTab === "prompts" && (
           <Flex flexDirection="column" gap={8}>
             {prompt.piiDetected && <PIIBanner />}
+            {systemText && (
+              <Bubble label="System" color="var(--text-2)" text={systemText} />
+            )}
             <Bubble label="Input" color="var(--blue)" text={inputText} />
             <Bubble label="Output" color="var(--purple)" text={outputText} />
           </Flex>
-        </div>
+        )}
+
+        {activeTab === "eval" && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            <ScoreCard
+              label="Hallucination"
+              value={prompt.evalHallucination}
+              color="var(--red)"
+            />
+            <ScoreCard
+              label="Correctness"
+              value={prompt.evalCorrectness}
+              color="var(--green)"
+            />
+            <ScoreCard
+              label="Faithfulness"
+              value={prompt.evalFaithfulness}
+              color="var(--green)"
+            />
+            <ScoreCard
+              label="Relevance"
+              value={prompt.evalRelevance}
+              color="var(--green)"
+            />
+          </div>
+        )}
+
+        {activeTab === "info" && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "160px 1fr",
+              gap: 12,
+              fontSize: 12,
+            }}
+          >
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Service
+            </Text>
+            <Text>{prompt.service}</Text>
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Model
+            </Text>
+            <Text>{prompt.model ?? "—"}</Text>
+
+            {prompt.agent && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Agent
+                </Text>
+                <Text>{prompt.agent}</Text>
+              </>
+            )}
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Duration
+            </Text>
+            <Text>{fmtMs(prompt.durationMs)}</Text>
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              In tokens
+            </Text>
+            <Text>{fmtTokens(prompt.inTokens)}</Text>
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Out tokens
+            </Text>
+            <Text>{fmtTokens(prompt.outTokens)}</Text>
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Trace ID
+            </Text>
+            <Text style={{ fontFamily: "var(--mono, monospace)", fontSize: 11 }}>
+              {prompt.traceId ?? "—"}
+            </Text>
+
+            {prompt.spanId && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Span ID
+                </Text>
+                <Text style={{ fontFamily: "var(--mono, monospace)", fontSize: 11 }}>
+                  {prompt.spanId}
+                </Text>
+              </>
+            )}
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Timestamp
+            </Text>
+            <Text>{new Date(prompt.timestampMs).toLocaleString()}</Text>
+
+            {prompt.piiDetected && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--amber)" }}>
+                  PII Detected
+                </Text>
+                <Text style={{ color: "var(--amber)" }}>Yes</Text>
+              </>
+            )}
+
+            {prompt.hasWarning && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--amber)" }}>
+                  Warning
+                </Text>
+                <Text style={{ color: "var(--amber)" }}>Yes</Text>
+              </>
+            )}
+
+            {prompt.hasError && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--red)" }}>
+                  Error
+                </Text>
+                <Text style={{ color: "var(--red)" }}>Yes</Text>
+              </>
+            )}
+          </div>
+        )}
       </Flex>
-    </Surface>
+    </div>
   );
 };

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
@@ -85,16 +86,17 @@ const dayLabel = (offsetFromOldest: number, totalDays: number): string => {
 
 export const useFinOps = (): FinOpsData => {
   const { scope } = useScope();
+  const { filters } = useGlobalFilters();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
 
   const dailyResult = useScopedDql<DailyTokensRecord>(
-    canQuery ? buildDailyTokensQuery(resolution.serviceIds) : "",
+    canQuery ? buildDailyTokensQuery(resolution.serviceIds, filters) : "",
     { enabled: canQuery, staleTime: 5 * 60_000 },
   );
   const serviceResult = useScopedDql<ServiceCostRecord>(
     canQuery
-      ? buildServiceCostBreakdownQuery(resolution.serviceIds, scope.timeframe)
+      ? buildServiceCostBreakdownQuery(resolution.serviceIds, scope.timeframe, filters)
       : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
@@ -242,5 +244,6 @@ export const useFinOps = (): FinOpsData => {
     serviceResult.isLoading,
     serviceResult.error,
     resolution.isLoading,
+    filters,
   ]);
 };

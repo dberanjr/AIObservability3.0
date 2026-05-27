@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -6,14 +6,19 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  RefreshIcon,
+  SettingIcon,
 } from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
+import { getPricing, estimateCost } from "../../data/pricing";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
+import { usePersistedState } from "../../state/usePersistedState";
+import { PromptDetailPanel } from "./PromptDetailPanel";
 
 export type PromptView = "stream" | "metadata" | "evaluations";
-
+type VisibleColumn = "in_cost" | "out_cost" | "system_prompt";
 type SortKey = "timestampMs" | "inTokens" | "outTokens" | "durationMs";
 type SortDir = "asc" | "desc";
 
@@ -214,12 +219,105 @@ const ViewSegmented = ({
   </div>
 );
 
+const ColumnSelector = ({
+  visibleCols,
+  onToggle,
+}: {
+  visibleCols: Set<VisibleColumn>;
+  onToggle: (col: VisibleColumn) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [open]);
+
+  return (
+    <div style={{ position: "relative" }} ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          padding: "4px 8px",
+          borderRadius: 4,
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          fontSize: 12,
+          color: "var(--text-2)",
+        }}
+        title="Toggle columns"
+      >
+        <SettingIcon size={14} />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "100%",
+            marginTop: 4,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            padding: 8,
+            zIndex: 1000,
+            minWidth: 160,
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+          }}
+        >
+          {["in_cost", "out_cost", "system_prompt"].map((col) => (
+            <label
+              key={col}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 8px",
+                cursor: "pointer",
+                fontSize: 12,
+                color: "var(--text)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={visibleCols.has(col as VisibleColumn)}
+                onChange={() => onToggle(col as VisibleColumn)}
+                style={{ cursor: "pointer" }}
+              />
+              {col === "in_cost"
+                ? "In cost"
+                : col === "out_cost"
+                  ? "Out cost"
+                  : "System prompt"}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const StreamHeader = ({
   sort,
   onSort,
+  visibleCols,
 }: {
   sort: { key: SortKey; dir: SortDir };
   onSort: (key: SortKey) => void;
+  visibleCols: Set<VisibleColumn>;
 }) => (
   <Flex alignItems="center" style={{ padding: "0 10px" }}>
     <HeaderCell width={80} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
@@ -233,24 +331,42 @@ const StreamHeader = ({
     <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
       Out tok
     </HeaderCell>
+    {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
+    {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
     <HeaderCell>Input</HeaderCell>
     <HeaderCell>Output</HeaderCell>
+    {visibleCols.has("system_prompt") && <HeaderCell width={140}>System prompt</HeaderCell>}
     <HeaderCell width={24}>{""}</HeaderCell>
   </Flex>
 );
+
+const fmtUSD = (cents: number): string => {
+  if (!Number.isFinite(cents) || cents <= 0) return "—";
+  const dollars = cents / 100;
+  return `$${dollars.toFixed(4)}`;
+};
 
 const StreamRow = ({
   prompt,
   privacy,
   onClick,
+  isSelected,
+  visibleCols,
 }: {
   prompt: PromptRow;
   privacy: PrivacyMode;
   onClick: (p: PromptRow) => void;
+  isSelected: boolean;
+  visibleCols: Set<VisibleColumn>;
 }) => {
   const inputText = privacy === "mask" ? maskPII(prompt.promptText) : prompt.promptText;
   const outputText =
     privacy === "mask" ? maskPII(prompt.responseText) : prompt.responseText;
+
+  const pricing = getPricing(prompt.model);
+  const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
+  const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+
   return (
     <div
       role="row"
@@ -267,10 +383,13 @@ const StreamRow = ({
         alignItems: "center",
         padding: "0 10px",
         borderTop: "1px solid var(--border)",
+        borderLeft: isSelected ? "3px solid var(--blue)" : "3px solid transparent",
         cursor: "pointer",
-        background: prompt.hasError
-          ? "color-mix(in oklab, var(--red) 4%, transparent)"
-          : undefined,
+        background: isSelected
+          ? "color-mix(in oklab, var(--blue) 8%, transparent)"
+          : prompt.hasError
+            ? "color-mix(in oklab, var(--red) 4%, transparent)"
+            : undefined,
       }}
     >
       <Cell width={80}>
@@ -283,11 +402,21 @@ const StreamRow = ({
         {prompt.model ?? "—"}
       </Cell>
       <Cell width={70} align="right" mono>
-        {fmtTokens(prompt.inTokens)}
+        {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
       </Cell>
       <Cell width={70} align="right" mono>
-        {fmtTokens(prompt.outTokens)}
+        {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
       </Cell>
+      {visibleCols.has("in_cost") && (
+        <Cell width={70} align="right" mono>
+          {fmtUSD(inCost)}
+        </Cell>
+      )}
+      {visibleCols.has("out_cost") && (
+        <Cell width={70} align="right" mono>
+          {fmtUSD(outCost)}
+        </Cell>
+      )}
       <Cell title={inputText}>
         {inputText ? truncate(inputText, 80) : (
           <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
@@ -298,6 +427,13 @@ const StreamRow = ({
           <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
         )}
       </Cell>
+      {visibleCols.has("system_prompt") && (
+        <Cell width={140} title={prompt.systemPrompt ?? undefined}>
+          {prompt.systemPrompt ? truncate(prompt.systemPrompt, 40) : (
+            <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
+          )}
+        </Cell>
+      )}
       <Cell width={24}>
         <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
       </Cell>
@@ -308,9 +444,11 @@ const StreamRow = ({
 const MetadataHeader = ({
   sort,
   onSort,
+  visibleCols,
 }: {
   sort: { key: SortKey; dir: SortDir };
   onSort: (key: SortKey) => void;
+  visibleCols: Set<VisibleColumn>;
 }) => (
   <Flex alignItems="center" style={{ padding: "0 10px" }}>
     <HeaderCell width={80} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
@@ -328,7 +466,10 @@ const MetadataHeader = ({
     <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
       Out tok
     </HeaderCell>
+    {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
+    {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
     <HeaderCell>Trace ID</HeaderCell>
+    {visibleCols.has("system_prompt") && <HeaderCell width={140}>System prompt</HeaderCell>}
     <HeaderCell width={24}>{""}</HeaderCell>
   </Flex>
 );
@@ -336,60 +477,91 @@ const MetadataHeader = ({
 const MetadataRow = ({
   prompt,
   onClick,
+  isSelected,
+  visibleCols,
 }: {
   prompt: PromptRow;
   onClick: (p: PromptRow) => void;
-}) => (
-  <div
-    role="row"
-    tabIndex={0}
-    onClick={() => onClick(prompt)}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onClick(prompt);
-      }
-    }}
-    style={{
-      display: "flex",
-      alignItems: "center",
-      padding: "0 10px",
-      borderTop: "1px solid var(--border)",
-      cursor: "pointer",
-    }}
-  >
-    <Cell width={80}>
-      <TimeCell ms={prompt.timestampMs} />
-    </Cell>
-    <Cell width={140} mono color="var(--text-2)">
-      {prompt.service}
-    </Cell>
-    <Cell width={160} mono color="var(--text-2)">
-      {prompt.model ?? "—"}
-    </Cell>
-    <Cell width={110}>
-      <Flex gap={4}>
-        <KindChip kind={prompt.kind} />
-        <TypeChip label={prompt.typeLabel} />
-      </Flex>
-    </Cell>
-    <Cell width={90} align="right" mono>
-      {fmtMs(prompt.durationMs)}
-    </Cell>
-    <Cell width={70} align="right" mono>
-      {fmtTokens(prompt.inTokens)}
-    </Cell>
-    <Cell width={70} align="right" mono>
-      {fmtTokens(prompt.outTokens)}
-    </Cell>
-    <Cell mono color="var(--text-2)">
-      {prompt.traceId ?? "—"}
-    </Cell>
-    <Cell width={24}>
-      <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
-    </Cell>
-  </div>
-);
+  isSelected: boolean;
+  visibleCols: Set<VisibleColumn>;
+}) => {
+  const pricing = getPricing(prompt.model);
+  const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
+  const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+
+  return (
+    <div
+      role="row"
+      tabIndex={0}
+      onClick={() => onClick(prompt)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(prompt);
+        }
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        padding: "0 10px",
+        borderTop: "1px solid var(--border)",
+        borderLeft: isSelected ? "3px solid var(--blue)" : "3px solid transparent",
+        cursor: "pointer",
+        background: isSelected
+          ? "color-mix(in oklab, var(--blue) 8%, transparent)"
+          : undefined,
+      }}
+    >
+      <Cell width={80}>
+        <TimeCell ms={prompt.timestampMs} />
+      </Cell>
+      <Cell width={140} mono color="var(--text-2)">
+        {prompt.service}
+      </Cell>
+      <Cell width={160} mono color="var(--text-2)">
+        {prompt.model ?? "—"}
+      </Cell>
+      <Cell width={110}>
+        <Flex gap={4}>
+          <KindChip kind={prompt.kind} />
+          <TypeChip label={prompt.typeLabel} />
+        </Flex>
+      </Cell>
+      <Cell width={90} align="right" mono>
+        {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
+      </Cell>
+      <Cell width={70} align="right" mono>
+        {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
+      </Cell>
+      <Cell width={70} align="right" mono>
+        {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
+      </Cell>
+      {visibleCols.has("in_cost") && (
+        <Cell width={70} align="right" mono>
+          {fmtUSD(inCost)}
+        </Cell>
+      )}
+      {visibleCols.has("out_cost") && (
+        <Cell width={70} align="right" mono>
+          {fmtUSD(outCost)}
+        </Cell>
+      )}
+      <Cell mono color="var(--text-2)">
+        {prompt.traceId ?? "—"}
+      </Cell>
+      {visibleCols.has("system_prompt") && (
+        <Cell width={140} title={prompt.systemPrompt ?? undefined}>
+          {prompt.systemPrompt ? truncate(prompt.systemPrompt, 40) : (
+            <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
+          )}
+        </Cell>
+      )}
+      <Cell width={24}>
+        <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
+      </Cell>
+    </div>
+  );
+};
 
 const EvaluationsEmptyState = () => (
   <Flex
@@ -434,7 +606,7 @@ export interface PromptsTableProps {
   prompts: PromptRow[];
   isLoading: boolean;
   privacy: PrivacyMode;
-  onRowClick: (p: PromptRow) => void;
+  onRefresh: () => void;
 }
 
 export const PromptsTable = ({
@@ -443,12 +615,18 @@ export const PromptsTable = ({
   prompts,
   isLoading,
   privacy,
-  onRowClick,
+  onRefresh,
 }: PromptsTableProps) => {
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
     key: "timestampMs",
     dir: "desc",
   });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [localSearch, setLocalSearch] = useState("");
+  const [visibleCols, setVisibleCols] = usePersistedState<Set<VisibleColumn>>(
+    "ai-obs.prompts-visible-cols",
+    new Set(["in_cost", "out_cost"]),
+  );
 
   const toggleSort = (key: SortKey) =>
     setSort((current) =>
@@ -457,8 +635,27 @@ export const PromptsTable = ({
         : { key, dir: "desc" },
     );
 
+  const toggleColumn = (col: VisibleColumn) => {
+    const next = new Set(visibleCols);
+    if (next.has(col)) {
+      next.delete(col);
+    } else {
+      next.add(col);
+    }
+    setVisibleCols(next);
+  };
+
+  const searchLower = localSearch.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!searchLower) return prompts;
+    return prompts.filter((p) => {
+      const hay = `${p.promptText} ${p.responseText} ${p.service} ${p.model ?? ""} ${p.agent ?? ""}`.toLowerCase();
+      return hay.includes(searchLower);
+    });
+  }, [prompts, searchLower]);
+
   const sorted = useMemo(() => {
-    const copy = [...prompts];
+    const copy = [...filtered];
     copy.sort((a, b) => {
       const av = a[sort.key] ?? 0;
       const bv = b[sort.key] ?? 0;
@@ -466,7 +663,22 @@ export const PromptsTable = ({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return copy;
-  }, [prompts, sort]);
+  }, [filtered, sort]);
+
+  const selectedPrompt = useMemo(
+    () => sorted.find((p) => p.id === selectedId) ?? null,
+    [sorted, selectedId],
+  );
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedId) {
+        setSelectedId(null);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [selectedId]);
 
   return (
     <Surface elevation="raised" padding={0}>
@@ -481,7 +693,7 @@ export const PromptsTable = ({
           </Heading>
           <Flex alignItems="center" gap={12}>
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              {sorted.length} sampled
+              {sorted.length} shown
             </Text>
             <ViewSegmented value={view} onChange={onViewChange} />
           </Flex>
@@ -491,10 +703,56 @@ export const PromptsTable = ({
           <EvaluationsEmptyState />
         ) : (
           <>
+            <Flex
+              alignItems="center"
+              style={{
+                padding: "8px 16px",
+                borderBottom: "1px solid var(--border)",
+                gap: 12,
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Search prompts..."
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "6px 8px",
+                  fontSize: 12,
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  fontFamily: "inherit",
+                }}
+              />
+              <button
+                type="button"
+                onClick={onRefresh}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  fontSize: 12,
+                  color: "var(--text-2)",
+                }}
+                title="Refresh data"
+              >
+                <RefreshIcon size={14} />
+              </button>
+              <ColumnSelector visibleCols={visibleCols} onToggle={toggleColumn} />
+            </Flex>
+
             {view === "stream" ? (
-              <StreamHeader sort={sort} onSort={toggleSort} />
+              <StreamHeader sort={sort} onSort={toggleSort} visibleCols={visibleCols} />
             ) : (
-              <MetadataHeader sort={sort} onSort={toggleSort} />
+              <MetadataHeader sort={sort} onSort={toggleSort} visibleCols={visibleCols} />
             )}
             {isLoading && sorted.length === 0 ? (
               <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
@@ -505,22 +763,41 @@ export const PromptsTable = ({
             ) : sorted.length === 0 ? (
               <Flex style={{ padding: "32px 16px" }}>
                 <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-                  No prompts match the current filters.
+                  {localSearch
+                    ? "No prompts match the search."
+                    : "No prompts match the current filters."}
                 </Text>
               </Flex>
             ) : (
-              sorted.map((p) =>
-                view === "stream" ? (
-                  <StreamRow
-                    key={p.id}
-                    prompt={p}
-                    privacy={privacy}
-                    onClick={onRowClick}
-                  />
-                ) : (
-                  <MetadataRow key={p.id} prompt={p} onClick={onRowClick} />
-                ),
-              )
+              sorted.map((p) => (
+                <React.Fragment key={p.id}>
+                  {view === "stream" ? (
+                    <StreamRow
+                      prompt={p}
+                      privacy={privacy}
+                      onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
+                      isSelected={p.id === selectedId}
+                      visibleCols={visibleCols}
+                    />
+                  ) : (
+                    <MetadataRow
+                      prompt={p}
+                      onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
+                      isSelected={p.id === selectedId}
+                      visibleCols={visibleCols}
+                    />
+                  )}
+                  {p.id === selectedId && (
+                    <div style={{ borderTop: "1px solid var(--border)" }}>
+                      <PromptDetailPanel
+                        prompt={p}
+                        privacy={privacy}
+                        onClose={() => setSelectedId(null)}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              ))
             )}
           </>
         )}

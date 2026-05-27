@@ -8,8 +8,7 @@ import { filterSegmentsClient } from "@dynatrace-sdk/client-filter-segment-manag
 import { useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
-import { ScanLimitSegmented } from "./ScanLimitSegmented";
-import { SamplingSegmented } from "./SamplingSegmented";
+import { AttributeFilterBar } from "./AttributeFilterBar";
 
 interface LabeledFieldProps {
   label: string;
@@ -135,14 +134,6 @@ export const GlobalFilterStrip = () => {
 
         <Flex flexGrow={1} style={{ minWidth: 0 }} />
 
-        <LabeledField label="Sampling">
-          <SamplingSegmented />
-        </LabeledField>
-
-        <LabeledField label="Scan limit">
-          <ScanLimitSegmented />
-        </LabeledField>
-
         <Button
           variant="default"
           onClick={reset}
@@ -155,6 +146,7 @@ export const GlobalFilterStrip = () => {
           Reset
         </Button>
       </Flex>
+      <AttributeFilterBar />
       <ResolutionStatusLine />
     </Flex>
   );

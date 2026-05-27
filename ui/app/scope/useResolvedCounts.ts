@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useScopedDql } from "../scope/useScopedDql";
 import { useScope } from "./ScopeContext";
+import { useGlobalFilters } from "./GlobalFilterContext";
 import {
   FLEET_SERVICE_COUNT_QUERY,
   buildAgentCountQuery,
@@ -30,13 +31,14 @@ interface CountRecord {
  */
 export const useResolvedCounts = (): ResolvedCounts => {
   const { scope } = useScope();
+  const { filters } = useGlobalFilters();
 
   const agentResult = useScopedDql<CountRecord>(
-    buildAgentCountQuery(null, scope.timeframe),
+    buildAgentCountQuery(null, scope.timeframe, filters),
     { staleTime: 60_000 },
   );
   const toolResult = useScopedDql<CountRecord>(
-    buildToolCountQuery(null, scope.timeframe),
+    buildToolCountQuery(null, scope.timeframe, filters),
     { staleTime: 60_000 },
   );
   const serviceResult = useScopedDql<CountRecord>(FLEET_SERVICE_COUNT_QUERY, {

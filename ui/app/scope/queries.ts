@@ -50,11 +50,13 @@ export const scopeFilterClause = (serviceIds: string[] | null): string =>
 export const buildAgentCountQuery = (
   serviceIds: string[] | null,
   timeframe: { from: string; to?: string },
+  filters?: GlobalFilters,
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
 ${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
 | summarize agents = countDistinct(gen_ai.agent.name)
 `.trim();
@@ -63,11 +65,13 @@ ${scopeFilterClause(serviceIds)}
 export const buildToolCountQuery = (
   serviceIds: string[] | null,
   timeframe: { from: string; to?: string },
+  filters?: GlobalFilters,
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
 ${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name)
 | summarize tools = countDistinct(gen_ai.tool.name)
 `.trim();
@@ -79,3 +83,40 @@ fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 200
 | filter isNotNull(gen_ai.provider.name)
 | summarize services = countDistinct(dt.entity.service)
 `.trim();
+
+export interface GlobalFilters {
+  agents: string[];
+  models: string[];
+  providers: string[];
+}
+
+export const globalFilterClauses = (f?: GlobalFilters): string =>
+  [
+    f?.agents?.length
+      ? `| filter in(gen_ai.agent.name, array(${dqlIdArray(f.agents)}))`
+      : "",
+    f?.models?.length
+      ? `| filter in(gen_ai.request.model, array(${dqlIdArray(f.models)}))`
+      : "",
+    f?.providers?.length
+      ? `| filter in(gen_ai.provider.name, array(${dqlIdArray(f.providers)}))`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+export const buildFilterOptionsQuery = (
+  serviceIds: string[] | null,
+  timeframe: { from: string; to?: string },
+): string => {
+  const toClause = dqlTimeArg(timeframe.to ?? "now()");
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+| summarize
+    agents = collectDistinct(gen_ai.agent.name),
+    models = collectDistinct(gen_ai.request.model),
+    providers = collectDistinct(gen_ai.provider.name)
+`.trim();
+};
