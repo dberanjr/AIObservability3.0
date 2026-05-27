@@ -32,15 +32,20 @@ ${scopeFilterClause(serviceIds)}
       gen_ai.completion,
       ""
     ),
+    system_prompt = if(gen_ai.prompt.0.role == "system", gen_ai.prompt.0.content, else: null),
     pii_detected = coalesce(toBoolean(gen_ai.privacy.pii_detected), false),
     has_warning = coalesce(toBoolean(gen_ai.response.warning), false),
     has_error = if(isNotNull(exception.type), true, else: false),
-    type_label = coalesce(gen_ai.operation.name, gen_ai.kind, "completion")
+    type_label = coalesce(gen_ai.operation.name, gen_ai.kind, "completion"),
+    eval_hallucination = toDouble(gen_ai.evaluation.hallucination),
+    eval_correctness = toDouble(gen_ai.evaluation.correctness),
+    eval_faithfulness = toDouble(gen_ai.evaluation.faithfulness),
+    eval_relevance = toDouble(gen_ai.evaluation.relevance)
 | fields
     timestamp,
     kind,
     type_label,
-    service = entityName(dt.entity.service),
+    service = entity.name(dt.entity.service),
     service_id = dt.entity.service,
     model = gen_ai.request.model,
     agent = gen_ai.agent.name,
@@ -49,9 +54,14 @@ ${scopeFilterClause(serviceIds)}
     duration_ms,
     prompt_text,
     response_text,
+    system_prompt,
     pii_detected,
     has_warning,
     has_error,
+    eval_hallucination,
+    eval_correctness,
+    eval_faithfulness,
+    eval_relevance,
     trace_id = trace.id,
     span_id = span.id
 | sort timestamp desc
@@ -111,6 +121,40 @@ ${scopeFilterClause(serviceIds)}
     with_correct = sum(has_correct),
     with_faith = sum(has_faith),
     with_rel = sum(has_rel)
+`.trim();
+
+/**
+ * Fetches all spans within a trace for the detail panel trace tree view.
+ * Used to build the span hierarchy and show metadata for each span.
+ */
+export const buildTraceSpansQuery = (traceId: string): string => `
+fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
+| filter trace.id == "${traceId}"
+| fieldsAdd
+    duration_ms = duration / 1000000,
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
+| fields
+    span_id = span.id,
+    parent_span_id,
+    name = span.name,
+    service = entity.name(dt.entity.service),
+    duration_ms,
+    timestamp,
+    has_error = if(isNotNull(exception.type), true, else: false),
+    gen_ai_provider = gen_ai.provider.name,
+    gen_ai_model = gen_ai.request.model,
+    gen_ai_operation = gen_ai.operation.name,
+    agent_name = gen_ai.agent.name,
+    tool_name = gen_ai.tool.name,
+    in_tok,
+    out_tok,
+    exception_type = exception.type,
+    exception_msg = exception.message,
+    workflow = traceloop.workflow.name,
+    session_id = dt.rum.session.id
+| sort timestamp asc
+| limit 100
 `.trim();
 
 void dqlEscape;
