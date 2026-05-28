@@ -8,7 +8,6 @@ import { filterSegmentsClient } from "@dynatrace-sdk/client-filter-segment-manag
 import { useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
-import { AttributeFilterBar } from "./AttributeFilterBar";
 
 interface LabeledFieldProps {
   label: string;
@@ -146,7 +145,6 @@ export const GlobalFilterStrip = () => {
           Reset
         </Button>
       </Flex>
-      <AttributeFilterBar />
       <ResolutionStatusLine />
     </Flex>
   );
