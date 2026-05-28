@@ -8,6 +8,8 @@ import { filterSegmentsClient } from "@dynatrace-sdk/client-filter-segment-manag
 import { useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
+import { SamplingSegmented } from "./SamplingSegmented";
+import { ScanLimitSegmented } from "./ScanLimitSegmented";
 
 interface LabeledFieldProps {
   label: string;
@@ -129,6 +131,14 @@ export const GlobalFilterStrip = () => {
             <SegmentSelector variant="compact" />
             <SelectedSegmentNames />
           </Flex>
+        </LabeledField>
+
+        <LabeledField label="Sampling">
+          <SamplingSegmented />
+        </LabeledField>
+
+        <LabeledField label="Scan limit">
+          <ScanLimitSegmented />
         </LabeledField>
 
         <Flex flexGrow={1} style={{ minWidth: 0 }} />

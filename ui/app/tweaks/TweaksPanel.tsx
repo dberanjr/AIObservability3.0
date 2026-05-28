@@ -12,8 +12,6 @@ import {
   type Theme,
   type TileStyle,
 } from "./TweaksContext";
-import { SamplingSegmented } from "../layout/SamplingSegmented";
-import { ScanLimitSegmented } from "../layout/ScanLimitSegmented";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <Text
@@ -418,25 +416,6 @@ export const TweaksPanel = () => {
                 value={t.tileStyle}
                 onChange={t.setTileStyle}
               />
-            </Flex>
-
-          </Flex>
-
-          <Flex flexDirection="column" gap={12} style={{ position: "relative", zIndex: 100 }}>
-            <SectionLabel>Data</SectionLabel>
-
-            <Flex flexDirection="column" gap={6} style={{ position: "relative", zIndex: 101 }}>
-              <FieldLabel>Sampling</FieldLabel>
-              <div style={{ position: "relative", zIndex: 102 }}>
-                <SamplingSegmented />
-              </div>
-            </Flex>
-
-            <Flex flexDirection="column" gap={6} style={{ position: "relative", zIndex: 101 }}>
-              <FieldLabel>Scan limit</FieldLabel>
-              <div style={{ position: "relative", zIndex: 102 }}>
-                <ScanLimitSegmented />
-              </div>
             </Flex>
 
           </Flex>
