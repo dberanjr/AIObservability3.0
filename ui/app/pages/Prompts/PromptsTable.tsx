@@ -627,7 +627,12 @@ export const PromptsTable = ({
     "ai-obs.prompts-visible-cols",
     ["in_cost", "out_cost"],
   );
-  const visibleCols = new Set(visibleColsArray ?? []);
+  // Handle migration from old Set-based storage: if the loaded value is not an array,
+  // treat it as invalid and use the default
+  const validVisibleColsArray: VisibleColumn[] = Array.isArray(visibleColsArray)
+    ? visibleColsArray
+    : (["in_cost", "out_cost"] as VisibleColumn[]);
+  const visibleCols = new Set(validVisibleColsArray);
 
   const toggleSort = (key: SortKey) =>
     setSort((current) =>
@@ -637,7 +642,7 @@ export const PromptsTable = ({
     );
 
   const toggleColumn = (col: VisibleColumn) => {
-    const next = new Set(visibleColsArray);
+    const next = new Set(validVisibleColsArray);
     if (next.has(col)) {
       next.delete(col);
     } else {
