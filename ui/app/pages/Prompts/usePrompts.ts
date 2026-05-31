@@ -200,14 +200,14 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     const kindCounts = countBy(prompts, (r) => r.kind);
 
     const search = filter.search?.trim().toLowerCase() ?? "";
-    const kindSet = new Set(filter.kinds ?? []);
-    const serviceSet = new Set(filter.services ?? []);
-    const modelSet = new Set(filter.models ?? []);
+    const kinds = filter.kinds ?? [];
+    const services = filter.services ?? [];
+    const models = filter.models ?? [];
 
     const filtered = prompts.filter((p) => {
-      if (kindSet.size > 0 && !kindSet.has(p.kind)) return false;
-      if (serviceSet.size > 0 && !serviceSet.has(p.service)) return false;
-      if (modelSet.size > 0 && (!p.model || !modelSet.has(p.model))) return false;
+      if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
+      if (services.length > 0 && !services.includes(p.service)) return false;
+      if (models.length > 0 && (!p.model || !models.includes(p.model))) return false;
       if (search) {
         const hay =
           `${p.promptText} ${p.responseText} ${p.service} ${p.model ?? ""} ${p.agent ?? ""}`.toLowerCase();
