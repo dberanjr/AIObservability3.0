@@ -623,10 +623,11 @@ export const PromptsTable = ({
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState("");
-  const [visibleCols, setVisibleCols] = usePersistedState<Set<VisibleColumn>>(
+  const [visibleColsArray, setVisibleColsArray] = usePersistedState<VisibleColumn[]>(
     "ai-obs.prompts-visible-cols",
-    new Set(["in_cost", "out_cost"]),
+    ["in_cost", "out_cost"],
   );
+  const visibleCols = new Set(visibleColsArray ?? []);
 
   const toggleSort = (key: SortKey) =>
     setSort((current) =>
@@ -636,13 +637,13 @@ export const PromptsTable = ({
     );
 
   const toggleColumn = (col: VisibleColumn) => {
-    const next = new Set(visibleCols);
+    const next = new Set(visibleColsArray);
     if (next.has(col)) {
       next.delete(col);
     } else {
       next.add(col);
     }
-    setVisibleCols(next);
+    setVisibleColsArray(Array.from(next));
   };
 
   const searchLower = localSearch.trim().toLowerCase();
