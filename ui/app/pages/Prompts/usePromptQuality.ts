@@ -97,5 +97,5 @@ export const usePromptQuality = (): PromptQuality => {
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading, filters]);
+  }, [data, isLoading, error, resolution.isLoading]);
 };

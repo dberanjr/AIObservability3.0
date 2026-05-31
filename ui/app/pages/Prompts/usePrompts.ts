@@ -132,7 +132,17 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
         ? buildPromptsListQuery(resolution.serviceIds, scope.timeframe, filters) +
           ` /* r${refreshKey} */`
         : "",
-    [canQuery, resolution.serviceIds, scope.timeframe, filters, refreshKey],
+    [
+      canQuery,
+      resolution.serviceIds,
+      scope.timeframe,
+      filters?.agents?.join(","),
+      filters?.models?.join(","),
+      filters?.providers?.join(","),
+      filters?.tools?.join(","),
+      filters?.services?.join(","),
+      refreshKey,
+    ],
   );
 
   const { data, isLoading, error } = useScopedDql<PromptRecord>(query, {
@@ -231,10 +241,10 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     isLoading,
     error,
     resolution.isLoading,
-    filter.search,
-    filter.kinds,
-    filter.services,
-    filter.models,
+    filter?.search,
+    filter?.kinds?.join(","),
+    filter?.services?.join(","),
+    filter?.models?.join(","),
     refetch,
   ]);
 };
