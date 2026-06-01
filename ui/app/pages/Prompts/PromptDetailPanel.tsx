@@ -209,9 +209,9 @@ export const PromptDetailPanel = ({
             value={activeTab}
             onChange={setActiveTab}
             options={[
-              { value: "trace", label: "Trace" },
               { value: "prompts", label: "Prompts" },
               { value: "eval", label: "Eval" },
+              { value: "trace", label: "Trace" },
               { value: "info", label: "Info" },
             ]}
           />
