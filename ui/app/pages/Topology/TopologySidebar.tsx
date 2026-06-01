@@ -152,6 +152,9 @@ export const TopologySidebar = ({
           />
           <Text style={{ fontSize: 12.5 }}>Show critical path</Text>
         </Flex>
+        <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
+          Highlights the highest-traffic path: top service → top agent → top tool.
+        </Text>
       </Flex>
 
       <IntelCallout />
