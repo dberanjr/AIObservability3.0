@@ -166,7 +166,7 @@ export const PromptDetailPanel = ({
   privacy,
   onClose,
 }: PromptDetailPanelProps) => {
-  const [activeTab, setActiveTab] = useState<DetailTab>("trace");
+  const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
   const { spans, isLoading, error } = useTraceSpans(prompt.traceId);
 
   const inputText =
