@@ -50,13 +50,27 @@ export const PromptsPage = () => {
         alignItems: "start",
       }}
     >
-      <PromptsSidebar
-        facets={facets}
-        filter={filter}
-        privacy={privacy}
-        onFilterChange={setFilter}
-        onPrivacyChange={setPrivacy}
-      />
+      {/* Sticky so the filters stay in view while the prompt list scrolls.
+          Independently scrollable when the facet list is taller than the
+          viewport (top offset clears the fixed page header + filter strip). */}
+      <div
+        style={{
+          position: "sticky",
+          top: 16,
+          alignSelf: "start",
+          maxHeight: "calc(100vh - 130px)",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
+        <PromptsSidebar
+          facets={facets}
+          filter={filter}
+          privacy={privacy}
+          onFilterChange={setFilter}
+          onPrivacyChange={setPrivacy}
+        />
+      </div>
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
         {firstError && <ErrorBanner error={firstError} />}
