@@ -90,12 +90,46 @@ const metricOf = (n: NodeAgg, by: SizeBy): number =>
           ? n.cost
           : 0;
 
+interface TraceTotals {
+  inTok: number;
+  outTok: number;
+  cost: number; // cents
+  durationMs: number; // wall-clock
+}
 interface Layout {
   nodes: TopoNode[];
   edges: TopoEdge[];
   width: number;
   height: number;
+  totals: TraceTotals;
 }
+
+/** Trace-wide totals (all spans, regardless of category filter). Duration is
+ *  the wall-clock span of the trace, not a sum (which would double-count). */
+const traceTotals = (spans: TraceSpan[]): TraceTotals => {
+  let inTok = 0;
+  let outTok = 0;
+  let cost = 0;
+  let minStart = Infinity;
+  let maxEnd = -Infinity;
+  for (const s of spans) {
+    inTok += s.inTokens;
+    outTok += s.outTokens;
+    const pricing = getPricing(s.model);
+    cost +=
+      (s.inTokens > 0 ? estimateCost(s.inTokens, 0, pricing) : 0) +
+      (s.outTokens > 0 ? estimateCost(0, s.outTokens, pricing) : 0);
+    if (s.timestampMs < minStart) minStart = s.timestampMs;
+    const end = s.timestampMs + Math.max(0, s.durationMs);
+    if (end > maxEnd) maxEnd = end;
+  }
+  return {
+    inTok,
+    outTok,
+    cost,
+    durationMs: spans.length ? Math.max(0, maxEnd - minStart) : 0,
+  };
+};
 
 const buildLayout = (
   spans: TraceSpan[],
@@ -238,7 +272,7 @@ const buildLayout = (
       });
     });
   }
-  return { nodes: out, edges, width, height };
+  return { nodes: out, edges, width, height, totals: traceTotals(spans) };
 };
 
 const edgePath = (x1: number, y1: number, x2: number, y2: number): string => {
@@ -325,9 +359,19 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
     p.push(
       `<text x="${n.x}" y="${n.y + n.r + 15}" text-anchor="middle" font-size="11" font-weight="600" fill="${textc}">${escapeXml(trunc(n.label, 24))}</text>`,
     );
-    p.push(
-      `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" fill="${text3}">${escapeXml(sublabel(n, by))}</text>`,
-    );
+    if (n.isEntry) {
+      const t = layout.totals;
+      p.push(
+        `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" font-weight="600" fill="${textc}">${escapeXml(`${fmtMs(t.durationMs)} · ${fmtCost(t.cost)}`)}</text>`,
+      );
+      p.push(
+        `<text x="${n.x}" y="${n.y + n.r + 40}" text-anchor="middle" font-size="10" fill="${text3}">${escapeXml(`${fmtTokens(t.inTok)} in · ${fmtTokens(t.outTok)} out`)}</text>`,
+      );
+    } else {
+      p.push(
+        `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" fill="${text3}">${escapeXml(sublabel(n, by))}</text>`,
+      );
+    }
   }
   p.push("</svg>");
   return p.join("");
@@ -553,15 +597,28 @@ const TopologyGraph = ({
                       >
                         {n.label}
                       </Text>
-                      <Text
-                        style={{
-                          fontSize: 10,
-                          color: sizeBy === "none" ? "var(--text-3)" : "var(--text-2)",
-                          fontWeight: sizeBy === "none" ? 400 : 600,
-                        }}
-                      >
-                        {sublabel(n, sizeBy)}
-                      </Text>
+                      {n.isEntry ? (
+                        <>
+                          <Text
+                            style={{ fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}
+                          >
+                            {`${fmtMs(layout.totals.durationMs)} · ${fmtCost(layout.totals.cost)}`}
+                          </Text>
+                          <Text style={{ fontSize: 10, color: "var(--text-3)" }}>
+                            {`${fmtTokens(layout.totals.inTok)} in · ${fmtTokens(layout.totals.outTok)} out`}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            color: sizeBy === "none" ? "var(--text-3)" : "var(--text-2)",
+                            fontWeight: sizeBy === "none" ? 400 : 600,
+                          }}
+                        >
+                          {sublabel(n, sizeBy)}
+                        </Text>
+                      )}
                     </div>
                   </div>
                 );
