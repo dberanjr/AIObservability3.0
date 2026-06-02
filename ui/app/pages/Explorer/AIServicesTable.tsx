@@ -10,7 +10,9 @@ import { fmtCount, fmtPercent, fmtTokens } from "../../data/format";
 import {
   PROVIDER_COLOR,
   normalizeProvider,
+  canonicalizeModel,
 } from "../../detection/attributes";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import type { AIService } from "./useAIServices";
 
 const COLS = [
@@ -83,37 +85,53 @@ const Cell = ({
   </div>
 );
 
-const ModelChips = ({ models }: { models: string[] }) => (
+const ModelChips = ({
+  models,
+  rawModels,
+}: {
+  models: string[];
+  rawModels: string[];
+}) => (
   <Flex gap={4} style={{ flexWrap: "wrap" }}>
     {models.slice(0, 3).map((m) => {
       const provider = normalizeProvider(undefined, m);
+      // Raw gen_ai.request.model values that canonicalize to this chip label.
+      const variants = rawModels.filter(
+        (raw) => canonicalizeModel(raw).label === m,
+      );
       return (
-        <span
+        <FilterTrigger
           key={m}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "2px 6px",
-            borderRadius: 999,
-            border: `1px solid color-mix(in oklab, ${PROVIDER_COLOR[provider.id]} 40%, transparent)`,
-            background: `color-mix(in oklab, ${PROVIDER_COLOR[provider.id]} 10%, transparent)`,
-            fontFamily: "var(--mono, monospace)",
-            fontSize: 11,
-            color: "var(--text-2)",
-          }}
+          attribute="gen_ai.request.model"
+          value={variants.length > 0 ? variants : m}
+          label="model"
         >
           <span
-            aria-hidden
             style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: PROVIDER_COLOR[provider.id],
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "2px 6px",
+              borderRadius: 999,
+              border: `1px solid color-mix(in oklab, ${PROVIDER_COLOR[provider.id]} 40%, transparent)`,
+              background: `color-mix(in oklab, ${PROVIDER_COLOR[provider.id]} 10%, transparent)`,
+              fontFamily: "var(--mono, monospace)",
+              fontSize: 11,
+              color: "var(--text-2)",
             }}
-          />
-          {m}
-        </span>
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                background: PROVIDER_COLOR[provider.id],
+              }}
+            />
+            {m}
+          </span>
+        </FilterTrigger>
       );
     })}
     {models.length > 3 && (
@@ -148,9 +166,16 @@ export const AIServicesTable = ({
         justifyContent="space-between"
         style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
       >
-        <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-          AI services
-        </Heading>
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+            AI services
+          </Heading>
+          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+            Any monitored service that emitted LLM spans
+            (<code>gen_ai.provider.name</code>) in scope — classified
+            automatically, no tagging required.
+          </Text>
+        </Flex>
         <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
           {rows.length} {rows.length === 1 ? "service" : "services"}
         </Text>
@@ -227,7 +252,13 @@ export const AIServicesTable = ({
                   fontSize: 12.5,
                 }}
               >
-                {r.service}
+                <FilterTrigger
+                  attribute="service.name"
+                  value={r.service}
+                  label="service"
+                >
+                  {r.service}
+                </FilterTrigger>
               </Cell>
               <Cell width={120}>
                 {r.framework ? (
@@ -250,7 +281,7 @@ export const AIServicesTable = ({
                 width={220}
                 style={{ whiteSpace: "normal", overflow: "visible" }}
               >
-                <ModelChips models={r.modelDisplay} />
+                <ModelChips models={r.modelDisplay} rawModels={r.models} />
               </Cell>
               <Cell
                 width={80}
@@ -365,11 +396,12 @@ export const AIServicesTable = ({
           }}
         >
           Logical errors are HTTP 200 responses with payload-level failures.
-          Detection blends three signals: the OTel-standard{" "}
-          <code>gen_ai.error.type</code> span attribute, guardrail and
-          moderation activation events, and OTel refusal markers
-          (<code>gen_ai.response.refusal_reason</code>). Log-pattern matching for
-          empty completions runs alongside the spans pipeline and joins in here.
+          The load-bearing signal here is{" "}
+          <code>gen_ai.response.finish_reasons</code> containing{" "}
+          <code>max_tokens</code> (truncated output), <code>content_filter</code>,
+          or <code>refusal</code>. OTel markers (<code>gen_ai.error.type</code>,
+          guardrail/moderation events, <code>gen_ai.response.refusal_reason</code>)
+          are also counted when present, but emit no data in this environment.
         </Text>
       </Flex>
     </Flex>

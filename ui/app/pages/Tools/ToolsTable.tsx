@@ -8,6 +8,8 @@ import {
   ChevronUpIcon,
 } from "@dynatrace/strato-icons";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
+import { FilterTrigger } from "../../components/FilterTrigger";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { CATEGORY_COLOR } from "./categories";
 import type { Tool, ToolZone } from "./useTools";
 import { ZONE_LABEL } from "./useTools";
@@ -115,6 +117,11 @@ export const ToolsTable = ({
   isLoading,
   highlightZone,
 }: ToolsTableProps) => {
+  const { pageConfig } = useTweaks();
+  // In discovered mode a tool is a span.name; in strict mode it's
+  // gen_ai.tool.name — filter on whichever backs the current view.
+  const toolAttr =
+    pageConfig.toolsMode === "discovered" ? "span.name" : "gen_ai.tool.name";
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: "calls",
     dir: "desc",
@@ -244,14 +251,31 @@ export const ToolsTable = ({
               </Cell>
               <Cell mono>
                 <Flex alignItems="center" gap={6}>
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {t.tool}
-                  </span>
+                  <FilterTrigger
+                    attribute={toolAttr}
+                    value={t.tool}
+                    label="tool"
+                    style={{ flex: 1, minWidth: 0 }}
+                  >
+                    <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {t.tool}
+                    </span>
+                  </FilterTrigger>
                   <CategoryChip tool={t} />
                 </Flex>
               </Cell>
               <Cell width={140} mono color="var(--text-2)">
-                {t.service}
+                {t.service ? (
+                  <FilterTrigger
+                    attribute="service.name"
+                    value={t.service}
+                    label="service"
+                  >
+                    {t.service}
+                  </FilterTrigger>
+                ) : (
+                  t.service
+                )}
               </Cell>
               <Cell width={130} mono color="var(--text-2)">
                 {t.mcpServer ?? "—"}

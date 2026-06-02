@@ -85,13 +85,19 @@ export const ScopeProvider = ({ children }: { children: React.ReactNode }) => {
   // tab that already has the app mounted) back into scope state. Depends on
   // the string params, not the URLSearchParams object, which is unstable
   // across renders.
+  //
+  // IMPORTANT: when the URL has no timeframe params we KEEP the current scope
+  // instead of snapping back to the default. Tab navigation can momentarily
+  // drop the query string; resetting here is what made the timeframe revert to
+  // "last hour" when switching tabs. The explicit reset() handler still
+  // restores defaults on demand.
   useEffect(() => {
     const urlTf = readUrlTimeframe(fromParam, toParam);
-    const target = urlTf ?? DEFAULT_SCOPE.timeframe;
+    if (!urlTf) return;
     setScope((prev) =>
-      prev.timeframe.from === target.from && prev.timeframe.to === target.to
+      prev.timeframe.from === urlTf.from && prev.timeframe.to === urlTf.to
         ? prev
-        : { ...prev, timeframe: target },
+        : { ...prev, timeframe: urlTf },
     );
   }, [fromParam, toParam]);
 

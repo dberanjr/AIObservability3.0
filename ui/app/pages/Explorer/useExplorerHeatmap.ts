@@ -7,7 +7,7 @@ import { buildServiceModelHeatmapQuery } from "./queries";
 import {
   PROVIDER_COLOR,
   normalizeProvider,
-  stripModelVersion,
+  canonicalizeModel,
   type ProviderId,
 } from "../../detection/attributes";
 
@@ -29,6 +29,8 @@ export interface HeatmapCell {
 
 export interface HeatmapColumn {
   model: string;
+  /** Raw gen_ai.request.model values that map to this canonical column. */
+  rawModels: string[];
   providerId: ProviderId;
   color: string;
   totalTokens: number;
@@ -68,7 +70,7 @@ export const useExplorerHeatmap = (): UseExplorerHeatmapResult => {
 
     for (const r of data?.records ?? []) {
       if (!r.service || !r.service_id || !r.model) continue;
-      const modelKey = stripModelVersion(r.model);
+      const modelKey = canonicalizeModel(r.model).label;
       const provider = normalizeProvider(r.system, r.model);
 
       let row = rowMap.get(r.service_id);
@@ -96,9 +98,13 @@ export const useExplorerHeatmap = (): UseExplorerHeatmapResult => {
       const existingCol = colMap.get(modelKey);
       if (existingCol) {
         existingCol.totalTokens += r.tokens ?? 0;
+        if (r.model && !existingCol.rawModels.includes(r.model)) {
+          existingCol.rawModels.push(r.model);
+        }
       } else {
         colMap.set(modelKey, {
           model: modelKey,
+          rawModels: r.model ? [r.model] : [],
           providerId: provider.id,
           color: PROVIDER_COLOR[provider.id],
           totalTokens: r.tokens ?? 0,

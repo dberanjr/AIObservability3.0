@@ -1,64 +1,86 @@
 import React, { createContext, useContext } from "react";
 import { usePersistedState } from "../state/usePersistedState";
 
+/**
+ * A single free-form filter condition: a span attribute and the set of values
+ * to match (OR within a condition; AND across conditions). The attribute can
+ * be ANY span field — gen_ai.*, langchain.*, service.name, k8s.*, span.*, etc.
+ */
+export interface FilterCondition {
+  attribute: string;
+  values: string[];
+}
+
 export interface GlobalFilters {
-  agents: string[];
-  models: string[];
-  providers: string[];
-  tools: string[];
-  services: string[];
+  conditions: FilterCondition[];
 }
 
 interface GlobalFilterContextValue {
   filters: GlobalFilters;
-  setAgents: (agents: string[]) => void;
-  setModels: (models: string[]) => void;
-  setProviders: (providers: string[]) => void;
-  setTools?: (tools: string[]) => void;
-  setServices?: (services: string[]) => void;
+  /** Add (or merge values into) a condition for an attribute. */
+  upsertCondition: (attribute: string, values: string[]) => void;
+  /** Replace the values of an existing condition; removes it if empty. */
+  setConditionValues: (attribute: string, values: string[]) => void;
+  removeCondition: (attribute: string) => void;
   clearAll: () => void;
   hasFilters: boolean;
 }
 
-const GlobalFilterContext = createContext<GlobalFilterContextValue | undefined>(undefined);
+const GlobalFilterContext = createContext<GlobalFilterContextValue | undefined>(
+  undefined,
+);
 
-export const GlobalFilterProvider = ({ children }: { children: React.ReactNode }) => {
-  const [filters, setFilters] = usePersistedState<GlobalFilters>("ai-obs.global-filters", {
-    agents: [],
-    models: [],
-    providers: [],
-    tools: [],
-    services: [],
-  });
+const EMPTY: GlobalFilters = { conditions: [] };
 
-  const setAgents = (agents: string[]) =>
-    setFilters({ ...filters, agents });
+export const GlobalFilterProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  // Persisted under a new key so the old fixed-category shape doesn't
+  // deserialize into the new conditions model.
+  const [filters, setFilters] = usePersistedState<GlobalFilters>(
+    "ai-obs.global-filters.v2",
+    EMPTY,
+  );
 
-  const setModels = (models: string[]) =>
-    setFilters({ ...filters, models });
+  const conditions = filters.conditions ?? [];
 
-  const setProviders = (providers: string[]) =>
-    setFilters({ ...filters, providers });
+  const setConditionValues = (attribute: string, values: string[]) => {
+    const others = conditions.filter((c) => c.attribute !== attribute);
+    setFilters({
+      conditions:
+        values.length > 0 ? [...others, { attribute, values }] : others,
+    });
+  };
 
-  const setTools = (tools: string[]) =>
-    setFilters({ ...filters, tools });
+  const upsertCondition = (attribute: string, values: string[]) => {
+    const existing = conditions.find((c) => c.attribute === attribute);
+    const merged = existing
+      ? Array.from(new Set([...existing.values, ...values]))
+      : values;
+    setConditionValues(attribute, merged);
+  };
 
-  const setServices = (services: string[]) =>
-    setFilters({ ...filters, services });
+  const removeCondition = (attribute: string) =>
+    setFilters({
+      conditions: conditions.filter((c) => c.attribute !== attribute),
+    });
 
-  const clearAll = () =>
-    setFilters({ agents: [], models: [], providers: [], tools: [], services: [] });
+  const clearAll = () => setFilters(EMPTY);
 
-  const hasFilters =
-    filters.agents.length > 0 ||
-    filters.models.length > 0 ||
-    filters.providers.length > 0 ||
-    (filters.tools?.length || 0) > 0 ||
-    (filters.services?.length || 0) > 0;
+  const hasFilters = conditions.length > 0;
 
   return (
     <GlobalFilterContext.Provider
-      value={{ filters, setAgents, setModels, setProviders, setTools, setServices, clearAll, hasFilters }}
+      value={{
+        filters: { conditions },
+        upsertCondition,
+        setConditionValues,
+        removeCondition,
+        clearAll,
+        hasFilters,
+      }}
     >
       {children}
     </GlobalFilterContext.Provider>

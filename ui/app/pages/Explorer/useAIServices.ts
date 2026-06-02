@@ -9,7 +9,7 @@ import {
   PROVIDER_COLOR,
   PROVIDER_DISPLAY,
   normalizeProvider,
-  stripModelVersion,
+  canonicalizeModel,
   type ProviderId,
 } from "../../detection/attributes";
 import { toNum } from "../../data/format";
@@ -27,6 +27,7 @@ interface ServiceRecord {
   errors?: number;
   logical_errors?: number;
   agents?: number;
+  agent_names?: Array<string | null>;
   models?: string[];
   framework?: string;
   tok_per_req?: number;
@@ -39,6 +40,7 @@ export interface AIService {
   framework: string | null;
   models: string[];
   modelDisplay: string[];
+  agentNames: string[];
   providers: ProviderId[];
   requests: number;
   tokens: number;
@@ -85,7 +87,12 @@ const toService = (r: ServiceRecord): AIService | null => {
     service: r.service,
     framework: r.framework ?? null,
     models,
-    modelDisplay: models.map(stripModelVersion),
+    agentNames: (r.agent_names ?? []).filter(
+      (a): a is string => typeof a === "string" && a.length > 0,
+    ),
+    modelDisplay: Array.from(
+      new Set(models.map((m) => canonicalizeModel(m).label)),
+    ),
     providers,
     requests: num(r.requests),
     tokens: num(r.tokens),
@@ -146,8 +153,21 @@ export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult 
     const fwSet = new Set(filter.frameworks ?? []);
     const modelSet = new Set(filter.models ?? []);
 
+    const matchesSearch = (s: AIService): boolean => {
+      if (!search) return true;
+      const hay = [
+        s.service,
+        s.framework ?? "",
+        ...s.modelDisplay,
+        ...s.agentNames,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(search);
+    };
+
     const filtered = services.filter((s) => {
-      if (search && !s.service.toLowerCase().includes(search)) return false;
+      if (!matchesSearch(s)) return false;
       if (providerSet.size > 0 && !s.providers.some((p) => providerSet.has(p)))
         return false;
       if (fwSet.size > 0 && (!s.framework || !fwSet.has(s.framework)))

@@ -7,7 +7,11 @@ import { ResetIcon } from "@dynatrace/strato-icons";
 import { filterSegmentsClient } from "@dynatrace-sdk/client-filter-segment-management";
 import { useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
+import { useGlobalFilters } from "../scope/GlobalFilterContext";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
+import { SamplingSegmented } from "./SamplingSegmented";
+import { ScanLimitSegmented } from "./ScanLimitSegmented";
+import { GlobalAttributeFilter } from "./GlobalAttributeFilter";
 
 interface LabeledFieldProps {
   label: string;
@@ -102,9 +106,15 @@ const SelectedSegmentNames = () => {
 
 export const GlobalFilterStrip = () => {
   const { scope, reset } = useScope();
+  const { hasFilters, clearAll } = useGlobalFilters();
 
   const isDefaultScope =
     scope.timeframe.from === "now()-24h" && !scope.timeframe.to;
+
+  const resetAll = () => {
+    reset();
+    clearAll();
+  };
 
   return (
     <Flex
@@ -131,12 +141,24 @@ export const GlobalFilterStrip = () => {
           </Flex>
         </LabeledField>
 
+        <LabeledField label="Sampling">
+          <SamplingSegmented />
+        </LabeledField>
+
+        <LabeledField label="Scan limit">
+          <ScanLimitSegmented />
+        </LabeledField>
+
+        <LabeledField label="Filters">
+          <GlobalAttributeFilter />
+        </LabeledField>
+
         <Flex flexGrow={1} style={{ minWidth: 0 }} />
 
         <Button
           variant="default"
-          onClick={reset}
-          disabled={isDefaultScope}
+          onClick={resetAll}
+          disabled={isDefaultScope && !hasFilters}
           aria-label="Reset filters"
         >
           <Button.Prefix>

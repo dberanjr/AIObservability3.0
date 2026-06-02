@@ -9,6 +9,7 @@ import { AgentCostBarList } from "./AgentCostBarList";
 import { PlatformHealthCard } from "./PlatformHealthCard";
 import { ProviderMixDonut } from "./ProviderMixDonut";
 import { SummaryTilesRow } from "./SummaryTilesRow";
+import { TokenEfficiencyTiles } from "./TokenEfficiencyTiles";
 import { TokenConsumptionChart } from "./TokenConsumptionChart";
 import { TopFindingsStrip } from "./TopFindingsStrip";
 import { TopModelsPanel } from "./TopModelsPanel";
@@ -60,6 +61,7 @@ export const PulsePage = () => {
       >
         {firstError && <ErrorBanner error={firstError} />}
         <SummaryTilesRow summary={summary} />
+        <TokenEfficiencyTiles />
         <TopFindingsStrip
           findings={anomalies}
           isLoading={anomaliesLoading}

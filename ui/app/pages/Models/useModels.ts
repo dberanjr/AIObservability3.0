@@ -9,6 +9,7 @@ import {
 import { buildModelsQuery } from "./queries";
 import { estimateCost, getPricing } from "../../data/pricing";
 import {
+  canonicalizeModel,
   normalizeProvider,
   type ProviderId,
 } from "../../detection/attributes";
@@ -67,6 +68,8 @@ export const inferModelType = (
 export interface ModelRow {
   model: string;
   modelKey: string;
+  /** All raw gen_ai.request.model values merged under this canonical row. */
+  rawModels: string[];
   provider: { id: ProviderId; label: string; viaBedrock: boolean };
   providerColor: string;
   type: ModelType;
@@ -125,24 +128,101 @@ export const useModels = (): UseModelsResult => {
   );
 
   return useMemo<UseModelsResult>(() => {
-    const models: ModelRow[] = [];
+    // The same model is logged under several naming conventions
+    // (global.anthropic.claude-sonnet-4-6 / Claude-Sonnet-4.6 / dated bedrock
+    // ids). Merge per-raw-model rows under one canonical key so the table
+    // shows one row per real model. Sums are exact; latency percentiles take
+    // the dominant (highest-request) variant since percentiles can't be
+    // re-aggregated from per-variant percentiles; averages are request-weighted.
+    interface Agg {
+      key: string;
+      label: string;
+      rawModels: Set<string>;
+      requests: number;
+      inputTokens: number;
+      outputTokens: number;
+      errors: number;
+      timeouts: number;
+      hasStatusCode: number;
+      wAvgMs: number;
+      wAvgIn: number;
+      wAvgOut: number;
+      domRequests: number;
+      domModel: string;
+      domOperation?: string | null;
+      domSystem?: string | null;
+      domP95: number;
+      domP99: number;
+    }
+    const byKey = new Map<string, Agg>();
     for (const r of data?.records ?? []) {
       if (!r.model) continue;
-      const pricing = getPricing(r.model);
-      const provider = normalizeProvider(r.system, r.model);
-      const inputTokens = num(r.input_tokens);
-      const outputTokens = num(r.output_tokens);
+      const { key, label } = canonicalizeModel(r.model);
       const requests = num(r.requests);
       const avgInputTokens = num(r.avg_input_tokens);
       const avgOutputTokens = num(r.avg_output_tokens);
       const avgMs = num(r.avg_ms);
+      let agg = byKey.get(key);
+      if (!agg) {
+        agg = {
+          key,
+          label,
+          rawModels: new Set<string>(),
+          requests: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          errors: 0,
+          timeouts: 0,
+          hasStatusCode: 0,
+          wAvgMs: 0,
+          wAvgIn: 0,
+          wAvgOut: 0,
+          domRequests: -1,
+          domModel: r.model,
+          domOperation: r.operation,
+          domSystem: r.system,
+          domP95: 0,
+          domP99: 0,
+        };
+        byKey.set(key, agg);
+      }
+      agg.rawModels.add(r.model);
+      agg.requests += requests;
+      agg.inputTokens += num(r.input_tokens);
+      agg.outputTokens += num(r.output_tokens);
+      agg.errors += num(r.errors);
+      agg.timeouts += num(r.timeouts);
+      agg.hasStatusCode += num(r.has_status_code);
+      agg.wAvgMs += avgMs * requests;
+      agg.wAvgIn += avgInputTokens * requests;
+      agg.wAvgOut += avgOutputTokens * requests;
+      if (requests > agg.domRequests) {
+        agg.domRequests = requests;
+        agg.domModel = r.model;
+        agg.domOperation = r.operation;
+        agg.domSystem = r.system;
+        agg.domP95 = num(r.p95_ms);
+        agg.domP99 = num(r.p99_ms);
+      }
+    }
+
+    const models: ModelRow[] = [];
+    for (const agg of byKey.values()) {
+      const pricing = getPricing(agg.domModel);
+      const provider = normalizeProvider(agg.domSystem, agg.domModel);
+      const inputTokens = agg.inputTokens;
+      const outputTokens = agg.outputTokens;
+      const requests = agg.requests;
+      const avgInputTokens = requests > 0 ? agg.wAvgIn / requests : 0;
+      const avgOutputTokens = requests > 0 ? agg.wAvgOut / requests : 0;
+      const avgMs = requests > 0 ? agg.wAvgMs / requests : 0;
       const cost = estimateCost(inputTokens, outputTokens, pricing);
       const totalTokens = inputTokens + outputTokens;
       const costPerMTok =
         totalTokens > 0 ? (cost / totalTokens) * 1_000_000 : 0;
-      const type = inferModelType(r.model, r.operation);
+      const type = inferModelType(agg.domModel, agg.domOperation);
       const typeInferredFromName =
-        !r.operation ||
+        !agg.domOperation ||
         ![
           "embeddings",
           "embedding",
@@ -150,7 +230,7 @@ export const useModels = (): UseModelsResult => {
           "reranking",
           "chat",
           "completion",
-        ].includes((r.operation ?? "").trim().toLowerCase());
+        ].includes((agg.domOperation ?? "").trim().toLowerCase());
       const contextWindow = pricing.contextWindow;
       const contextUtilizationPct =
         contextWindow && contextWindow > 0
@@ -160,11 +240,16 @@ export const useModels = (): UseModelsResult => {
         type === "embedding" || avgMs <= 0 || avgOutputTokens <= 0
           ? null
           : avgOutputTokens / (avgMs / 1000);
-      const hasTimeoutAttribute = num(r.has_status_code) > 0;
+      const hasTimeoutAttribute = agg.hasStatusCode > 0;
+      const errorRatePct =
+        requests > 0 ? (agg.errors / requests) * 100 : 0;
+      const timeoutRatePct =
+        requests > 0 ? (agg.timeouts / requests) * 100 : 0;
 
       models.push({
-        model: r.model,
-        modelKey: r.model.toLowerCase(),
+        model: agg.label,
+        modelKey: agg.key,
+        rawModels: Array.from(agg.rawModels),
         provider,
         providerColor: PROVIDER_COLOR_LIGHT[provider.id],
         type,
@@ -175,12 +260,12 @@ export const useModels = (): UseModelsResult => {
         avgInputTokens,
         avgOutputTokens,
         avgMs,
-        p95Ms: num(r.p95_ms),
-        p99Ms: num(r.p99_ms),
-        errors: num(r.errors),
-        errorRatePct: num(r.error_rate_pct),
-        timeouts: num(r.timeouts),
-        timeoutRatePct: num(r.timeout_rate_pct),
+        p95Ms: agg.domP95,
+        p99Ms: agg.domP99,
+        errors: agg.errors,
+        errorRatePct,
+        timeouts: agg.timeouts,
+        timeoutRatePct,
         hasTimeoutAttribute,
         cost,
         costPerMTok,
@@ -190,6 +275,7 @@ export const useModels = (): UseModelsResult => {
           pricing.inputPerMTok === 0 && pricing.outputPerMTok === 0,
       });
     }
+    models.sort((a, b) => b.requests - a.requests);
 
     return {
       models,

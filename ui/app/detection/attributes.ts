@@ -134,6 +134,71 @@ export const PROVIDER_COLOR: Record<ProviderId, string> = {
 export const stripModelVersion = (model: string | null | undefined): string =>
   typeof model === "string" ? model.replace(/-\d{8}(?:-v\d+)?$/i, "") : "";
 
+export interface CanonicalModel {
+  /** Stable grouping key — variants of the same model share it. */
+  key: string;
+  /** Human-friendly display label, e.g. "Claude Sonnet 4.6". */
+  label: string;
+}
+
+const TITLE = (s: string): string =>
+  s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+
+/**
+ * Collapse the many ways the same model is logged into one canonical
+ * key + label. The BOS tenant emits the SAME model under several
+ * conventions, e.g.:
+ *   global.anthropic.claude-sonnet-4-6           ┐
+ *   Claude-Sonnet-4.6                            ├ → "Claude Sonnet 4.6"
+ *   us.anthropic.claude-sonnet-4-5-20250929-v1:0 → "Claude Sonnet 4.5"
+ *
+ * Strategy: strip region (global./us./eu.) + vendor (anthropic./amazon./…)
+ * prefixes, drop date stamps and bedrock revision tags (-v1:0, :0), then
+ * special-case the Claude family (tier + X.Y version, order-independent)
+ * since that's where the dash-vs-dot and word-order variants live. Other
+ * families fall back to a conservative cleanup that still merges prefix and
+ * date variants without over-collapsing distinct versions.
+ */
+export const canonicalizeModel = (raw?: string | null): CanonicalModel => {
+  const original = (raw ?? "").trim();
+  if (!original) return { key: "unknown", label: "Unknown" };
+
+  let s = original.toLowerCase();
+  // Region prefix (global. us. eu. apac. …) then vendor prefix.
+  s = s.replace(/^(global|us|eu|apac|apj|sa|usgov)\./, "");
+  s = s.replace(
+    /^(anthropic|amazon|cohere|meta|mistral|ai21|openai|google)\./,
+    "",
+  );
+  // Date stamps and bedrock revision tags.
+  s = s.replace(/[-_]?\d{8}/g, "");
+  s = s.replace(/[-_]v\d+(?::\d+)?$/i, "");
+  s = s.replace(/:\d+$/, "");
+  // Unify separators so "4.6" and "4-6" compare equal.
+  s = s.replace(/[._]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+
+  // Claude family: order-independent tier + version extraction.
+  if (s.includes("claude")) {
+    const tier = ["opus", "sonnet", "haiku"].find((t) => s.includes(t)) ?? "";
+    // Strip the family/tier words, then read the first numeric version group
+    // ("4-6" → 4.6, "4" → 4) — order-independent so "claude-4.5-opus" and
+    // "claude-opus-4-5" both resolve to 4.5.
+    const rest = s.replace("claude", "").replace(tier, "");
+    const vm = rest.match(/(\d+)(?:-(\d+))?/);
+    const ver = vm ? (vm[2] ? `${vm[1]}.${vm[2]}` : vm[1]) : "";
+    const labelParts = ["Claude", TITLE(tier), ver].filter(Boolean);
+    const keyParts = ["claude", tier, ver].filter(Boolean);
+    return { key: keyParts.join("-"), label: labelParts.join(" ") };
+  }
+
+  // Generic fallback: prettify the cleaned string but don't over-merge.
+  // Restore X.Y version dots ("4-1" → "4.1") for display only.
+  const label = TITLE(s.replace(/(\d)-(\d)/g, "$1.$2").replace(/-/g, " "))
+    .replace(/\bGpt\b/, "GPT")
+    .trim();
+  return { key: s, label };
+};
+
 /** Approximate framework detection from a span attribute or process tag. */
 export type Framework =
   | "AgentExecutor"

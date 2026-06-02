@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { FilterTrigger } from "../FilterTrigger";
 
 export interface DonutSlice {
   key: string;
@@ -9,6 +10,8 @@ export interface DonutSlice {
   color: string;
   /** Optional sublabel rendered under the legend label (e.g. "12% (Bedrock proxy)"). */
   sub?: string;
+  /** When set, the legend label becomes click-to-filter. */
+  filter?: { attribute: string; values: string[]; label?: string };
 }
 
 export interface DonutProps {
@@ -140,7 +143,17 @@ export const Donut = ({
               />
               <Flex flexDirection="column" gap={0}>
                 <Text style={{ fontSize: 12.5 }}>
-                  {s.label}{" "}
+                  {s.filter ? (
+                    <FilterTrigger
+                      attribute={s.filter.attribute}
+                      value={s.filter.values}
+                      label={s.filter.label ?? s.label}
+                    >
+                      {s.label}
+                    </FilterTrigger>
+                  ) : (
+                    s.label
+                  )}{" "}
                   <Text
                     as="span"
                     style={{

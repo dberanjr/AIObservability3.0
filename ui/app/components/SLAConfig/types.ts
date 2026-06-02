@@ -40,7 +40,7 @@ export const SLA_METRIC_UNITS: Record<SLAMetric, string> = {
 export const SLA_METRIC_ATTRS: Record<SLAMetric, string> = {
   p90Ms: "duration (P90 across agent spans)",
   p99Ms: "duration (P99 across agent spans)",
-  maxErrorRatePct: "span.events.exception.type / total spans",
+  maxErrorRatePct: "exception.type OR http.response.status_code ≥ 400 / total spans",
   maxCostPerInvocation:
     "gen_ai.usage.{input,output}_tokens × pricing.ts per model",
   maxTtftMs: "gen_ai.usage.time_to_first_token (not yet instrumented)",

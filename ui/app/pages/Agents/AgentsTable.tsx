@@ -12,6 +12,8 @@ import {
   type AgentHealthStatus,
 } from "../../components/SLAConfig/agentHealthScore";
 import { useSLA } from "../../components/SLAConfig/SLAContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import { StageBreakdownBar } from "./StageBreakdownBar";
 import type { AgentRow } from "./useAgents";
 
@@ -136,12 +138,13 @@ const ExpandedDetail = ({ row }: { row: AgentRow }) => (
             color: "var(--text-3)",
           }}
         >
-          Stage breakdown (estimated ms)
+          Stage mix (share of child spans)
         </Text>
         <StageBreakdownBar stage={row.stage} height={10} showLegend />
         <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-          Approximated from child-span counts. Exact parent-child decomposition
-          arrives with the topology session (Session 10).
+          Share of this agent's own spans by stage. LLM is typically ~0 because
+          model calls run on the shared proxy in a separate trace — see "Latency
+          by execution tier" for the LLM share of total time.
         </Text>
       </Flex>
       <Flex flexDirection="column" gap={4} style={{ minWidth: 180 }}>
@@ -173,18 +176,32 @@ const ExpandedDetail = ({ row }: { row: AgentRow }) => (
         >
           Cost
         </Text>
-        <Text style={{ fontSize: 12.5 }}>
-          Input tokens {fmtCount(row.inputTokens)}
-        </Text>
-        <Text style={{ fontSize: 12.5 }}>
-          Output tokens {fmtCount(row.outputTokens)}
-        </Text>
-        <Text style={{ fontSize: 12.5 }}>
-          Cost / invocation {fmtUSD(row.costPerInvocation)}
-        </Text>
-        <Text style={{ fontSize: 12.5 }}>
-          Total cost {fmtUSD(row.cost)} ({row.models.join(", ") || "model unknown"})
-        </Text>
+        {row.costAttributed ? (
+          <>
+            <Text style={{ fontSize: 12.5 }}>
+              Input tokens {fmtCount(row.inputTokens)}
+            </Text>
+            <Text style={{ fontSize: 12.5 }}>
+              Output tokens {fmtCount(row.outputTokens)}
+            </Text>
+            <Text style={{ fontSize: 12.5 }}>
+              Cost / invocation {fmtUSD(row.costPerInvocation)}
+            </Text>
+            <Text style={{ fontSize: 12.5 }}>
+              Total cost {fmtUSD(row.cost)} (
+              {row.models.join(", ") || "model unknown"})
+            </Text>
+          </>
+        ) : (
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.5 }}>
+            No cost attributable. This agent's LLM calls run through the central
+            proxy (<code>bos-proxy-core</code>) in a separate trace, so token
+            usage can't be tied back to it via <code>trace.id</code>. Agents
+            whose model calls share their trace (e.g. LangChain-instrumented
+            ones) do show cost. Fleet cost is exact on the Models and FinOps
+            tabs.
+          </Text>
+        )}
       </Flex>
     </Flex>
   </Flex>
@@ -197,6 +214,8 @@ export interface AgentsTableProps {
 
 export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
   const { thresholds, hasActive } = useSLA();
+  const { pageConfig } = useTweaks();
+  const showTtft = pageConfig.agentsShowTtft;
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const toggle = (id: string) =>
@@ -231,7 +250,9 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
           <HeaderCell width={80} align="right">Inv</HeaderCell>
           <HeaderCell width={80} align="right">P90</HeaderCell>
           <HeaderCell width={80} align="right">P99</HeaderCell>
-          <HeaderCell width={80} align="right">TTFT</HeaderCell>
+          {showTtft && (
+            <HeaderCell width={80} align="right">TTFT</HeaderCell>
+          )}
           <HeaderCell width={70} align="right">Err</HeaderCell>
           <HeaderCell width={100} align="right">$/inv</HeaderCell>
           <HeaderCell width={140}>Stages</HeaderCell>
@@ -251,7 +272,10 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
             </Text>
           </Flex>
         ) : (
-          rows.map((r) => {
+          // Cap to ~10 rows tall and scroll the rest, so the table doesn't
+          // dominate the page when there are many agents.
+          <div style={{ maxHeight: 460, overflowY: "auto" }}>
+          {rows.map((r) => {
             const id = `${r.serviceId}-${r.agent}`;
             const isExpanded = expanded === id;
             const slow = r.p90Ms > SLOW_ROW_P90_MS;
@@ -296,9 +320,27 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                       <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
                     )}
                   </Cell>
-                  <Cell mono>{r.agent}</Cell>
+                  <Cell mono>
+                    <FilterTrigger
+                      attribute="gen_ai.agent.name"
+                      value={r.agent}
+                      label="agent"
+                    >
+                      {r.agent}
+                    </FilterTrigger>
+                  </Cell>
                   <Cell width={140} mono color="var(--text-2)">
-                    {r.service}
+                    {r.service ? (
+                      <FilterTrigger
+                        attribute="service.name"
+                        value={r.service}
+                        label="service"
+                      >
+                        {r.service}
+                      </FilterTrigger>
+                    ) : (
+                      r.service
+                    )}
                   </Cell>
                   <Cell width={80} align="right" mono>
                     {fmtCount(r.invocations)}
@@ -314,9 +356,11 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                   <Cell width={80} align="right" mono>
                     {fmtMs(r.p99Ms)}
                   </Cell>
-                  <Cell width={80} align="right">
-                    <TTFTValue value={r.ttftMs} />
-                  </Cell>
+                  {showTtft && (
+                    <Cell width={80} align="right">
+                      <TTFTValue value={r.ttftMs} />
+                    </Cell>
+                  )}
                   <Cell
                     width={70}
                     align="right"
@@ -326,7 +370,20 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                     {r.errors > 0 ? fmtPercent(r.errorRatePct) : "0%"}
                   </Cell>
                   <Cell width={100} align="right" mono>
-                    {fmtUSD(r.costPerInvocation)}
+                    {r.costAttributed ? (
+                      fmtUSD(r.costPerInvocation)
+                    ) : (
+                      <Text
+                        style={{
+                          fontFamily: "var(--mono, monospace)",
+                          fontSize: 12.5,
+                          color: "var(--text-4)",
+                        }}
+                        title="LLM tokens for this agent run through the central proxy in a separate trace and can't be attributed. Cost is shown where an LLM span shares the agent's trace."
+                      >
+                        —
+                      </Text>
+                    )}
                   </Cell>
                   <Cell width={140} style={{ overflow: "visible" }}>
                     <StageBreakdownBar stage={r.stage} />
@@ -361,7 +418,8 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                 {isExpanded && <ExpandedDetail row={r} />}
               </React.Fragment>
             );
-          })
+          })}
+          </div>
         )}
       </Flex>
     </Surface>

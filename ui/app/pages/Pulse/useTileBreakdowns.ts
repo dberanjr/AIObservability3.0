@@ -3,7 +3,7 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
-import { stripModelVersion } from "../../detection/attributes";
+import { canonicalizeModel } from "../../detection/attributes";
 import { estimateCost, getPricing } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import {
@@ -23,6 +23,8 @@ export interface BreakdownSlice {
   /** Blended USD estimate derived from the tokens via pricing.ts. For
    * model slices we use the model-specific pricing when known. */
   cost: number;
+  /** Click-to-filter target for this slice's label. */
+  filter?: { attribute: string; values: string[]; label?: string };
 }
 
 export interface UseTileBreakdownsResult {
@@ -96,38 +98,55 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     // Accumulate the per-variant tokens into the canonical bucket too so
     // the table row totals are accurate.
     interface ModelAgg {
+      label: string;
+      rawModels: Set<string>;
       requests: number;
       inputTokens: number;
       outputTokens: number;
-      // Track one representative raw model id so we can look up
-      // per-model pricing instead of blending.
+      // Track the dominant raw model id (by requests) so per-model pricing
+      // lookup uses a real id, not a blended fallback.
       pricingKey: string;
+      domRequests: number;
     }
     const modelAcc = new Map<string, ModelAgg>();
     for (const r of modelsRes.data?.records ?? []) {
       if (typeof r.model !== "string" || !r.model) continue;
-      const canonical = stripModelVersion(r.model) || r.model;
+      const { key, label } = canonicalizeModel(r.model);
+      const reqs = num(r.requests);
       const cur =
-        modelAcc.get(canonical) ?? {
+        modelAcc.get(key) ?? {
+          label,
+          rawModels: new Set<string>(),
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
           pricingKey: r.model,
+          domRequests: -1,
         };
-      cur.requests += num(r.requests) * samplingRatio;
+      cur.rawModels.add(r.model);
+      cur.requests += reqs * samplingRatio;
       cur.inputTokens += num(r.input_tokens) * samplingRatio;
       cur.outputTokens += num(r.output_tokens) * samplingRatio;
-      modelAcc.set(canonical, cur);
+      if (reqs > cur.domRequests) {
+        cur.domRequests = reqs;
+        cur.pricingKey = r.model;
+      }
+      modelAcc.set(key, cur);
     }
     const models: BreakdownSlice[] = Array.from(modelAcc.entries())
-      .map(([label, agg]) => {
+      .map(([key, agg]) => {
         const pricing = getPricing(agg.pricingKey);
         return {
-          key: label,
-          label,
+          key,
+          label: agg.label,
           value: agg.requests,
           tokens: agg.inputTokens + agg.outputTokens,
           cost: estimateCost(agg.inputTokens, agg.outputTokens, pricing),
+          filter: {
+            attribute: "gen_ai.request.model",
+            values: Array.from(agg.rawModels),
+            label: "model",
+          },
         };
       })
       .sort((a, b) => b.value - a.value);
@@ -146,6 +165,11 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           value: num(r.requests) * samplingRatio,
           tokens: inTok + outTok,
           cost: estimateCost(inTok, outTok, BLENDED_PRICING),
+          filter: {
+            attribute: "traceloop.workflow.name",
+            values: [r.server],
+            label: "MCP server",
+          },
         };
       });
 
@@ -163,6 +187,11 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           value: num(r.calls) * samplingRatio,
           tokens: inTok + outTok,
           cost: estimateCost(inTok, outTok, BLENDED_PRICING),
+          filter: {
+            attribute: "traceloop.entity.name",
+            values: [r.tool],
+            label: "MCP tool",
+          },
         };
       });
 

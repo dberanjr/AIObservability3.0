@@ -11,9 +11,8 @@ import {
   type Density,
   type Theme,
   type TileStyle,
+  type ToolsMode,
 } from "./TweaksContext";
-import { SamplingSegmented } from "../layout/SamplingSegmented";
-import { ScanLimitSegmented } from "../layout/ScanLimitSegmented";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <Text
@@ -287,7 +286,17 @@ const CHART_LABELS_OPTIONS: SegmentOption<ChartLabels>[] = [
   { value: "peak", label: "peak" },
   { value: "minmax", label: "min/max" },
   { value: "interesting", label: "interesting" },
-  { value: "all", label: "all" },
+  { value: "all", label: "periodic" },
+];
+
+const TOOLS_MODE_OPTIONS: SegmentOption<ToolsMode>[] = [
+  { value: "strict", label: "Strict" },
+  { value: "discovered", label: "Discovered" },
+];
+
+const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
 ];
 
 /**
@@ -422,25 +431,6 @@ export const TweaksPanel = () => {
 
           </Flex>
 
-          <Flex flexDirection="column" gap={12} style={{ position: "relative", zIndex: 100 }}>
-            <SectionLabel>Data</SectionLabel>
-
-            <Flex flexDirection="column" gap={6} style={{ position: "relative", zIndex: 101 }}>
-              <FieldLabel>Sampling</FieldLabel>
-              <div style={{ position: "relative", zIndex: 102 }}>
-                <SamplingSegmented />
-              </div>
-            </Flex>
-
-            <Flex flexDirection="column" gap={6} style={{ position: "relative", zIndex: 101 }}>
-              <FieldLabel>Scan limit</FieldLabel>
-              <div style={{ position: "relative", zIndex: 102 }}>
-                <ScanLimitSegmented />
-              </div>
-            </Flex>
-
-          </Flex>
-
           <Flex flexDirection="column" gap={12}>
             <SectionLabel>Color & Charts</SectionLabel>
 
@@ -495,6 +485,38 @@ export const TweaksPanel = () => {
                 value={t.colorBlindFilter}
                 onChange={t.setColorBlindFilter}
               />
+            </Flex>
+          </Flex>
+
+          <Flex flexDirection="column" gap={12}>
+            <SectionLabel>Page configuration</SectionLabel>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Tools tab · tool definition</FieldLabel>
+              <Segmented
+                ariaLabel="Tools mode"
+                options={TOOLS_MODE_OPTIONS}
+                value={t.pageConfig.toolsMode}
+                onChange={t.setToolsMode}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Strict counts only spans with{" "}
+                <code>gen_ai.tool.name</code>. Discovered treats MCP / internal
+                function spans (by span name) as tools.
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Agents tab · TTFT column</FieldLabel>
+              <Segmented
+                ariaLabel="Show TTFT column"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.agentsShowTtft ? "on" : "off"}
+                onChange={(v) => t.setAgentsShowTtft(v === "on")}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Off by default —{" "}
+                <code>gen_ai.usage.time_to_first_token</code> is not
+                instrumented in this environment.
+              </Text>
             </Flex>
           </Flex>
 

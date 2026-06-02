@@ -154,6 +154,23 @@ export const PromptsSidebar = ({
         maxVisible={6}
       />
 
+      <FacetGroup
+        label="Agent"
+        options={facets.agents.map((a) => ({
+          value: a.value,
+          label: a.value,
+          count: a.count,
+        }))}
+        selected={filter.agents ?? []}
+        onChange={(next) =>
+          onFilterChange({
+            ...filter,
+            agents: next.length > 0 ? next : undefined,
+          })
+        }
+        maxVisible={6}
+      />
+
       <PrivacySegment value={privacy} onChange={onPrivacyChange} />
     </Flex>
   </Surface>

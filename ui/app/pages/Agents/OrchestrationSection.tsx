@@ -7,10 +7,11 @@ import {
   WarningIcon,
 } from "@dynatrace/strato-icons";
 import { fmtCount, fmtMs } from "../../data/format";
-import type { AgentRow } from "./useAgents";
+import { FilterTrigger } from "../../components/FilterTrigger";
+import type { NodeRow } from "./useOrchestrationNodes";
 
 export interface OrchestrationSectionProps {
-  rows: AgentRow[];
+  rows: NodeRow[];
 }
 
 export const OrchestrationSection = ({ rows }: OrchestrationSectionProps) => {
@@ -87,9 +88,10 @@ export const OrchestrationSection = ({ rows }: OrchestrationSectionProps) => {
               style={{ color: "var(--amber)", flex: "0 0 auto", marginTop: 2 }}
             />
             <Text style={{ fontSize: 12, color: "var(--text)" }}>
-              These are LangGraph / RunnableChain framework internals. Latency
-              includes orchestration overhead. Excluded from headline counts so
-              SLA scoring isn't diluted by no-op router nodes.
+              Node-level runtime breakdown — each row is an individual runtime
+              span (<code>span.name</code>) inside an agent execution (tool
+              calls, routers, retrieval, sub-steps), not the agent itself.
+              Latency is per-node. Excluded from headline agent counts.
             </Text>
           </Flex>
           <Flex
@@ -103,42 +105,58 @@ export const OrchestrationSection = ({ rows }: OrchestrationSectionProps) => {
             }}
           >
             <span style={{ flex: 1 }}>Node</span>
-            <span style={{ width: 140 }}>Service</span>
+            <span style={{ width: 160 }}>Agent</span>
             <span style={{ width: 80, textAlign: "right" }}>Invocations</span>
             <span style={{ width: 80, textAlign: "right" }}>Avg</span>
             <span style={{ width: 80, textAlign: "right" }}>P90</span>
           </Flex>
           {rows.map((r) => (
             <Flex
-              key={`${r.serviceId}-${r.agent}`}
+              key={`${r.agent}-${r.node}`}
               alignItems="center"
               style={{
                 padding: "6px 10px",
                 borderTop: "1px solid var(--border)",
               }}
             >
-              <Text
-                style={{
-                  flex: 1,
-                  fontFamily: "var(--mono, monospace)",
-                  fontSize: 12,
-                }}
-              >
-                {r.agent}
-              </Text>
-              <Text
-                style={{
-                  width: 140,
-                  fontFamily: "var(--mono, monospace)",
-                  fontSize: 12,
-                  color: "var(--text-2)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {r.service}
-              </Text>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <FilterTrigger attribute="span.name" value={r.node} label="node">
+                  <Text
+                    style={{
+                      fontFamily: "var(--mono, monospace)",
+                      fontSize: 12,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                    }}
+                  >
+                    {r.node}
+                  </Text>
+                </FilterTrigger>
+              </span>
+              <span style={{ width: 160 }}>
+                <FilterTrigger
+                  attribute="gen_ai.agent.name"
+                  value={r.agent}
+                  label="agent"
+                >
+                  <Text
+                    style={{
+                      fontFamily: "var(--mono, monospace)",
+                      fontSize: 12,
+                      color: "var(--text-2)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                    }}
+                    title={r.service}
+                  >
+                    {r.agent}
+                  </Text>
+                </FilterTrigger>
+              </span>
               <Text
                 style={{
                   width: 80,

@@ -9,6 +9,7 @@ import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
 import { useTraceSpans } from "./useTraceSpans";
+import { usePromptSpanDetail } from "./usePromptSpanDetail";
 import { TraceTree } from "./TraceTree";
 import { openInTraces } from "../../lib/intents";
 
@@ -166,8 +167,9 @@ export const PromptDetailPanel = ({
   privacy,
   onClose,
 }: PromptDetailPanelProps) => {
-  const [activeTab, setActiveTab] = useState<DetailTab>("trace");
+  const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
   const { spans, isLoading, error } = useTraceSpans(prompt.traceId);
+  const spanDetail = usePromptSpanDetail(prompt.spanId);
 
   const inputText =
     privacy === "mask" ? maskPII(prompt.promptText) : prompt.promptText;
@@ -209,9 +211,9 @@ export const PromptDetailPanel = ({
             value={activeTab}
             onChange={setActiveTab}
             options={[
-              { value: "trace", label: "Trace" },
               { value: "prompts", label: "Prompts" },
               { value: "eval", label: "Eval" },
+              { value: "trace", label: "Trace" },
               { value: "info", label: "Info" },
             ]}
           />
@@ -318,6 +320,88 @@ export const PromptDetailPanel = ({
               Out tokens
             </Text>
             <Text>{fmtTokens(prompt.outTokens)}</Text>
+
+            {prompt.provider && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Provider
+                </Text>
+                <Text>{prompt.provider}</Text>
+              </>
+            )}
+
+            {spanDetail.detail?.finishReason && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Finish reason
+                </Text>
+                <Text>{spanDetail.detail.finishReason}</Text>
+              </>
+            )}
+
+            {spanDetail.detail?.temperature != null && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Temperature
+                </Text>
+                <Text>{spanDetail.detail.temperature}</Text>
+              </>
+            )}
+
+            {spanDetail.detail?.maxTokens != null && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Max tokens
+                </Text>
+                <Text>{fmtTokens(spanDetail.detail.maxTokens)}</Text>
+              </>
+            )}
+
+            {spanDetail.detail?.scope && (
+              <>
+                <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+                  Instrumentation
+                </Text>
+                <Text style={{ fontFamily: "var(--mono, monospace)", fontSize: 11 }}>
+                  {spanDetail.detail.scope}
+                </Text>
+              </>
+            )}
+
+            <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
+              Logs
+            </Text>
+            <Text>
+              {spanDetail.isLoading ? (
+                <Text as="span" style={{ color: "var(--text-3)" }}>
+                  loading…
+                </Text>
+              ) : (
+                <>
+                  <Text
+                    as="span"
+                    style={{
+                      color:
+                        spanDetail.errorLogs > 0 ? "var(--red)" : "var(--text)",
+                    }}
+                  >
+                    {spanDetail.errorLogs} error
+                  </Text>
+                  {" · "}
+                  <Text
+                    as="span"
+                    style={{
+                      color:
+                        spanDetail.warningLogs > 0
+                          ? "var(--amber)"
+                          : "var(--text)",
+                    }}
+                  >
+                    {spanDetail.warningLogs} warning
+                  </Text>
+                </>
+              )}
+            </Text>
 
             <Text style={{ fontWeight: 600, color: "var(--text-3)" }}>
               Trace ID

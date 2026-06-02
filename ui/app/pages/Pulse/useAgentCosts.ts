@@ -3,13 +3,14 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
-import { buildAgentCostQuery } from "./dataQueries";
+import { buildAgentTraceJoinQuery } from "../Agents/queries";
 import { estimateCost, getPricing } from "../../data/pricing";
+import { canonicalizeModel } from "../../detection/attributes";
 
 interface AgentRecord {
   agent?: string;
-  model?: string;
-  invocations?: number;
+  models?: Array<string | null>;
+  linked_traces?: number;
   input_tokens?: number;
   output_tokens?: number;
 }
@@ -38,44 +39,42 @@ export const useAgentCosts = (): UseAgentCostsResult => {
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
 
+  // Agent spans carry no tokens in this tenant (LLM calls run through the
+  // central proxy), so the only way to cost an agent is the trace-join: LLM
+  // token usage that shares a trace.id with the agent. Opts out of the global
+  // filter for the same reason as the Agents-tab join (must keep both span
+  // types). Agents whose LLM calls run in separate traces won't appear.
   const { data, isLoading, error } = useScopedDql<AgentRecord>(
-    canQuery ? buildAgentCostQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    canQuery ? buildAgentTraceJoinQuery(serviceIds, scope.timeframe) : "",
+    { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
   );
 
   return useMemo<UseAgentCostsResult>(() => {
     const byAgent = new Map<string, AgentCost>();
     for (const r of data?.records ?? []) {
       if (!r.agent) continue;
-      const pricing = getPricing(r.model);
-      // Extrapolate token sums and invocation counts back to the unsampled
-      // population. Cost is derived from the extrapolated token figures so it
-      // scales correctly without an explicit multiply.
+      const rawModels = (r.models ?? []).filter(
+        (m): m is string => typeof m === "string" && m.length > 0,
+      );
+      const pricing = getPricing(rawModels[0]);
+      // Extrapolate token sums back to the unsampled population; cost derives
+      // from the extrapolated figures.
       const inTok = (r.input_tokens ?? 0) * samplingRatio;
       const outTok = (r.output_tokens ?? 0) * samplingRatio;
-      const invocations = (r.invocations ?? 0) * samplingRatio;
+      const invocations = (r.linked_traces ?? 0) * samplingRatio;
       const cost = estimateCost(inTok, outTok, pricing);
-      const existing = byAgent.get(r.agent);
-      if (existing) {
-        existing.invocations += invocations;
-        existing.inputTokens += inTok;
-        existing.outputTokens += outTok;
-        existing.tokens += inTok + outTok;
-        existing.cost += cost;
-        if (r.model && !existing.models.includes(r.model)) {
-          existing.models.push(r.model);
-        }
-      } else {
-        byAgent.set(r.agent, {
-          agent: r.agent,
-          invocations,
-          inputTokens: inTok,
-          outputTokens: outTok,
-          tokens: inTok + outTok,
-          cost,
-          models: r.model ? [r.model] : [],
-        });
-      }
+      const models = Array.from(
+        new Set(rawModels.map((m) => canonicalizeModel(m).label)),
+      );
+      byAgent.set(r.agent, {
+        agent: r.agent,
+        invocations,
+        inputTokens: inTok,
+        outputTokens: outTok,
+        tokens: inTok + outTok,
+        cost,
+        models,
+      });
     }
     const rows = Array.from(byAgent.values()).sort((a, b) => b.cost - a.cost);
     const totalCost = rows.reduce((acc, r) => acc + r.cost, 0);

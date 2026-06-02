@@ -84,34 +84,69 @@ fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 200
 | summarize services = countDistinct(dt.entity.service)
 `.trim();
 
-export interface GlobalFilters {
-  agents: string[];
-  models: string[];
-  providers: string[];
-  tools: string[];
-  services: string[];
+export interface FilterCondition {
+  attribute: string;
+  values: string[];
 }
 
-export const globalFilterClauses = (f?: GlobalFilters): string =>
-  [
-    f?.agents?.length
-      ? `| filter in(gen_ai.agent.name, array(${dqlIdArray(f.agents)}))`
-      : "",
-    f?.models?.length
-      ? `| filter in(gen_ai.request.model, array(${dqlIdArray(f.models)}))`
-      : "",
-    f?.providers?.length
-      ? `| filter in(gen_ai.provider.name, array(${dqlIdArray(f.providers)}))`
-      : "",
-    f?.tools?.length
-      ? `| filter in(gen_ai.tool.name, array(${dqlIdArray(f.tools)}))`
-      : "",
-    f?.services?.length
-      ? `| filter in(service.name, array(${dqlIdArray(f.services)}))`
-      : "",
-  ]
-    .filter(Boolean)
+export interface GlobalFilters {
+  conditions: FilterCondition[];
+}
+
+/** Only allow well-formed attribute paths to be interpolated as a DQL field. */
+const SAFE_ATTR_RE = /^[A-Za-z][A-Za-z0-9_.]*$/;
+
+/**
+ * Emit a DQL filter pipe for each global filter condition. Values are matched
+ * with `in(toString(<attr>), array(...))` so the comparison works regardless
+ * of the attribute's underlying type (string / long / boolean). Conditions
+ * AND together; values within a condition OR together.
+ *
+ * Note: this is a span-LEVEL filter. Filtering on an attribute that only
+ * exists on one span type (e.g. gen_ai.agent.name) will naturally exclude
+ * spans of other types on panels that read those — that's inherent to span
+ * filtering in a multi-span-type trace model.
+ */
+const emitConditionPipes = (f?: GlobalFilters): string =>
+  (f?.conditions ?? [])
+    .filter(
+      (c) =>
+        c &&
+        SAFE_ATTR_RE.test(c.attribute) &&
+        Array.isArray(c.values) &&
+        c.values.length > 0,
+    )
+    .map(
+      (c) =>
+        `| filter in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`,
+    )
     .join("\n");
+
+/**
+ * @deprecated Inline filtering is now applied centrally by
+ * `injectGlobalFilters` in `useScopedDql`, so every `fetch spans/logs` query
+ * inherits the global filter without each builder threading it. Builders may
+ * still call this (it returns "") which keeps their `filters` param live and
+ * forward-compatible. Do not add new call sites.
+ */
+export const globalFilterClauses = (_f?: GlobalFilters): string => "";
+
+/**
+ * Insert the global filter pipes immediately after the first
+ * `fetch spans|logs …` statement in a query. Used by useScopedDql so the
+ * active global filter applies to every data query in the app.
+ */
+export const injectGlobalFilters = (
+  query: string,
+  f?: GlobalFilters,
+): string => {
+  const pipes = emitConditionPipes(f);
+  if (!pipes || !query) return query;
+  return query.replace(
+    /^(\s*fetch\s+(?:spans|logs)\b[^\n]*\n)/m,
+    `$1${pipes}\n`,
+  );
+};
 
 export const buildFilterOptionsQuery = (
   serviceIds: string[] | null,

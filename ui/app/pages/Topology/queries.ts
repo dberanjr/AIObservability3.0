@@ -23,7 +23,7 @@ ${globalFilterClauses(filters)}
     or isNotNull(gen_ai.agent.name)
     or isNotNull(gen_ai.tool.name)
 | fieldsAdd
-    has_err = if(isNotNull(exception.type), 1, else: 0)
+    has_err = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
 | summarize
     calls = count(),
     errors = sum(has_err),

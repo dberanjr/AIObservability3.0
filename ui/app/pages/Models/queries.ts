@@ -18,10 +18,11 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.request.model)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type), 1, else: 0),
+    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
     is_timeout = if(span.status_code == "TIMEOUT", 1, else: 0),
     has_timeout_attr = if(isNotNull(span.status_code), 1, else: 0),
     op_name = gen_ai.operation.name

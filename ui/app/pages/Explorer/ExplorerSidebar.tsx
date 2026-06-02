@@ -37,7 +37,7 @@ export const ExplorerSidebar = ({
           onChange={(value) =>
             onFilterChange({ ...filter, search: value || undefined })
           }
-          placeholder="Filter services"
+          placeholder="Search services, agents, models"
         />
       </Flex>
 

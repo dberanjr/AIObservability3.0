@@ -14,6 +14,7 @@ import {
   useChartExpander,
 } from "../../components/charts/ChartExpander";
 import { InfoTooltip } from "../../components/InfoTooltip";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import { useTweaks } from "../../tweaks/TweaksContext";
 import {
   fmtCount,
@@ -549,7 +550,17 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                         }}
                         title={s.label}
                       >
-                        {s.label}
+                        {s.filter ? (
+                          <FilterTrigger
+                            attribute={s.filter.attribute}
+                            value={s.filter.values}
+                            label={s.filter.label ?? s.label}
+                          >
+                            {s.label}
+                          </FilterTrigger>
+                        ) : (
+                          s.label
+                        )}
                       </td>
                       <td style={{ padding: "8px", textAlign: "right" }}>
                         {fmt(s.value)}

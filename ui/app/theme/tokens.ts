@@ -227,4 +227,14 @@ ${toBlock(darkSurfaces)}
 :root[data-aiobs-accent="gray50"]     { --blue: ${brand.gray50};     --blue-pale: ${brand.gray75}; }
 :root[data-aiobs-accent="gray75"]     { --blue: ${brand.gray75};     --blue-pale: ${brand.black}; }
 :root[data-aiobs-accent="black"]      { --blue: ${brand.black};      --blue-pale: ${brand.gray75}; }
+
+/* Click-to-filter affordance: subtle highlight + boxed underline on hover. */
+.aiobs-filter-trigger:hover {
+  background: color-mix(in oklab, var(--blue) 14%, transparent);
+  box-shadow: inset 0 -1px 0 0 var(--blue);
+}
+.aiobs-filter-trigger:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
 `;
