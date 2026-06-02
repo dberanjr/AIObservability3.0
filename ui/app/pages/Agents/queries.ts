@@ -25,6 +25,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -96,6 +97,7 @@ ${globalFilterClauses(filters)}
 | filter span.kind == "internal"
 | filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
 | filter span.name != gen_ai.agent.name
+| dedup {span.id}
 | summarize
     invocations = count(),
     avg_ns = avg(duration),
@@ -136,6 +138,7 @@ export const buildAgentTraceJoinQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.request.model)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
@@ -179,6 +182,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | fieldsAdd lname = lower(span.name)
 | fieldsAdd tier = if(isNotNull(gen_ai.provider.name), "LLM",
     else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "Retrieval/DB",
@@ -233,7 +237,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
-| summarize by: { svc = dt.entity.service }
+| summarize spans = count(), by: { svc = dt.entity.service }
 | limit 200
 `.trim();
 

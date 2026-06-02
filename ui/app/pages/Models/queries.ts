@@ -18,6 +18,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.request.model)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),

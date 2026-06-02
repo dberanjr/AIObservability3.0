@@ -1,7 +1,18 @@
-import { dqlEscape, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
+import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
+
+/** Sidebar facet selections applied server-side so the 200-row cap is taken
+ *  AFTER filtering (not before). Service + kind + search are pushed into DQL;
+ *  model/agent stay client-side (canonical label / trace-backfilled). */
+export interface PromptsSidebarFilter {
+  services?: string[];
+  kinds?: string[];
+  search?: string;
+}
+
+const SVC_EXPR = `coalesce(service.name, getNodeName(dt.smartscape.service))`;
 
 /**
  * Per-prompt rows for the Stream / Metadata views. Reads a small set of
@@ -12,7 +23,23 @@ export const buildPromptsListQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
-): string => `
+  sidebar?: PromptsSidebarFilter,
+): string => {
+  const svcClause = sidebar?.services?.length
+    ? `| filter in(${SVC_EXPR}, array(${dqlIdArray(sidebar.services)}))`
+    : "";
+  const kinds = sidebar?.kinds ?? [];
+  const kindClause =
+    kinds.length === 1
+      ? kinds[0] === "Agent"
+        ? "| filter isNotNull(gen_ai.agent.name)"
+        : "| filter isNull(gen_ai.agent.name)"
+      : "";
+  const q = (sidebar?.search ?? "").trim().toLowerCase();
+  const searchClause = q
+    ? `| filter contains(lower(prompt_text), "${dqlEscape(q)}") or contains(lower(response_text), "${dqlEscape(q)}") or contains(lower(coalesce(system_prompt, "")), "${dqlEscape(q)}")`
+    : "";
+  return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
@@ -21,6 +48,10 @@ ${globalFilterClauses(filters)}
 // LangChain gen_ai.system) and is the convention the platform AI app uses.
 | filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)
 | filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
+${svcClause}
+${kindClause}
+// Collapse duplicate span records (this tenant double-emits some spans).
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -61,6 +92,7 @@ ${globalFilterClauses(filters)}
 // Keep only rows that carry a prompt or response (or are errors). This drops
 // the central-proxy spans, which have tokens but no content.
 | filter prompt_text != "" or response_text != "" or span.status_code == "error"
+${searchClause}
 | fields
     timestamp = start_time,
     kind,
@@ -88,6 +120,7 @@ ${globalFilterClauses(filters)}
 | sort timestamp desc
 | limit 200
 `.trim();
+};
 
 /**
  * Trace → agent map. LLM-call spans (gen_ai.provider.name) carry no
@@ -173,6 +206,7 @@ ${globalFilterClauses(filters)}
 export const buildTraceSpansQuery = (traceId: string): string => `
 fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
 | filter trace.id == "${traceId}"
+| dedup {span.id}
 | fieldsAdd
     duration_ms = duration / 1000000,
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),

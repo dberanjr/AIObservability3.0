@@ -18,6 +18,7 @@ export const buildTokenEfficiencyQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -48,6 +49,7 @@ export const buildSummaryQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -110,6 +112,7 @@ export const buildTokenSeriesQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | makeTimeseries
     tokens = sum(toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)) + toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))),
     interval: ${intervalSec}s
@@ -151,6 +154,7 @@ export const buildSummarySparkSeriesQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -173,6 +177,7 @@ export const buildActivityHistogramQuery = (
 fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 5000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | makeTimeseries requests = count(), interval: 1h
 `.trim();
 
@@ -189,6 +194,7 @@ export const buildModelsBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
@@ -265,6 +271,7 @@ export const buildProviderMixQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | fieldsAdd
     provider = ${dqlNormalizedProvider()},
     via_bedrock = if(${dqlViaBedrock()}, 1, else: 0)

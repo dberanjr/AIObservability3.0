@@ -20,6 +20,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name)
+| dedup {span.id}
 | fieldsAdd
     is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
     retries = coalesce(toLong(gen_ai.tool.retry_count), 0),
@@ -68,6 +69,7 @@ ${globalFilterClauses(filters)}
 | filter span.kind == "internal" or span.kind == "client"
 | filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
 | filter span.name != gen_ai.agent.name
+| dedup {span.id}
 | fieldsAdd
     is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
 | summarize

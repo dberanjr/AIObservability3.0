@@ -150,15 +150,33 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  // Service / kind / search facets are applied SERVER-SIDE so the 200-row cap
+  // is taken after filtering (model/agent stay client-side below). The query
+  // therefore varies with those facets and refetches when they change.
+  const sidebar = {
+    services: filter.services,
+    kinds: filter.kinds,
+    search: filter.search,
+  };
   const query = useMemo(
     () =>
       canQuery
-        ? buildPromptsListQuery(resolution.serviceIds, scope.timeframe, filters) +
-          ` /* r${refreshKey} */`
+        ? buildPromptsListQuery(
+            resolution.serviceIds,
+            scope.timeframe,
+            filters,
+            sidebar,
+          ) + ` /* r${refreshKey} */`
         : "",
-    // The global attribute filter is injected centrally by useScopedDql, so
-    // the query string itself no longer varies by filter — no filter deps here.
-    [canQuery, resolution.serviceIds, scope.timeframe, refreshKey],
+    [
+      canQuery,
+      resolution.serviceIds,
+      scope.timeframe,
+      refreshKey,
+      filter.services?.join(","),
+      filter.kinds?.join(","),
+      filter.search,
+    ],
   );
 
   const { data, isLoading, error } = useScopedDql<PromptRecord>(query, {

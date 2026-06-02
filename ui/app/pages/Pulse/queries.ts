@@ -15,6 +15,7 @@ export const buildSlowAgentsQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
+| dedup {span.id}
 | fieldsAdd is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
 | summarize
     p95_ms = percentile(duration, 95) / 1000000,
@@ -34,6 +35,7 @@ export const buildSlowModelsQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
+| dedup {span.id}
 | summarize
     p95_ms = percentile(duration, 95) / 1000000,
     calls = count(),
@@ -55,6 +57,7 @@ export const buildOperationalQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
+| dedup {span.id}
 | fieldsAdd is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
 | summarize
     total = count(),
@@ -74,6 +77,7 @@ export const buildQualityPresenceQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | fieldsAdd has_eval = if(
     isNotNull(gen_ai.evaluation.score)
       or isNotNull(gen_ai.evaluation.hallucination)
@@ -98,6 +102,7 @@ export const buildCostQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | summarize
     requests = count(),
     input_tokens = sum(toLong(gen_ai.usage.input_tokens)),
@@ -111,6 +116,7 @@ export const buildCostBaselineQuery = (
 fetch spans, samplingRatio: 1, from: now()-7d, to: now(), scanLimitGBytes: 1000
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | summarize
     requests_7d = count(),
     input_tokens_7d = sum(toLong(gen_ai.usage.input_tokens)),
