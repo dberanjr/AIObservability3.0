@@ -39,6 +39,9 @@ export interface TraceSpan {
   exceptionType: string | null;
   exceptionMsg: string | null;
   workflow: string | null;
+  tlEntity: string | null;
+  tlEntityPath: string | null;
+  tlKind: string | null;
   sessionId: string | null;
 }
 
@@ -69,6 +72,9 @@ interface TraceSpanRecord {
   exception_type?: string | null;
   exception_msg?: string | null;
   workflow?: string | null;
+  tl_entity?: string | null;
+  tl_entity_path?: string | null;
+  tl_kind?: string | null;
   session_id?: string | null;
 }
 
@@ -136,6 +142,9 @@ export const useTraceSpans = (
         exceptionType: r.exception_type ?? null,
         exceptionMsg: r.exception_msg ?? null,
         workflow: r.workflow ?? null,
+        tlEntity: r.tl_entity ?? null,
+        tlEntityPath: r.tl_entity_path ?? null,
+        tlKind: r.tl_kind ?? null,
         sessionId: r.session_id ?? null,
       });
     }

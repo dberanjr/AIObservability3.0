@@ -283,7 +283,15 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
           value: span.outTokens > 0 ? span.outTokens : null,
           type: "number",
         },
+      ]),
+    },
+    {
+      title: "Langchain",
+      rows: present([
         { label: "Workflow", value: span.workflow, type: "string" },
+        { label: "Entity name", value: span.tlEntity, type: "string" },
+        { label: "Entity path", value: span.tlEntityPath, type: "string" },
+        { label: "Span kind", value: span.tlKind, type: "string" },
       ]),
     },
     {
@@ -314,8 +322,18 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
   return sections.filter((s) => s.rows.length > 0);
 };
 
-const AttrSection = ({ section }: { section: AttrSectionData }) => {
-  const [open, setOpen] = useState(true);
+// Sections expanded by default; the rest (Code attributes, Error, Identifiers)
+// start collapsed.
+const OPEN_BY_DEFAULT = new Set(["Core", "Gen AI", "Langchain"]);
+
+const AttrSection = ({
+  section,
+  defaultOpen = true,
+}: {
+  section: AttrSectionData;
+  defaultOpen?: boolean;
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div
       style={{
@@ -440,7 +458,9 @@ const SpanAttributesPanel = ({ span, maxHeight }: SpanAttributesPanelProps) => {
           flexDirection: "column",
           gap: 8,
           maxHeight: maxHeight ?? 360,
-          overflow: "auto",
+          overflowY: "auto",
+          overflowX: "hidden",
+          paddingRight: 4,
         }}
       >
         {sections.length === 0 ? (
@@ -448,7 +468,15 @@ const SpanAttributesPanel = ({ span, maxHeight }: SpanAttributesPanelProps) => {
             No attributes match your search.
           </Text>
         ) : (
-          sections.map((s) => <AttrSection key={s.title} section={s} />)
+          sections.map((s) => (
+            // Remount when a search term toggles so collapsed sections open to
+            // reveal matches (and revert to their default when search clears).
+            <AttrSection
+              key={`${s.title}:${term ? "q" : ""}`}
+              section={s}
+              defaultOpen={!!term || OPEN_BY_DEFAULT.has(s.title)}
+            />
+          ))
         )}
       </div>
     </Flex>

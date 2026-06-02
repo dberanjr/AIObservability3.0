@@ -345,6 +345,9 @@ fetch spans, samplingRatio: 1, from: ${from}, to: ${to}, scanLimitGBytes: 100
     exception_type = exception.type,
     exception_msg = exception.message,
     workflow = traceloop.workflow.name,
+    tl_entity = traceloop.entity.name,
+    tl_entity_path = traceloop.entity.path,
+    tl_kind = traceloop.span.kind,
     session_id = dt.rum.session.id
 | sort timestamp asc
 | limit 100
