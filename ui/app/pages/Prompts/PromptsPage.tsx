@@ -1,6 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import {
+  CloseSidebarIcon,
+  OpenSidebarIcon,
+  FilterIcon,
+} from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
@@ -14,6 +19,37 @@ import { usePromptSummary } from "./usePromptSummary";
 export const PromptsPage = () => {
   const [filter, setFilter] = useState<PromptsFilter>({});
   const [view, setView] = useState<PromptView>("stream");
+  // Sticky sidebar height must equal the space from its (pinned) top to the
+  // viewport bottom — a fixed calc() guesses the page-header height wrong and
+  // pushes the bottom (Privacy) off-screen, unreachable by the inner scroll.
+  // Measure it from the element's actual top instead, on mount/scroll/resize.
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const [sidebarMaxH, setSidebarMaxH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    let raf = 0;
+    const compute = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = sidebarRef.current;
+        if (!el) return;
+        const top = el.getBoundingClientRect().top;
+        setSidebarMaxH(Math.max(220, window.innerHeight - top - 24));
+      });
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    // capture:true so the inner Page.Main scroll container's events are caught.
+    window.addEventListener("scroll", compute, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("scroll", compute, true);
+    };
+  }, []);
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState<boolean>(
+    "ai-obs.prompts-sidebar-collapsed",
+    false,
+  );
   const [privacy, setPrivacy] = usePersistedState<PrivacyMode>(
     "ai-obs.prompts-privacy",
     "mask",
@@ -44,19 +80,87 @@ export const PromptsPage = () => {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "230px minmax(0, 1fr)",
+        gridTemplateColumns: sidebarCollapsed
+          ? "36px minmax(0, 1fr)"
+          : "248px minmax(0, 1fr)",
         gap: 16,
         padding: "18px 20px 80px",
         alignItems: "start",
       }}
     >
-      <PromptsSidebar
-        facets={facets}
-        filter={filter}
-        privacy={privacy}
-        onFilterChange={setFilter}
-        onPrivacyChange={setPrivacy}
-      />
+      {/* Sticky so the filters stay in view while the prompt list scrolls; it
+          scrolls internally when taller than the viewport. The sidebar content
+          is fluid-width and we reserve gutter space (scrollbar-gutter +
+          paddingRight) so the scrollbar never overlaps the right-aligned facet
+          counts (the bug that hid the totals before). Collapsible to reclaim
+          horizontal space for the table. */}
+      <div
+        ref={sidebarRef}
+        style={{
+          position: "sticky",
+          top: 16,
+          alignSelf: "start",
+          maxHeight: sidebarMaxH ? `${sidebarMaxH}px` : "calc(100vh - 160px)",
+          overflowY: sidebarCollapsed ? "visible" : "auto",
+          paddingRight: sidebarCollapsed ? 0 : 8,
+          scrollbarGutter: sidebarCollapsed ? "auto" : "stable",
+        }}
+      >
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(false)}
+            title="Show filters"
+            aria-label="Show filters"
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 0",
+              width: 36,
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text-2)",
+            }}
+          >
+            <OpenSidebarIcon size={16} />
+            <FilterIcon size={16} />
+          </button>
+        ) : (
+          <>
+            <Flex justifyContent="flex-end" style={{ marginBottom: 6 }}>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(true)}
+                title="Hide filters"
+                aria-label="Hide filters"
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 4,
+                  borderRadius: 6,
+                  color: "var(--text-3)",
+                }}
+              >
+                <CloseSidebarIcon size={16} />
+              </button>
+            </Flex>
+            <PromptsSidebar
+              facets={facets}
+              filter={filter}
+              privacy={privacy}
+              onFilterChange={setFilter}
+              onPrivacyChange={setPrivacy}
+            />
+          </>
+        )}
+      </div>
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
         {firstError && <ErrorBanner error={firstError} />}
@@ -91,7 +195,11 @@ export const PromptsPage = () => {
             </Text>
           </Flex>
         )}
-        <PromptsTilesRow summary={summary} />
+        <PromptsTilesRow
+          summary={summary}
+          filter={filter}
+          onFilterChange={setFilter}
+        />
         <PromptQualityAnalytics quality={quality} />
 
         <PromptsTable

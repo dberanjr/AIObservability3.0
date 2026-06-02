@@ -220,6 +220,10 @@ export const normalizeModelKey = (model: string): string => {
   s = s.replace(/-\d{4}-\d{2}-\d{2}$/, "");
   // Normalize friendly periods to canonical hyphens (4.5 → 4-5).
   s = s.replace(/\./g, "-");
+  // Canonical labels use spaces ("Claude Sonnet 4.5") — fold them to hyphens so
+  // a display label resolves to the same key as the raw id ("claude-sonnet-4-5").
+  s = s.replace(/\s+/g, "-");
+  s = s.replace(/-+/g, "-");
   return s;
 };
 

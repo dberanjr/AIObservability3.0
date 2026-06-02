@@ -31,6 +31,12 @@ interface IntentContext {
   traceId?: string;
   /** Span ID for span-scoped drills. */
   spanId?: string;
+  /**
+   * Epoch-ms timestamp of the record being drilled into. Used to bracket the
+   * `fetch spans` window tightly around the trace so the Distributed Tracing
+   * app finds it fast (Grail is time-partitioned) without scanning 24h.
+   */
+  startMs?: number;
   /** Davis problem ID. */
   problemId?: string;
   /** Optional pre-built DQL query the receiving app should run. */
@@ -54,31 +60,122 @@ const safeSend = (
   }
 };
 
+const dqlStr = (s: string): string =>
+  s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
 /**
- * Build a DQL query targeting the relevant spans, then route through Notebooks
- * (or whichever app the user has installed that handles `dt.query`).
+ * The Distributed Tracing app handles the `view-traces` intent, which takes a
+ * `dt.filter` (its own filter DSL — NOT DQL) plus a `dt.timeframe`. This is the
+ * contract observed from the Services app's "View traces" link, e.g.:
+ *   /ui/intent/dynatrace.distributedtracing/view-traces#
+ *     {"dt.filter":"dt.smartscape.service = SERVICE-… AND
+ *       dt.smartscape.service.entity.name = ReserveController",
+ *      "dt.timeframe":{ "from": "…", "to": "…" }}
+ * The app does NOT handle `dt.query`, so the previous exemplar approach never
+ * surfaced it in "Open with…".
+ */
+const DT_TRACING_APP_ID = "dynatrace.distributedtracing";
+// `view-traces` opens the Explorer list (Requests/Spans). `view-trace` opens a
+// single trace's WATERFALL directly — it shows every span regardless of whether
+// the trace has a request-root span, so it works for agentic/OTel traces (which
+// have none, leaving the Explorer's default Requests view empty). Both intent
+// contracts confirmed via `dtctl get intents`.
+const DT_VIEW_TRACES_INTENT_ID = "view-traces";
+const DT_VIEW_TRACE_INTENT_ID = "view-trace";
+
+/**
+ * Absolute ISO timeframe bracketing the record (±30m). Wide enough to contain
+ * the trace, tight enough that the Distributed Tracing app loads quickly.
+ */
+const traceTimeframe = (startMs?: number): { from: string; to: string } => {
+  if (typeof startMs === "number" && Number.isFinite(startMs)) {
+    const pad = 30 * 60 * 1000;
+    return {
+      from: new Date(startMs - pad).toISOString(),
+      to: new Date(startMs + pad).toISOString(),
+    };
+  }
+  const now = Date.now();
+  return {
+    from: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+    to: new Date(now).toISOString(),
+  };
+};
+
+/**
+ * Build the `dt.filter` value for the view-traces intent. Trace/entity ids are
+ * single tokens (no spaces) so they pass unquoted, matching the Services app's
+ * generated filter; a display name is quoted in case it contains spaces.
+ */
+const buildTraceFilter = (ctx: IntentContext): string | null => {
+  if (ctx.traceId) return `trace.id = ${ctx.traceId}`;
+  if (ctx.entityId) return `dt.smartscape.service = ${ctx.entityId}`;
+  if (ctx.entity)
+    return `dt.smartscape.service.entity.name = "${dqlStr(ctx.entity)}"`;
+  return null;
+};
+
+/** Common payload for the single-trace waterfall (`view-trace`) intent. */
+const traceWaterfallPayload = (ctx: IntentContext): IntentPayload => {
+  const payload: IntentPayload = {
+    "trace.id": ctx.traceId,
+    "dt.timeframe": traceTimeframe(ctx.startMs),
+  };
+  if (ctx.spanId) payload["span.id"] = ctx.spanId;
+  if (typeof ctx.startMs === "number" && Number.isFinite(ctx.startMs)) {
+    // Helps the app locate the trace's time partition / center the view.
+    payload["timestamp"] = new Date(ctx.startMs).toISOString();
+  }
+  return payload;
+};
+
+/**
+ * Drill into a distributed trace. With a trace id we open the single-trace
+ * WATERFALL (`view-trace`) so every span shows even when the trace has no
+ * request-root span (agentic/OTel traces have none, which left the Explorer's
+ * default Requests view empty — the bug being fixed). Without a trace id (e.g.
+ * an entity-only finding drill) we fall back to the Explorer (`view-traces`)
+ * filtered to the entity, forced into Spans view.
  */
 export const openInTraces = (ctx: IntentContext = {}): void => {
-  const filters: string[] = [];
-  if (ctx.traceId) filters.push(`trace.id == "${ctx.traceId}"`);
-  if (ctx.spanId) filters.push(`span.id == "${ctx.spanId}"`);
-  if (ctx.entityId) filters.push(`dt.entity.service == "${ctx.entityId}"`);
-  const dql =
-    ctx.dql ??
-    [
-      "fetch spans, from: now()-24h, to: now()",
-      ...(filters.length ? [`| filter ${filters.join(" and ")}`] : []),
-      "| sort timestamp desc",
-      "| limit 200",
-    ].join("\n");
-  safeSend(
-    { "dt.query": dql, ...(ctx.traceId ? { trace_id: ctx.traceId } : {}) },
-    {
-      recommendedAppId: KNOWN_NOTEBOOKS_APP_ID,
-      recommendedIntentId: NOTEBOOKS_VIEW_QUERY_INTENT_ID,
-    },
-  );
+  if (ctx.traceId) {
+    // span.id isn't part of "open trace" — only "open span" focuses a span.
+    const { spanId: _omit, ...traceCtx } = ctx;
+    safeSend(traceWaterfallPayload(traceCtx), {
+      recommendedAppId: DT_TRACING_APP_ID,
+      recommendedIntentId: DT_VIEW_TRACE_INTENT_ID,
+    });
+    return;
+  }
+  const filter = buildTraceFilter(ctx);
+  const payload: IntentPayload = {
+    "dt.filter": filter ?? "span.id = *",
+    "dt.timeframe": traceTimeframe(ctx.startMs),
+    // Agentic spans aren't request roots, so prefer the Spans view.
+    viewMode: "spans",
+  };
+  safeSend(payload, {
+    recommendedAppId: DT_TRACING_APP_ID,
+    recommendedIntentId: DT_VIEW_TRACES_INTENT_ID,
+  });
 };
+
+/**
+ * Open a specific span in the Distributed Tracing app — the single-trace
+ * waterfall (`view-trace`) scoped to the trace and focused on `span.id`.
+ */
+export const openSpanInTraces = (ctx: IntentContext = {}): void => {
+  if (!ctx.traceId) {
+    openInTraces(ctx);
+    return;
+  }
+  safeSend(traceWaterfallPayload(ctx), {
+    recommendedAppId: DT_TRACING_APP_ID,
+    recommendedIntentId: DT_VIEW_TRACE_INTENT_ID,
+  });
+};
+
+export type { IntentContext };
 
 /**
  * Service-entity intent — `dt.entity.service` is the canonical semantic key,

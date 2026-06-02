@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
+import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
 import { fmtPercent } from "../../data/format";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
 import type {
@@ -89,18 +90,42 @@ export interface PromptQualityAnalyticsProps {
   quality: PromptQuality;
 }
 
-export const PromptQualityAnalytics = ({ quality }: PromptQualityAnalyticsProps) => (
+export const PromptQualityAnalytics = ({ quality }: PromptQualityAnalyticsProps) => {
+  const [open, setOpen] = useState(false);
+  return (
   <Surface elevation="raised" padding={16}>
-    <Flex flexDirection="column" gap={12}>
-      <Flex alignItems="baseline" justifyContent="space-between">
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Prompt quality analytics
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Aggregate evaluation scores across LLM spans in the current scope
-          </Text>
-        </Flex>
+    <Flex flexDirection="column" gap={open ? 12 : 0}>
+      <Flex alignItems="center" justifyContent="space-between">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {open ? (
+            <ChevronDownIcon size={16} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
+          ) : (
+            <ChevronRightIcon size={16} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
+          )}
+          <Flex flexDirection="column" gap={2}>
+            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+              Prompt quality analytics
+            </Heading>
+            {open && (
+              <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                Aggregate evaluation scores across LLM spans in the current scope
+              </Text>
+            )}
+          </Flex>
+        </button>
         {quality.hasAnyEval && (
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
             {quality.totalLlmSpans.toLocaleString()} LLM spans
@@ -108,7 +133,7 @@ export const PromptQualityAnalytics = ({ quality }: PromptQualityAnalyticsProps)
         )}
       </Flex>
 
-      {quality.isLoading && !quality.hasAnyEval ? (
+      {!open ? null : quality.isLoading && !quality.hasAnyEval ? (
         <div
           style={{
             display: "grid",
@@ -145,12 +170,15 @@ export const PromptQualityAnalytics = ({ quality }: PromptQualityAnalyticsProps)
         </div>
       )}
 
-      <Text
-        style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}
-      >
-        Three paths to populate: add eval attrs to LLM spans, run a Workflow
-        LLM-as-judge, or push offline eval results as business events.
-      </Text>
+      {open && (
+        <Text
+          style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}
+        >
+          Three paths to populate: add eval attrs to LLM spans, run a Workflow
+          LLM-as-judge, or push offline eval results as business events.
+        </Text>
+      )}
     </Flex>
   </Surface>
-);
+  );
+};

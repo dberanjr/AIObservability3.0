@@ -94,6 +94,7 @@ const handlerFor = (
     return () =>
       dispatchIntent(intent.intent!, {
         entity: finding.entity,
+        startMs: finding.timestampMs,
       });
   }
   return undefined;

@@ -3,16 +3,72 @@ import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
+/** Response-time (duration) filter expressed in milliseconds. */
+export interface LatencyFilter {
+  op: "gt" | "lt" | "between";
+  min?: number;
+  max?: number;
+}
+
 /** Sidebar facet selections applied server-side so the 200-row cap is taken
- *  AFTER filtering (not before). Service + kind + search are pushed into DQL;
- *  model/agent stay client-side (canonical label / trace-backfilled). */
+ *  AFTER filtering (not before). Service + kind + search + provider + operation
+ *  + status (errors/pii/warnings) + latency are pushed into DQL; model/agent
+ *  stay client-side (canonical label / trace-backfilled). */
 export interface PromptsSidebarFilter {
   services?: string[];
   kinds?: string[];
   search?: string;
+  providers?: string[];
+  operations?: string[];
+  onlyErrors?: boolean;
+  onlyPii?: boolean;
+  onlyWarnings?: boolean;
+  latency?: LatencyFilter;
 }
 
 const SVC_EXPR = `coalesce(service.name, getNodeName(dt.smartscape.service))`;
+const PROVIDER_EXPR = `coalesce(gen_ai.system, gen_ai.provider.name)`;
+
+/** Build the server-side clauses for the extended sidebar filters. */
+const sidebarClauses = (sidebar?: PromptsSidebarFilter): string => {
+  const lines: string[] = [];
+  if (sidebar?.providers?.length) {
+    lines.push(
+      `| filter in(${PROVIDER_EXPR}, array(${dqlIdArray(sidebar.providers)}))`,
+    );
+  }
+  if (sidebar?.operations?.length) {
+    lines.push(
+      `| filter in(gen_ai.operation.name, array(${dqlIdArray(sidebar.operations)}))`,
+    );
+  }
+  if (sidebar?.onlyErrors) {
+    lines.push(
+      `| filter isNotNull(exception.type) or span.status_code == "error"`,
+    );
+  }
+  if (sidebar?.onlyPii) {
+    lines.push(`| filter toBoolean(gen_ai.privacy.pii_detected) == true`);
+  }
+  if (sidebar?.onlyWarnings) {
+    lines.push(`| filter toBoolean(gen_ai.response.warning) == true`);
+  }
+  const lat = sidebar?.latency;
+  if (lat) {
+    // `duration` is a DQL duration-typed column — it must be compared against a
+    // duration literal (e.g. `3000ms`), NOT a raw nanosecond integer (that
+    // silently matches nothing). The UI specifies milliseconds.
+    const ms = (v: number) => `${Math.max(0, Math.round(v))}ms`;
+    if (lat.op === "gt" && lat.min != null) {
+      lines.push(`| filter duration > ${ms(lat.min)}`);
+    } else if (lat.op === "lt" && lat.max != null) {
+      lines.push(`| filter duration < ${ms(lat.max)}`);
+    } else if (lat.op === "between" && lat.min != null && lat.max != null) {
+      lines.push(`| filter duration >= ${ms(lat.min)} and duration <= ${ms(lat.max)}`);
+    }
+  }
+  return lines.join("\n");
+};
 
 /**
  * Per-prompt rows for the Stream / Metadata views. Reads a small set of
@@ -39,6 +95,7 @@ export const buildPromptsListQuery = (
   const searchClause = q
     ? `| filter contains(lower(prompt_text), "${dqlEscape(q)}") or contains(lower(response_text), "${dqlEscape(q)}") or contains(lower(coalesce(system_prompt, "")), "${dqlEscape(q)}")`
     : "";
+  const extraClauses = sidebarClauses(sidebar);
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
@@ -50,6 +107,7 @@ ${globalFilterClauses(filters)}
 | filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
 ${svcClause}
 ${kindClause}
+${extraClauses}
 // Collapse duplicate span records (this tenant double-emits some spans).
 | dedup {span.id}
 | fieldsAdd
@@ -102,6 +160,7 @@ ${searchClause}
     service_id = coalesce(dt.smartscape.service, dt.entity.service),
     model = model_name,
     agent = gen_ai.agent.name,
+    temperature = gen_ai.request.temperature,
     in_tok,
     out_tok,
     duration_ms,
@@ -121,6 +180,27 @@ ${searchClause}
 | limit 200
 `.trim();
 };
+
+/**
+ * Distinct facet values for the sidebar — discovered SERVER-SIDE across all
+ * AI spans (not just the 200 content rows). This is why the Agent facet was
+ * empty before: agent names live on agent-type spans, which the content-row
+ * projection never includes. One scan, collectDistinct per attribute.
+ */
+export const buildPromptFacetValuesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+| summarize
+    agents = collectDistinct(gen_ai.agent.name),
+    models = collectDistinct(coalesce(gen_ai.response.model, gen_ai.request.model, gen_ai.model)),
+    providers = collectDistinct(${PROVIDER_EXPR}),
+    operations = collectDistinct(gen_ai.operation.name),
+    services = collectDistinct(${SVC_EXPR})
+`.trim();
 
 /**
  * Trace → agent map. LLM-call spans (gen_ai.provider.name) carry no
@@ -200,12 +280,40 @@ ${globalFilterClauses(filters)}
 `.trim();
 
 /**
+ * Bracket a fetch window around a known epoch-ms timestamp (±30m). Grail is
+ * time-partitioned, so scoping the window to the record's time turns a 24h
+ * scan into a tiny one — and a trace older than 24h (the previous fixed
+ * window) is found at all. Falls back to now()-24h when no timestamp is known.
+ */
+const traceWindow = (
+  startMs?: number,
+): { from: string; to: string } => {
+  if (typeof startMs === "number" && Number.isFinite(startMs)) {
+    const pad = 30 * 60 * 1000;
+    return {
+      from: `"${new Date(startMs - pad).toISOString()}"`,
+      to: `"${new Date(startMs + pad).toISOString()}"`,
+    };
+  }
+  return { from: "now()-24h", to: "now()" };
+};
+
+/**
  * Fetches all spans within a trace for the detail panel trace tree view.
  * Used to build the span hierarchy and show metadata for each span.
+ *
+ * `trace.id` is a `uid`-typed column, so it must be compared with `toUid(...)`
+ * — comparing it to a bare string literal silently matches nothing (this was
+ * the bug that left the Trace tab perpetually empty).
  */
-export const buildTraceSpansQuery = (traceId: string): string => `
-fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
-| filter trace.id == "${traceId}"
+export const buildTraceSpansQuery = (
+  traceId: string,
+  startMs?: number,
+): string => {
+  const { from, to } = traceWindow(startMs);
+  return `
+fetch spans, samplingRatio: 1, from: ${from}, to: ${to}, scanLimitGBytes: 100
+| filter trace.id == toUid("${dqlEscape(traceId)}")
 | dedup {span.id}
 | fieldsAdd
     duration_ms = duration / 1000000,
@@ -215,12 +323,21 @@ fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
     span_id = span.id,
     parent_span_id = span.parent_id,
     name = span.name,
-    service = service.name,
+    service = coalesce(service.name, getNodeName(dt.smartscape.service)),
     duration_ms,
     timestamp = start_time,
+    end_time,
     has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
-    gen_ai_provider = gen_ai.provider.name,
-    gen_ai_model = gen_ai.request.model,
+    span_kind = span.kind,
+    status_code = span.status_code,
+    is_root = request.is_root_span,
+    endpoint = endpoint.name,
+    code_function = code.function,
+    code_namespace = code.namespace,
+    cpu_ms = span.timing.cpu / 1000000,
+    cpu_self_ms = span.timing.cpu_self / 1000000,
+    gen_ai_provider = coalesce(gen_ai.system, gen_ai.provider.name),
+    gen_ai_model = coalesce(gen_ai.request.model, gen_ai.response.model, gen_ai.model),
     gen_ai_operation = gen_ai.operation.name,
     agent_name = gen_ai.agent.name,
     tool_name = gen_ai.tool.name,
@@ -229,10 +346,42 @@ fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
     exception_type = exception.type,
     exception_msg = exception.message,
     workflow = traceloop.workflow.name,
+    tl_entity = traceloop.entity.name,
+    tl_entity_path = traceloop.entity.path,
+    tl_kind = traceloop.span.kind,
     session_id = dt.rum.session.id
 | sort timestamp asc
 | limit 100
 `.trim();
+};
+
+/**
+ * Logs correlated to a trace, for the detail panel's Logs tab. Logs carry
+ * `trace_id` / `span_id` as plain string fields (hex, not uid), so we match
+ * `trace_id` by string equality. Scoped to ±30m around the prompt timestamp to
+ * keep the (very large) logs table scan bounded. Returns up to 200 rows; the
+ * UI paginates them 10 at a time.
+ */
+export const buildTraceLogsQuery = (
+  traceId: string,
+  startMs?: number,
+): string => {
+  const { from, to } = traceWindow(startMs);
+  return `
+fetch logs, from: ${from}, to: ${to}, scanLimitGBytes: 500
+| filter trace_id == "${dqlEscape(traceId)}"
+| fields
+    timestamp,
+    status,
+    loglevel,
+    content,
+    span_id,
+    source = coalesce(log.source, dt.process.name, k8s.namespace.name, ""),
+    namespace = k8s.namespace.name
+| sort timestamp asc
+| limit 200
+`.trim();
+};
 
 /**
  * Full detail for a single span (the popup's Info tab). Enriches the row with

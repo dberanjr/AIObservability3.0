@@ -2,18 +2,22 @@ import React, { useState, useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { WarningIcon } from "@dynatrace/strato-icons";
+import { TextInput } from "@dynatrace/strato-components/forms";
+import { WarningIcon, MagnifyingGlassIcon } from "@dynatrace/strato-icons";
 import { sendIntent } from "@dynatrace-sdk/navigation";
 import { fmtMs, fmtTokens } from "../../data/format";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
 import { useTraceSpans } from "./useTraceSpans";
+import { useTraceLogs } from "./useTraceLogs";
 import { usePromptSpanDetail } from "./usePromptSpanDetail";
 import { TraceTree } from "./TraceTree";
-import { openInTraces } from "../../lib/intents";
+import { LogsPanel } from "./LogsPanel";
+import { TraceModal } from "./TraceModal";
+import { openSpanInTraces } from "../../lib/intents";
 
-type DetailTab = "trace" | "prompts" | "eval" | "info";
+type DetailTab = "prompts" | "trace" | "logs" | "eval" | "info";
 
 const Bubble = ({
   label,
@@ -168,8 +172,35 @@ export const PromptDetailPanel = ({
   onClose,
 }: PromptDetailPanelProps) => {
   const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
-  const { spans, isLoading, error } = useTraceSpans(prompt.traceId);
+  const [search, setSearch] = useState("");
+  const [traceModalOpen, setTraceModalOpen] = useState(false);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+  const { spans, isLoading, error } = useTraceSpans(
+    prompt.traceId,
+    prompt.timestampMs,
+  );
+  const traceLogs = useTraceLogs(prompt.traceId, prompt.timestampMs);
   const spanDetail = usePromptSpanDetail(prompt.spanId);
+
+  // Log counts shown in the Info tab are derived from the TRACE's logs (same
+  // source as the Logs tab). The per-span counts were wrong: WARN/ERROR logs in
+  // a trace usually belong to spans other than the LLM-call span, so a span_id
+  // match returned 0 even when the trace clearly had error/warning logs.
+  const logCounts = useMemo(() => {
+    let error = 0;
+    let warning = 0;
+    let info = 0;
+    for (const l of traceLogs.logs) {
+      const s = l.status.toUpperCase();
+      if (s === "ERROR" || s === "SEVERE" || s === "FATAL") error++;
+      else if (s === "WARN" || s === "WARNING") warning++;
+      else info++;
+    }
+    return { error, warning, info };
+  }, [traceLogs.logs]);
+
+  const searchTerm = search.trim().toLowerCase();
+  const showSearch = activeTab === "trace" || activeTab === "logs";
 
   const inputText =
     privacy === "mask" ? maskPII(prompt.promptText) : prompt.promptText;
@@ -185,13 +216,10 @@ export const PromptDetailPanel = ({
     [spans],
   );
 
-  const handleViewTrace = () => {
-    if (prompt.traceId) {
-      openInTraces({
-        traceId: prompt.traceId,
-        spanId: prompt.spanId ?? undefined,
-      });
-    }
+  const traceCtx = {
+    traceId: prompt.traceId ?? undefined,
+    spanId: prompt.spanId ?? undefined,
+    startMs: prompt.timestampMs,
   };
 
   const handleUserSession = () => {
@@ -212,28 +240,82 @@ export const PromptDetailPanel = ({
             onChange={setActiveTab}
             options={[
               { value: "prompts", label: "Prompts" },
-              { value: "eval", label: "Eval" },
               { value: "trace", label: "Trace" },
+              { value: "logs", label: "Logs" },
+              { value: "eval", label: "Eval" },
               { value: "info", label: "Info" },
             ]}
           />
         </Flex>
 
+        {showSearch && (
+          <Flex alignItems="center" gap={6}>
+            <MagnifyingGlassIcon
+              size={14}
+              style={{ color: "var(--text-3)", flex: "0 0 auto" }}
+            />
+            <div style={{ flex: 1 }}>
+              <TextInput
+                name="trace-log-search"
+                value={search}
+                onChange={setSearch}
+                placeholder={
+                  activeTab === "trace"
+                    ? "Highlight spans by name, service, model, attribute…"
+                    : "Filter logs by message or attribute…"
+                }
+              />
+            </div>
+          </Flex>
+        )}
+
         {activeTab === "trace" && (
           <Flex flexDirection="column" gap={8}>
-            <TraceTree spans={spans} isLoading={isLoading} />
+            <TraceTree
+              spans={spans}
+              isLoading={isLoading}
+              highlight={searchTerm}
+              selectedSpanId={selectedSpanId}
+              onSelectSpan={setSelectedSpanId}
+            />
             {error && (
               <Text style={{ fontSize: 11, color: "var(--red)" }}>
                 Error loading trace: {error.message}
               </Text>
             )}
             <Flex gap={6}>
-              <Button onClick={handleViewTrace}>View trace</Button>
+              <Button
+                variant="accent"
+                onClick={() => setTraceModalOpen(true)}
+                disabled={!prompt.traceId}
+              >
+                Open trace
+              </Button>
+              <Button
+                onClick={() =>
+                  openSpanInTraces({
+                    traceId: prompt.traceId ?? undefined,
+                    spanId: selectedSpanId ?? undefined,
+                    startMs: prompt.timestampMs,
+                  })
+                }
+                disabled={!selectedSpanId}
+              >
+                Open span
+              </Button>
               <Button onClick={handleUserSession} disabled={!sessionId}>
                 User session
               </Button>
             </Flex>
           </Flex>
+        )}
+
+        {activeTab === "logs" && (
+          <LogsPanel
+            logs={traceLogs.logs}
+            isLoading={traceLogs.isLoading}
+            highlight={searchTerm}
+          />
         )}
 
         {activeTab === "prompts" && (
@@ -372,7 +454,7 @@ export const PromptDetailPanel = ({
               Logs
             </Text>
             <Text>
-              {spanDetail.isLoading ? (
+              {traceLogs.isLoading ? (
                 <Text as="span" style={{ color: "var(--text-3)" }}>
                   loading…
                 </Text>
@@ -381,23 +463,24 @@ export const PromptDetailPanel = ({
                   <Text
                     as="span"
                     style={{
-                      color:
-                        spanDetail.errorLogs > 0 ? "var(--red)" : "var(--text)",
+                      color: logCounts.error > 0 ? "var(--red)" : "var(--text)",
                     }}
                   >
-                    {spanDetail.errorLogs} error
+                    {logCounts.error} error
                   </Text>
                   {" · "}
                   <Text
                     as="span"
                     style={{
                       color:
-                        spanDetail.warningLogs > 0
-                          ? "var(--amber)"
-                          : "var(--text)",
+                        logCounts.warning > 0 ? "var(--amber)" : "var(--text)",
                     }}
                   >
-                    {spanDetail.warningLogs} warning
+                    {logCounts.warning} warning
+                  </Text>
+                  {" · "}
+                  <Text as="span" style={{ color: "var(--text-3)" }}>
+                    {logCounts.info} info
                   </Text>
                 </>
               )}
@@ -455,6 +538,14 @@ export const PromptDetailPanel = ({
           </div>
         )}
       </Flex>
+
+      <TraceModal
+        show={traceModalOpen}
+        onClose={() => setTraceModalOpen(false)}
+        ctx={traceCtx}
+        spans={spans}
+        isLoading={isLoading}
+      />
     </div>
   );
 };
