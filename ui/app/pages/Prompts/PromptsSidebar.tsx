@@ -58,7 +58,7 @@ const StatusToggles = ({
  * Response-time (duration) filter: >, <, or between, in milliseconds.
  *
  * The number inputs are debounced — committing the filter (which triggers a new
- * DQL query) only after 2s of inactivity, or immediately on Enter / blur — so
+ * DQL query) only after 1s of inactivity, or immediately on Enter / blur — so
  * typing "3000" doesn't fire four queries. The operator select commits at once.
  */
 const LatencyControl = ({
@@ -105,7 +105,7 @@ const LatencyControl = ({
 
   const scheduleCommit = (min: number | null, max: number | null) => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => commit(op, min, max), 2000);
+    timer.current = setTimeout(() => commit(op, min, max), 1000);
   };
 
   const setOp = (next: LatOp) => commit(next, draftMin, draftMax);
