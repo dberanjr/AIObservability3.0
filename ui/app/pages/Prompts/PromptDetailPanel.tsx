@@ -190,6 +190,7 @@ export const PromptDetailPanel = ({
       openInTraces({
         traceId: prompt.traceId,
         spanId: prompt.spanId ?? undefined,
+        startMs: prompt.timestampMs,
       });
     }
   };
