@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Modal } from "@dynatrace/strato-components/overlays";
 import { Text } from "@dynatrace/strato-components/typography";
@@ -359,19 +359,6 @@ const TopologyGraph = ({
 }) => {
   const [zoom, setZoom] = useState(1);
   const [pngState, setPngState] = useState<"idle" | "copied" | "saved">("idle");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Wheel zoom (native non-passive listener so preventDefault works).
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      setZoom((z) => clampZoom(z * (e.deltaY < 0 ? 1.1 : 0.9)));
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
 
   const byKey = useMemo(
     () => new Map(layout.nodes.map((n) => [n.key, n])),
@@ -476,7 +463,7 @@ const TopologyGraph = ({
         )}
       </Flex>
 
-      <div ref={scrollRef} style={{ overflow: "auto", maxHeight: height }}>
+      <div style={{ overflow: "auto", maxHeight: height }}>
         {layout.nodes.length === 0 ? (
           <div style={{ padding: 24, textAlign: "center" }}>
             <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
