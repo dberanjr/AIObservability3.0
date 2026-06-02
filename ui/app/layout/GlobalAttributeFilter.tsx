@@ -5,7 +5,7 @@ import { FilterIcon, PlusIcon, XmarkIcon } from "@dynatrace/strato-icons";
 import { useGlobalFilters } from "../scope/GlobalFilterContext";
 import { useScope } from "../scope/ScopeContext";
 import { useScopedDql } from "../scope/useScopedDql";
-import { dqlTimeArg } from "../scope/queries";
+import { dqlTimeArg, dqlEscape } from "../scope/queries";
 import type { Timeframe } from "../scope/types";
 
 /**
@@ -37,11 +37,30 @@ const ATTRIBUTE_SUGGESTIONS: string[] = [
 
 const SAFE_ATTR_RE = /^[A-Za-z][A-Za-z0-9_.]*$/;
 
-const buildValuesQuery = (attribute: string, timeframe: Timeframe): string => {
+/**
+ * High-cardinality attributes (trace/span ids and any *.id / *_id) — these have
+ * far too many distinct values to enumerate, and discovery is slow, so we don't
+ * pre-fetch them: values are only queried once the user types a search term.
+ */
+const isHighCardinality = (attribute: string): boolean =>
+  /(^|[._])(trace|span)([._]id)$/i.test(attribute) ||
+  /\.id$/i.test(attribute) ||
+  /_id$/i.test(attribute);
+
+const buildValuesQuery = (
+  attribute: string,
+  timeframe: Timeframe,
+  search?: string,
+): string => {
   const to = timeframe.to ?? "now()";
+  const term = (search ?? "").trim();
+  const searchClause = term
+    ? `| filter contains(toString(${attribute}), "${dqlEscape(term)}")`
+    : "";
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 200
 | filter isNotNull(${attribute})
+${searchClause}
 | summarize cnt = count(), by: { v = toString(${attribute}) }
 | sort cnt desc
 | limit 200
@@ -83,16 +102,34 @@ const AddFilterPopover = ({
     setSelected(existing?.values ?? []);
   }, [attribute, filters.conditions]);
 
-  const valuesQuery =
-    attribute && SAFE_ATTR_RE.test(attribute)
-      ? buildValuesQuery(attribute, timeframe)
-      : "";
+  // Debounce the value search by 1s so typing in a high-cardinality field
+  // (trace.id, span.id…) doesn't fire a query per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(valueSearch), 1000);
+    return () => window.clearTimeout(t);
+  }, [valueSearch]);
+
+  const highCard = !!attribute && isHighCardinality(attribute);
+  // For high-cardinality attributes we DON'T pre-fetch: discovery only runs once
+  // the user has typed a (debounced) search term, and it's narrowed server-side.
+  const runQuery =
+    !!attribute &&
+    SAFE_ATTR_RE.test(attribute) &&
+    (!highCard || debouncedSearch.trim().length > 0);
+  const valuesQuery = runQuery
+    ? buildValuesQuery(attribute!, timeframe, highCard ? debouncedSearch : undefined)
+    : "";
   const { data, isLoading } = useScopedDql<{ v?: string }>(valuesQuery, {
     enabled: !!valuesQuery,
     staleTime: 60_000,
     // Always show the full value list, unaffected by other active filters.
     ignoreGlobalFilter: true,
   });
+  // Loading only counts while a query is actually in flight (and, for
+  // high-cardinality, while the debounce has caught up to the input).
+  const showLoading =
+    isLoading && runQuery && (!highCard || debouncedSearch === valueSearch);
 
   const allValues = useMemo(
     () =>
@@ -104,6 +141,14 @@ const AddFilterPopover = ({
   const filteredValues = valueSearch
     ? allValues.filter((v) => v.toLowerCase().includes(valueSearch.toLowerCase()))
     : allValues;
+
+  const typed = valueSearch.trim();
+  // Selected values not present in the discovered list (typed ids, or values
+  // seeded from an existing condition) — shown as checked rows so the current
+  // selection is always visible/removable.
+  const extraSelected = selected.filter((v) => !filteredValues.includes(v));
+  const canAddTyped =
+    typed.length > 0 && !filteredValues.includes(typed) && !selected.includes(typed);
 
   const keySuggestions = keyInput
     ? ATTRIBUTE_SUGGESTIONS.filter((k) =>
@@ -241,9 +286,16 @@ const AddFilterPopover = ({
           <input
             autoFocus
             type="text"
-            placeholder="Filter values…"
+            placeholder={highCard ? "Type a value (e.g. a full id)…" : "Filter values…"}
             value={valueSearch}
             onChange={(e) => setValueSearch(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter adds the exact typed value even if discovery has no match.
+              if (e.key === "Enter" && canAddTyped) {
+                toggleValue(typed);
+                setValueSearch("");
+              }
+            }}
             style={{
               all: "unset",
               padding: "8px 12px",
@@ -253,13 +305,52 @@ const AddFilterPopover = ({
             }}
           />
           <div style={{ overflow: "auto", flex: 1 }}>
-            {isLoading ? (
+            {/* Add the exact typed value — honored regardless of matches. */}
+            {canAddTyped && (
+              <button
+                type="button"
+                onClick={() => {
+                  toggleValue(typed);
+                  setValueSearch("");
+                }}
+                style={{ ...rowBtnStyle, color: "var(--blue)", fontWeight: 600 }}
+              >
+                ＋ Use “{typed}”
+              </button>
+            )}
+            {/* Already-selected values not in the discovered list. */}
+            {extraSelected.map((v) => (
+              <label key={`sel-${v}`} style={valueRowStyle}>
+                <input
+                  type="checkbox"
+                  checked
+                  onChange={() => toggleValue(v)}
+                  style={{ cursor: "pointer", width: 14, height: 14 }}
+                />
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    color: "var(--text)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {v}
+                </span>
+              </label>
+            ))}
+            {showLoading ? (
               <Text style={{ fontSize: 11, color: "var(--text-3)", padding: 12 }}>
                 Loading values…
               </Text>
             ) : filteredValues.length === 0 ? (
               <Text style={{ fontSize: 11, color: "var(--text-3)", padding: 12 }}>
-                {valueSearch ? "No matches" : "No values found"}
+                {highCard && !debouncedSearch.trim()
+                  ? "Type a value above to search — or press Enter to use it as-is."
+                  : valueSearch
+                    ? "No matches — use the option above to apply it anyway."
+                    : "No values found"}
               </Text>
             ) : (
               filteredValues.map((v) => (
