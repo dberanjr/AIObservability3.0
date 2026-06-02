@@ -24,6 +24,7 @@ export interface PromptsSidebarFilter {
   onlyPii?: boolean;
   onlyWarnings?: boolean;
   latency?: LatencyFilter;
+  temperature?: LatencyFilter;
 }
 
 const SVC_EXPR = `coalesce(service.name, getNodeName(dt.smartscape.service))`;
@@ -65,6 +66,25 @@ const sidebarClauses = (sidebar?: PromptsSidebarFilter): string => {
       lines.push(`| filter duration < ${ms(lat.max)}`);
     } else if (lat.op === "between" && lat.min != null && lat.max != null) {
       lines.push(`| filter duration >= ${ms(lat.min)} and duration <= ${ms(lat.max)}`);
+    }
+  }
+  // Temperature is a plain numeric attribute (0–1+), compared directly.
+  const temp = sidebar?.temperature;
+  if (temp) {
+    const T = "gen_ai.request.temperature";
+    const num = (v: number) => Number(v);
+    if (temp.op === "gt" && temp.min != null && Number.isFinite(temp.min)) {
+      lines.push(`| filter ${T} > ${num(temp.min)}`);
+    } else if (temp.op === "lt" && temp.max != null && Number.isFinite(temp.max)) {
+      lines.push(`| filter ${T} < ${num(temp.max)}`);
+    } else if (
+      temp.op === "between" &&
+      temp.min != null &&
+      temp.max != null &&
+      Number.isFinite(temp.min) &&
+      Number.isFinite(temp.max)
+    ) {
+      lines.push(`| filter ${T} >= ${num(temp.min)} and ${T} <= ${num(temp.max)}`);
     }
   }
   return lines.join("\n");

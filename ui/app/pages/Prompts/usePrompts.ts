@@ -115,6 +115,7 @@ export interface PromptsFilter {
   onlyPii?: boolean;
   onlyWarnings?: boolean;
   latency?: LatencyFilter;
+  temperature?: LatencyFilter;
 }
 
 export interface FacetValue {
@@ -185,6 +186,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     onlyPii: filter.onlyPii,
     onlyWarnings: filter.onlyWarnings,
     latency: filter.latency,
+    temperature: filter.temperature,
   };
   const query = useMemo(
     () =>
@@ -212,6 +214,9 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       filter.latency?.op,
       filter.latency?.min,
       filter.latency?.max,
+      filter.temperature?.op,
+      filter.temperature?.min,
+      filter.temperature?.max,
     ],
   );
 
