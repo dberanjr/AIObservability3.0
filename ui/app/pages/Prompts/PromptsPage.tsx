@@ -44,19 +44,36 @@ export const PromptsPage = () => {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "230px minmax(0, 1fr)",
+        gridTemplateColumns: "248px minmax(0, 1fr)",
         gap: 16,
         padding: "18px 20px 80px",
         alignItems: "start",
       }}
     >
-      <PromptsSidebar
-        facets={facets}
-        filter={filter}
-        privacy={privacy}
-        onFilterChange={setFilter}
-        onPrivacyChange={setPrivacy}
-      />
+      {/* Sticky so the filters stay in view while the prompt list scrolls; it
+          scrolls internally when taller than the viewport. The sidebar content
+          is fluid-width and we reserve gutter space (scrollbar-gutter +
+          paddingRight) so the scrollbar never overlaps the right-aligned facet
+          counts (the bug that hid the totals before). */}
+      <div
+        style={{
+          position: "sticky",
+          top: 16,
+          alignSelf: "start",
+          maxHeight: "calc(100vh - 130px)",
+          overflowY: "auto",
+          paddingRight: 8,
+          scrollbarGutter: "stable",
+        }}
+      >
+        <PromptsSidebar
+          facets={facets}
+          filter={filter}
+          privacy={privacy}
+          onFilterChange={setFilter}
+          onPrivacyChange={setPrivacy}
+        />
+      </div>
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
         {firstError && <ErrorBanner error={firstError} />}

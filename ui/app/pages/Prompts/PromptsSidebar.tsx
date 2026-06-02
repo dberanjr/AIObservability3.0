@@ -246,7 +246,7 @@ export const PromptsSidebar = ({
   onPrivacyChange,
 }: PromptsSidebarProps) => (
   <Surface elevation="raised" padding={16}>
-    <Flex flexDirection="column" gap={16} style={{ width: 210 }}>
+    <Flex flexDirection="column" gap={16} style={{ width: "100%", minWidth: 0 }}>
       <Flex flexDirection="column" gap={4}>
         <SegLabel>Search</SegLabel>
         <TextInput
