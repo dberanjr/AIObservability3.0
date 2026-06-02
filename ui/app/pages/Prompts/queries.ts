@@ -179,12 +179,12 @@ fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
 | fields
     span_id = span.id,
-    parent_span_id,
+    parent_span_id = span.parent_id,
     name = span.name,
     service = service.name,
     duration_ms,
-    timestamp,
-    has_error = if(isNotNull(exception.type), true, else: false),
+    timestamp = start_time,
+    has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
     gen_ai_provider = gen_ai.provider.name,
     gen_ai_model = gen_ai.request.model,
     gen_ai_operation = gen_ai.operation.name,
@@ -198,6 +198,40 @@ fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
     session_id = dt.rum.session.id
 | sort timestamp asc
 | limit 100
+`.trim();
+
+/**
+ * Full detail for a single span (the popup's Info tab). Enriches the row with
+ * attributes not carried in the list projection — finish reason, sampling
+ * params, status, scope, and both request/response models.
+ */
+export const buildSpanDetailQuery = (
+  spanId: string,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 200
+| filter span.id == toUid("${dqlEscape(spanId)}")
+| fields
+    finish_reason = coalesce(gen_ai.completion.0.finish_reason, toString(gen_ai.response.finish_reasons)),
+    temperature = gen_ai.request.temperature,
+    max_tokens = gen_ai.request.max_tokens,
+    status_code = span.status_code,
+    request_model = gen_ai.request.model,
+    response_model = gen_ai.response.model,
+    provider = coalesce(gen_ai.system, gen_ai.provider.name),
+    scope = otel.scope.name,
+    span_kind = span.kind
+| limit 1
+`.trim();
+
+/** Per-span log counts (ERROR / WARN) for the popup, keyed by span_id. */
+export const buildSpanLogsQuery = (
+  spanId: string,
+  timeframe: Timeframe,
+): string => `
+fetch logs, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 200
+| filter span_id == toUid("${dqlEscape(spanId)}")
+| summarize error_logs = countIf(status == "ERROR"), warning_logs = countIf(status == "WARN"), total = count()
 `.trim();
 
 void dqlEscape;
