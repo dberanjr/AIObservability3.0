@@ -19,11 +19,12 @@ import { useTraceSpans } from "./useTraceSpans";
 import { useTraceLogs } from "./useTraceLogs";
 import { usePromptSpanDetail } from "./usePromptSpanDetail";
 import { TraceTree } from "./TraceTree";
+import { TraceTopology } from "./TraceTopology";
 import { LogsPanel } from "./LogsPanel";
 import { TraceModal } from "./TraceModal";
 import { openSpanInTraces } from "../../lib/intents";
 
-type DetailTab = "prompts" | "trace" | "logs" | "eval" | "info";
+type DetailTab = "prompts" | "trace" | "logs" | "topology" | "eval" | "info";
 
 /** Copy-to-clipboard button with brief "Copied" feedback. */
 const CopyButton = ({
@@ -306,6 +307,7 @@ export const PromptDetailPanel = ({
               { value: "prompts", label: "Prompts" },
               { value: "trace", label: "Trace" },
               { value: "logs", label: "Logs" },
+              { value: "topology", label: "Topology" },
               { value: "eval", label: "Eval" },
               { value: "info", label: "Info" },
             ]}
@@ -380,6 +382,10 @@ export const PromptDetailPanel = ({
             isLoading={traceLogs.isLoading}
             highlight={searchTerm}
           />
+        )}
+
+        {activeTab === "topology" && (
+          <TraceTopology spans={spans} isLoading={isLoading} />
         )}
 
         {activeTab === "prompts" && (
