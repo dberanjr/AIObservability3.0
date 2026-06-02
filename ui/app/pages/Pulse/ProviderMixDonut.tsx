@@ -18,6 +18,17 @@ export const ProviderMixDonut = ({ result }: ProviderMixDonutProps) => {
     value: s.requests,
     color: s.color,
     sub: s.isBedrockProxy ? "via Bedrock proxy" : undefined,
+    // Filter on the raw gen_ai.provider.name values that compose this slice.
+    // For Bedrock-proxied vendors these collapse to "aws_bedrock", so the
+    // filter is as specific as the raw attribute allows.
+    filter:
+      s.rawProviders.length > 0
+        ? {
+            attribute: "gen_ai.provider.name",
+            values: s.rawProviders,
+            label: "provider",
+          }
+        : undefined,
   }));
 
   return (

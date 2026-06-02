@@ -15,11 +15,14 @@ interface ProviderRecord {
   requests?: number;
   tokens?: number;
   via_bedrock_count?: number;
+  raw_providers?: Array<string | null>;
 }
 
 export interface ProviderShare {
   provider: string;
   displayName: string;
+  /** Raw gen_ai.provider.name values composing this slice (for click-to-filter). */
+  rawProviders: string[];
   requests: number;
   tokens: number;
   sharePct: number;
@@ -114,6 +117,9 @@ export const useProviderMix = (): UseProviderMixResult => {
         return {
           provider,
           displayName: display,
+          rawProviders: (r.raw_providers ?? []).filter(
+            (p): p is string => typeof p === "string" && p.length > 0,
+          ),
           requests,
           tokens: (r.tokens ?? 0) * samplingRatio,
           sharePct:

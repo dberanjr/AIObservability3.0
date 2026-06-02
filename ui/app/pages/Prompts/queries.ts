@@ -16,9 +16,13 @@ export const buildPromptsListQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
-| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+// Include BOTH instrumentation paths: proxy LLM spans (gen_ai.provider.name +
+// tokens, no content) AND LangChain spans (gen_ai.prompt/completion content +
+// gen_ai.system, no provider). The old filter only matched the former, which
+// is why prompt/response content never appeared.
+| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.system) or isNotNull(gen_ai.prompt.0.content) or isNotNull(gen_ai.completion.0.content) or isNotNull(gen_ai.agent.name)
 | fieldsAdd
-    kind = if(isNotNull(gen_ai.provider.name), "LLM", else: "Agent"),
+    kind = if(isNotNull(gen_ai.request.model) or isNotNull(gen_ai.system) or isNotNull(gen_ai.prompt.0.content), "LLM", else: "Agent"),
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     duration_ms = duration / 1000000,
@@ -38,7 +42,7 @@ ${globalFilterClauses(filters)}
     pii_detected = coalesce(toBoolean(gen_ai.privacy.pii_detected), false),
     has_warning = coalesce(toBoolean(gen_ai.response.warning), false),
     has_error = if(isNotNull(exception.type), true, else: false),
-    type_label = coalesce(gen_ai.operation.name, gen_ai.kind, "completion"),
+    type_label = coalesce(gen_ai.operation.name, llm.request.type, gen_ai.kind, "completion"),
     model_name = coalesce(gen_ai.request.model, gen_ai.model, gen_ai.system.model, ""),
     eval_hallucination = toDouble(gen_ai.evaluation.hallucination),
     eval_correctness = toDouble(gen_ai.evaluation.correctness),

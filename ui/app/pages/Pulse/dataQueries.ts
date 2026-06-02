@@ -270,6 +270,7 @@ ${scopeFilterClause(serviceIds)}
     requests = count(),
     tokens = sum(toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)) + toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))),
     via_bedrock_count = sum(via_bedrock),
+    raw_providers = collectDistinct(gen_ai.provider.name),
     by: { provider }
 | sort requests desc
 | limit 12

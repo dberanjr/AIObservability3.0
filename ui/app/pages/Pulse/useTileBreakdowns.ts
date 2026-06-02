@@ -23,6 +23,8 @@ export interface BreakdownSlice {
   /** Blended USD estimate derived from the tokens via pricing.ts. For
    * model slices we use the model-specific pricing when known. */
   cost: number;
+  /** Click-to-filter target for this slice's label. */
+  filter?: { attribute: string; values: string[]; label?: string };
 }
 
 export interface UseTileBreakdownsResult {
@@ -97,6 +99,7 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     // the table row totals are accurate.
     interface ModelAgg {
       label: string;
+      rawModels: Set<string>;
       requests: number;
       inputTokens: number;
       outputTokens: number;
@@ -113,12 +116,14 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
       const cur =
         modelAcc.get(key) ?? {
           label,
+          rawModels: new Set<string>(),
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
           pricingKey: r.model,
           domRequests: -1,
         };
+      cur.rawModels.add(r.model);
       cur.requests += reqs * samplingRatio;
       cur.inputTokens += num(r.input_tokens) * samplingRatio;
       cur.outputTokens += num(r.output_tokens) * samplingRatio;
@@ -137,6 +142,11 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           value: agg.requests,
           tokens: agg.inputTokens + agg.outputTokens,
           cost: estimateCost(agg.inputTokens, agg.outputTokens, pricing),
+          filter: {
+            attribute: "gen_ai.request.model",
+            values: Array.from(agg.rawModels),
+            label: "model",
+          },
         };
       })
       .sort((a, b) => b.value - a.value);
@@ -155,6 +165,11 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           value: num(r.requests) * samplingRatio,
           tokens: inTok + outTok,
           cost: estimateCost(inTok, outTok, BLENDED_PRICING),
+          filter: {
+            attribute: "traceloop.workflow.name",
+            values: [r.server],
+            label: "MCP server",
+          },
         };
       });
 
@@ -172,6 +187,11 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           value: num(r.calls) * samplingRatio,
           tokens: inTok + outTok,
           cost: estimateCost(inTok, outTok, BLENDED_PRICING),
+          filter: {
+            attribute: "traceloop.entity.name",
+            values: [r.tool],
+            label: "MCP tool",
+          },
         };
       });
 
