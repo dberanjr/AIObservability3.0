@@ -1,8 +1,17 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Modal } from "@dynatrace/strato-components/overlays";
 import { Text } from "@dynatrace/strato-components/typography";
+import { Button } from "@dynatrace/strato-components/buttons";
 import { Checkbox } from "@dynatrace/strato-components/forms";
-import { ServicesIcon } from "@dynatrace/strato-icons";
+import {
+  ServicesIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+  ZoomToFitIcon,
+  MaximizeIcon,
+  ImageIcon,
+} from "@dynatrace/strato-icons";
 import { fmtTokens, fmtMs } from "../../data/format";
 import { getPricing, estimateCost } from "../../data/pricing";
 import {
@@ -17,9 +26,8 @@ import type { TraceSpan } from "./useTraceSpans";
  * Miniature Smartscape-style dependency graph of a trace. Spans collapse into
  * component nodes (entry agent/workflow → tool/task → LLM → downstream client
  * calls); edges are the parent→child call relationships, laid out in tiers by
- * BFS depth from the entry. Bottom controls let the user choose which span
- * categories to show (incl. all other service spans) and size the nodes by a
- * metric (in/out tokens, duration, or cost).
+ * BFS depth from the entry. Controls: category visibility, size-by metric,
+ * zoom (buttons + wheel), copy-as-PNG, and maximize into a modal.
  */
 
 type SizeBy = "none" | "inTok" | "outTok" | "duration" | "cost";
@@ -66,6 +74,10 @@ const R = 26;
 const ENTRY_R = 34;
 const R_MIN = 16;
 const R_MAX = 46;
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 3;
+const clampZoom = (z: number) =>
+  Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(z * 100) / 100));
 
 const metricOf = (n: NodeAgg, by: SizeBy): number =>
   by === "inTok"
@@ -159,7 +171,6 @@ const buildLayout = (
     return { from, to };
   });
 
-  // BFS (longest-path) depth from entry so callees sit right of their callers.
   const depth = new Map<string, number>();
   const queue: string[] = [];
   for (const [key, n] of nodes) {
@@ -185,14 +196,12 @@ const buildLayout = (
     }
   }
 
-  // Node radii.
   const maxMetric = Math.max(
     1,
     ...Array.from(nodes.values(), (n) => metricOf(n, sizeBy)),
   );
   const radiusOf = (n: NodeAgg): number => {
     if (sizeBy === "none") return n.isEntry ? ENTRY_R : R;
-    // sqrt so the *area* scales with the metric (perceptually fairer).
     return R_MIN + (R_MAX - R_MIN) * Math.sqrt(metricOf(n, sizeBy) / maxMetric);
   };
   const radii = new Map<string, number>();
@@ -262,6 +271,403 @@ const CAT_TOGGLES: { key: keyof IndicatorState; label: string }[] = [
   { key: "other", label: "All other service spans" },
 ];
 
+// ---- PNG export ----------------------------------------------------------
+const resolveVar = (v: string): string => {
+  const m = /var\((--[A-Za-z0-9-]+)\)/.exec(v);
+  if (!m) return v;
+  const val = getComputedStyle(document.documentElement)
+    .getPropertyValue(m[1])
+    .trim();
+  return val || "#888888";
+};
+const escapeXml = (s: string): string =>
+  s.replace(/[&<>"]/g, (c) =>
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;",
+  );
+const trunc = (s: string, n: number): string =>
+  s.length > n ? `${s.slice(0, n - 1)}…` : s;
+
+/** Standalone SVG (literal colors) of the graph, for rasterizing to PNG. */
+const buildExportSvg = (layout: Layout, by: SizeBy): string => {
+  const surface = resolveVar("var(--surface)");
+  const border = resolveVar("var(--border)");
+  const textc = resolveVar("var(--text)");
+  const text3 = resolveVar("var(--text-3)");
+  const blue = resolveVar("var(--blue)");
+  const byKey = new Map(layout.nodes.map((n) => [n.key, n]));
+  const W = layout.width;
+  const H = layout.height;
+  const p: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,Segoe UI,Roboto,sans-serif">`,
+    `<rect x="0" y="0" width="${W}" height="${H}" fill="${surface}"/>`,
+  ];
+  for (const e of layout.edges) {
+    const a = byKey.get(e.from);
+    const b = byKey.get(e.to);
+    if (!a || !b) continue;
+    const stroke = a.isEntry ? blue : border;
+    p.push(
+      `<path d="${edgePath(a.x + a.r, a.y, b.x - b.r, b.y)}" fill="none" stroke="${stroke}" stroke-width="${a.isEntry ? 2.5 : 1.5}"/>`,
+    );
+  }
+  for (const n of layout.nodes) {
+    const color = resolveVar(CAT_COLOR[n.category]);
+    p.push(
+      `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${surface}" stroke="${color}" stroke-width="${n.isEntry ? 3 : 2}"/>`,
+    );
+    // 3-cube cluster glyph
+    const s = Math.max(5, n.r * 0.34);
+    const sq = (x: number, y: number) =>
+      `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="1.5" fill="${color}"/>`;
+    p.push(sq(n.x - s / 2, n.y - s - 1));
+    p.push(sq(n.x - s - 1, n.y + 1));
+    p.push(sq(n.x + 1, n.y + 1));
+    p.push(
+      `<text x="${n.x}" y="${n.y + n.r + 15}" text-anchor="middle" font-size="11" font-weight="600" fill="${textc}">${escapeXml(trunc(n.label, 24))}</text>`,
+    );
+    p.push(
+      `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" fill="${text3}">${escapeXml(sublabel(n, by))}</text>`,
+    );
+  }
+  p.push("</svg>");
+  return p.join("");
+};
+
+const iconBtnStyle: React.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 26,
+  height: 26,
+  borderRadius: 6,
+  color: "var(--text-2)",
+};
+
+/** The scrollable, zoomable graph canvas with its overlay toolbar. */
+const TopologyGraph = ({
+  layout,
+  sizeBy,
+  height,
+  onMaximize,
+}: {
+  layout: Layout;
+  sizeBy: SizeBy;
+  height: number;
+  onMaximize?: () => void;
+}) => {
+  const [zoom, setZoom] = useState(1);
+  const [pngState, setPngState] = useState<"idle" | "copied" | "saved">("idle");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Wheel zoom (native non-passive listener so preventDefault works).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => clampZoom(z * (e.deltaY < 0 ? 1.1 : 0.9)));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const byKey = useMemo(
+    () => new Map(layout.nodes.map((n) => [n.key, n])),
+    [layout],
+  );
+
+  const copyPng = async () => {
+    try {
+      const svgStr = buildExportSvg(layout, sizeBy);
+      const url = URL.createObjectURL(
+        new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" }),
+      );
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = url;
+      });
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = layout.width * scale;
+      canvas.height = layout.height * scale;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const png = await new Promise<Blob | null>((res) =>
+        canvas.toBlob(res, "image/png"),
+      );
+      if (!png) throw new Error("no blob");
+      const ClipItem = (window as unknown as { ClipboardItem?: typeof ClipboardItem })
+        .ClipboardItem;
+      if (navigator.clipboard && "write" in navigator.clipboard && ClipItem) {
+        await navigator.clipboard.write([new ClipItem({ "image/png": png })]);
+        setPngState("copied");
+      } else {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(png);
+        a.download = "trace-topology.png";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setPngState("saved");
+      }
+    } catch {
+      setPngState("idle");
+    } finally {
+      window.setTimeout(() => setPngState("idle"), 1600);
+    }
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      {/* Overlay toolbar */}
+      <Flex
+        gap={2}
+        alignItems="center"
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          zIndex: 2,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: 2,
+          boxShadow: "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
+        }}
+      >
+        <button type="button" style={iconBtnStyle} title="Zoom out" onClick={() => setZoom((z) => clampZoom(z * 0.8))}>
+          <ZoomOutIcon size={15} />
+        </button>
+        <button
+          type="button"
+          style={{ ...iconBtnStyle, width: 42, fontSize: 11, color: "var(--text-3)" }}
+          title="Reset zoom"
+          onClick={() => setZoom(1)}
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button type="button" style={iconBtnStyle} title="Zoom in" onClick={() => setZoom((z) => clampZoom(z * 1.25))}>
+          <ZoomInIcon size={15} />
+        </button>
+        <button type="button" style={iconBtnStyle} title="Reset zoom" onClick={() => setZoom(1)}>
+          <ZoomToFitIcon size={15} />
+        </button>
+        <div style={{ width: 1, height: 18, background: "var(--border)", margin: "0 2px" }} />
+        <button
+          type="button"
+          style={{ ...iconBtnStyle, width: pngState === "idle" ? 26 : 64, color: pngState !== "idle" ? "var(--green-2)" : "var(--text-2)", gap: 4 }}
+          title="Copy graph as PNG"
+          onClick={copyPng}
+        >
+          <ImageIcon size={15} />
+          {pngState === "copied" ? <span style={{ fontSize: 11 }}>Copied</span> : pngState === "saved" ? <span style={{ fontSize: 11 }}>Saved</span> : null}
+        </button>
+        {onMaximize && (
+          <button type="button" style={iconBtnStyle} title="Maximize" onClick={onMaximize}>
+            <MaximizeIcon size={15} />
+          </button>
+        )}
+      </Flex>
+
+      <div ref={scrollRef} style={{ overflow: "auto", maxHeight: height }}>
+        {layout.nodes.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center" }}>
+            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+              No spans match the selected categories.
+            </Text>
+          </div>
+        ) : (
+          <div style={{ width: layout.width * zoom, height: layout.height * zoom }}>
+            <div
+              style={{
+                position: "relative",
+                width: layout.width,
+                height: layout.height,
+                transform: `scale(${zoom})`,
+                transformOrigin: "top left",
+              }}
+            >
+              <svg
+                width={layout.width}
+                height={layout.height}
+                style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+              >
+                {layout.edges.map((e) => {
+                  const a = byKey.get(e.from);
+                  const b = byKey.get(e.to);
+                  if (!a || !b) return null;
+                  return (
+                    <path
+                      key={`${e.from}->${e.to}`}
+                      d={edgePath(a.x + a.r, a.y, b.x - b.r, b.y)}
+                      fill="none"
+                      style={{ stroke: a.isEntry ? "var(--blue)" : "var(--border)" }}
+                      strokeWidth={a.isEntry ? 2.5 : 1.5}
+                      opacity={a.isEntry ? 0.9 : 1}
+                    />
+                  );
+                })}
+              </svg>
+
+              {layout.nodes.map((n) => {
+                const color = CAT_COLOR[n.category];
+                const d = n.r * 2;
+                return (
+                  <div
+                    key={n.key}
+                    title={`${n.label} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCost(n.cost)}`}
+                    style={{ position: "absolute", left: n.x - n.r, top: n.y - n.r, width: d, height: d }}
+                  >
+                    <div
+                      style={{
+                        width: d,
+                        height: d,
+                        borderRadius: "50%",
+                        background: "var(--surface)",
+                        border: `${n.isEntry ? 3 : 2}px solid ${color}`,
+                        boxShadow: n.isEntry
+                          ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
+                          : "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color,
+                      }}
+                    >
+                      <ServicesIcon size={Math.max(14, Math.min(26, n.r * 0.7))} />
+                    </div>
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: d + 4,
+                        left: -(180 - d) / 2,
+                        width: 180,
+                        textAlign: "center",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          display: "block",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "var(--text)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {n.label}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          color: sizeBy === "none" ? "var(--text-3)" : "var(--text-2)",
+                          fontWeight: sizeBy === "none" ? 400 : 600,
+                        }}
+                      >
+                        {sublabel(n, sizeBy)}
+                      </Text>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const BottomControls = ({
+  indicators,
+  setIndicators,
+  sizeBy,
+  setSizeBy,
+}: {
+  indicators: IndicatorState;
+  setIndicators: React.Dispatch<React.SetStateAction<IndicatorState>>;
+  sizeBy: SizeBy;
+  setSizeBy: (v: SizeBy) => void;
+}) => (
+  <Flex
+    alignItems="center"
+    justifyContent="space-between"
+    flexWrap="wrap"
+    gap={12}
+    style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}
+  >
+    <Flex alignItems="center" gap={12} flexWrap="wrap">
+      {CAT_TOGGLES.map((c) => (
+        <Flex key={c.key} alignItems="center" gap={6}>
+          <Checkbox
+            name={`topo-${c.key}`}
+            value={indicators[c.key]}
+            onChange={(checked) =>
+              setIndicators((prev) => ({ ...prev, [c.key]: checked }))
+            }
+            aria-label={c.label}
+          />
+          <span
+            aria-hidden
+            style={{ width: 8, height: 8, borderRadius: 2, background: CAT_COLOR[c.key], flex: "0 0 auto" }}
+          />
+          <Text style={{ fontSize: 12, color: "var(--text)" }}>{c.label}</Text>
+        </Flex>
+      ))}
+    </Flex>
+    <Flex alignItems="center" gap={8}>
+      <Text
+        style={{
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "var(--text-3)",
+        }}
+      >
+        Size by
+      </Text>
+      <div
+        role="radiogroup"
+        aria-label="Size nodes by"
+        style={{ display: "inline-flex", padding: 2, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 999 }}
+      >
+        {SIZE_OPTIONS.map((o) => {
+          const active = o.value === sizeBy;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setSizeBy(o.value)}
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                padding: "4px 12px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: active ? 600 : 500,
+                color: active ? "var(--text)" : "var(--text-2)",
+                background: active ? "var(--surface)" : "transparent",
+              }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </Flex>
+  </Flex>
+);
+
 export interface TraceTopologyProps {
   spans: TraceSpan[];
   isLoading: boolean;
@@ -272,9 +678,10 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
     agent: true,
     llm: true,
     tool: true,
-    other: false,
+    other: true,
   });
   const [sizeBy, setSizeBy] = useState<SizeBy>("none");
+  const [maximized, setMaximized] = useState(false);
 
   const layout = useMemo(
     () => buildLayout(spans, indicators, sizeBy),
@@ -284,226 +691,57 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
   if (isLoading) {
     return (
       <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-          Loading topology…
-        </Text>
+        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading topology…</Text>
       </div>
     );
   }
   if (spans.length === 0) {
     return (
       <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-          No spans found in trace
-        </Text>
+        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>No spans found in trace</Text>
       </div>
     );
   }
 
-  const byKey = new Map(layout.nodes.map((n) => [n.key, n]));
+  const controls = (
+    <BottomControls
+      indicators={indicators}
+      setIndicators={setIndicators}
+      sizeBy={sizeBy}
+      setSizeBy={setSizeBy}
+    />
+  );
 
   return (
     <Flex flexDirection="column" gap={12}>
-      <div style={{ overflow: "auto", maxHeight: 460 }}>
-        {layout.nodes.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center" }}>
-            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-              No spans match the selected categories.
-            </Text>
-          </div>
-        ) : (
-          <div
-            style={{
-              position: "relative",
-              width: layout.width,
-              height: layout.height,
-              minWidth: "100%",
-            }}
-          >
-            <svg
-              width={layout.width}
-              height={layout.height}
-              style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
-            >
-              {layout.edges.map((e) => {
-                const a = byKey.get(e.from);
-                const b = byKey.get(e.to);
-                if (!a || !b) return null;
-                return (
-                  <path
-                    key={`${e.from}->${e.to}`}
-                    d={edgePath(a.x + a.r, a.y, b.x - b.r, b.y)}
-                    fill="none"
-                    stroke={a.isEntry ? "var(--blue)" : "var(--border)"}
-                    strokeWidth={a.isEntry ? 2.5 : 1.5}
-                    opacity={a.isEntry ? 0.9 : 1}
-                  />
-                );
-              })}
-            </svg>
+      <TopologyGraph
+        layout={layout}
+        sizeBy={sizeBy}
+        height={440}
+        onMaximize={() => setMaximized(true)}
+      />
+      {controls}
 
-            {layout.nodes.map((n) => {
-              const color = CAT_COLOR[n.category];
-              const d = n.r * 2;
-              return (
-                <div
-                  key={n.key}
-                  title={`${n.label} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCost(n.cost)}`}
-                  style={{
-                    position: "absolute",
-                    left: n.x - n.r,
-                    top: n.y - n.r,
-                    width: d,
-                    height: d,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: d,
-                      height: d,
-                      borderRadius: "50%",
-                      background: "var(--surface)",
-                      border: `${n.isEntry ? 3 : 2}px solid ${color}`,
-                      boxShadow: n.isEntry
-                        ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
-                        : "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color,
-                    }}
-                  >
-                    <ServicesIcon size={Math.max(14, Math.min(26, n.r * 0.7))} />
-                  </div>
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: d + 4,
-                      left: -(180 - d) / 2,
-                      width: 180,
-                      textAlign: "center",
-                      pointerEvents: "none",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        display: "block",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: "var(--text)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {n.label}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        color:
-                          sizeBy === "none" ? "var(--text-3)" : "var(--text-2)",
-                        fontWeight: sizeBy === "none" ? 400 : 600,
-                      }}
-                    >
-                      {sublabel(n, sizeBy)}
-                    </Text>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom controls */}
-      <Flex
-        alignItems="center"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={12}
-        style={{
-          borderTop: "1px solid var(--border)",
-          paddingTop: 10,
-        }}
+      <Modal
+        show={maximized}
+        onDismiss={() => setMaximized(false)}
+        size="large"
+        title="Trace topology"
+        footer={
+          <Flex justifyContent="flex-end">
+            <Button onClick={() => setMaximized(false)}>Close</Button>
+          </Flex>
+        }
       >
-        <Flex alignItems="center" gap={12} flexWrap="wrap">
-          {CAT_TOGGLES.map((c) => (
-            <Flex key={c.key} alignItems="center" gap={6}>
-              <Checkbox
-                name={`topo-${c.key}`}
-                value={indicators[c.key]}
-                onChange={(checked) =>
-                  setIndicators((prev) => ({ ...prev, [c.key]: checked }))
-                }
-                aria-label={c.label}
-              />
-              <span
-                aria-hidden
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 2,
-                  background: CAT_COLOR[c.key],
-                  flex: "0 0 auto",
-                }}
-              />
-              <Text style={{ fontSize: 12, color: "var(--text)" }}>
-                {c.label}
-              </Text>
-            </Flex>
-          ))}
+        <Flex flexDirection="column" gap={12}>
+          <TopologyGraph
+            layout={layout}
+            sizeBy={sizeBy}
+            height={Math.round(window.innerHeight * 0.62)}
+          />
+          {controls}
         </Flex>
-        <Flex alignItems="center" gap={8}>
-          <Text
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              color: "var(--text-3)",
-            }}
-          >
-            Size by
-          </Text>
-          <div
-            role="radiogroup"
-            aria-label="Size nodes by"
-            style={{
-              display: "inline-flex",
-              padding: 2,
-              background: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              borderRadius: 999,
-            }}
-          >
-            {SIZE_OPTIONS.map((o) => {
-              const active = o.value === sizeBy;
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setSizeBy(o.value)}
-                  style={{
-                    all: "unset",
-                    cursor: "pointer",
-                    padding: "4px 12px",
-                    borderRadius: 999,
-                    fontSize: 12,
-                    fontWeight: active ? 600 : 500,
-                    color: active ? "var(--text)" : "var(--text-2)",
-                    background: active ? "var(--surface)" : "transparent",
-                  }}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-        </Flex>
-      </Flex>
+      </Modal>
     </Flex>
   );
 };
