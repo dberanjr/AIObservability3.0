@@ -391,6 +391,22 @@ export const PromptsSidebar = ({
         step={0.1}
       />
 
+      <RangeControl
+        label="In cost ($)"
+        name="in-cost"
+        value={filter.inCost}
+        onChange={(next) => onFilterChange({ ...filter, inCost: next })}
+        step={0.0001}
+      />
+
+      <RangeControl
+        label="Out cost ($)"
+        name="out-cost"
+        value={filter.outCost}
+        onChange={(next) => onFilterChange({ ...filter, outCost: next })}
+        step={0.0001}
+      />
+
       <PrivacySegment value={privacy} onChange={onPrivacyChange} />
     </Flex>
   </Surface>

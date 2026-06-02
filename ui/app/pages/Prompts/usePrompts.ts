@@ -13,7 +13,18 @@ import {
   type LatencyFilter,
 } from "./queries";
 import { canonicalizeModel } from "../../detection/attributes";
+import { getPricing, estimateCost } from "../../data/pricing";
 import { toNum } from "../../data/format";
+
+/** True when `val` satisfies a numeric range filter (>, <, between). */
+const matchRange = (val: number, r?: LatencyFilter): boolean => {
+  if (!r) return true;
+  if (r.op === "gt") return r.min == null || val > r.min;
+  if (r.op === "lt") return r.max == null || val < r.max;
+  if (r.op === "between")
+    return (r.min == null || val >= r.min) && (r.max == null || val <= r.max);
+  return true;
+};
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -50,6 +61,9 @@ export interface PromptRow {
   temperature: number | null;
   inTokens: number;
   outTokens: number;
+  /** Estimated cost in cents (tokens × per-model pricing). */
+  inCost: number;
+  outCost: number;
   durationMs: number;
   promptText: string;
   responseText: string;
@@ -116,6 +130,9 @@ export interface PromptsFilter {
   onlyWarnings?: boolean;
   latency?: LatencyFilter;
   temperature?: LatencyFilter;
+  /** Cost range filters, in dollars (applied client-side over loaded rows). */
+  inCost?: LatencyFilter;
+  outCost?: LatencyFilter;
 }
 
 export interface FacetValue {
@@ -272,6 +289,13 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       const evalRelevance =
         typeof r.eval_relevance === "number" ? r.eval_relevance : null;
 
+      const modelLabel = r.model ? canonicalizeModel(r.model).label : null;
+      const inTok = num(r.in_tok);
+      const outTok = num(r.out_tok);
+      const pricing = getPricing(modelLabel);
+      const inCost = inTok > 0 ? estimateCost(inTok, 0, pricing) : 0;
+      const outCost = outTok > 0 ? estimateCost(0, outTok, pricing) : 0;
+
       prompts.push({
         id: spanId ?? `${traceId ?? "?"}-${prompts.length}`,
         timestampMs: parseTimestamp(r.timestamp),
@@ -280,13 +304,15 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
         service: str(r.service),
         serviceId: str(r.service_id),
         provider: r.provider ?? null,
-        model: r.model ? canonicalizeModel(r.model).label : null,
+        model: modelLabel,
         agent:
           r.agent ?? (traceId ? traceAgent.get(traceId) ?? null : null),
         temperature:
           typeof r.temperature === "number" ? r.temperature : null,
-        inTokens: num(r.in_tok),
-        outTokens: num(r.out_tok),
+        inTokens: inTok,
+        outTokens: outTok,
+        inCost,
+        outCost,
         durationMs: num(r.duration_ms),
         promptText: str(r.prompt_text),
         responseText: str(r.response_text),
@@ -362,6 +388,9 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       if (services.length > 0 && !services.includes(p.service)) return false;
       if (models.length > 0 && (!p.model || !models.includes(p.model))) return false;
       if (agents.length > 0 && (!p.agent || !agents.includes(p.agent))) return false;
+      // Cost filters are in dollars; PromptRow stores cents.
+      if (!matchRange(p.inCost / 100, filter.inCost)) return false;
+      if (!matchRange(p.outCost / 100, filter.outCost)) return false;
       if (search) {
         const hay =
           `${p.promptText} ${p.responseText} ${p.service} ${p.model ?? ""} ${p.agent ?? ""}`.toLowerCase();
@@ -402,6 +431,12 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     filter?.services?.join(","),
     filter?.models?.join(","),
     filter?.agents?.join(","),
+    filter?.inCost?.op,
+    filter?.inCost?.min,
+    filter?.inCost?.max,
+    filter?.outCost?.op,
+    filter?.outCost?.min,
+    filter?.outCost?.max,
     refetch,
   ]);
 };
