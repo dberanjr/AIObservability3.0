@@ -21,6 +21,8 @@ const ATTRIBUTE_SUGGESTIONS: string[] = [
   "gen_ai.operation.name",
   "gen_ai.tool.name",
   "gen_ai.response.finish_reasons",
+  "trace.id",
+  "span.id",
   "span.name",
   "span.kind",
   "k8s.namespace.name",
