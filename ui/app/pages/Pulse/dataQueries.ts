@@ -21,12 +21,14 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    trunc = if(contains(toString(gen_ai.response.finish_reasons), "max_tokens"), 1, else: 0)
+    trunc = if(contains(toString(gen_ai.response.finish_reasons), "max_tokens"), 1, else: 0),
+    has_eval = if(isNotNull(gen_ai.evaluation.hallucination) or isNotNull(gen_ai.evaluation.correctness) or isNotNull(gen_ai.evaluation.faithfulness) or isNotNull(gen_ai.evaluation.relevance) or isNotNull(gen_ai.evaluation.score), 1, else: 0)
 | summarize
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
     requests = count(),
     truncations = sum(trunc),
+    eval_spans = sum(has_eval),
     dur_s = sum(duration) / 1000000000,
     by: { model = gen_ai.request.model }
 `.trim();

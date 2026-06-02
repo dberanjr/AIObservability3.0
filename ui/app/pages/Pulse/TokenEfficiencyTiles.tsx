@@ -108,9 +108,13 @@ export const TokenEfficiencyTiles = () => {
           "Weighted: output leverage 50% (output ÷ total tokens), completion 30% " +
           "(1 − truncation rate, where a response cut off by max_tokens counts as " +
           "waste), and throughput 20% (output tokens/sec vs a 60 tok/s target). " +
-          "It's a cost/throughput/waste measure — NOT output quality, since this " +
-          "environment emits no evaluation scores. Higher is better; a low score " +
-          "is usually driven by input/context bloat (see 'Input tokens / request')."
+          "It measures cost/throughput/waste, not output quality. Higher is " +
+          "better; a low score is usually driven by input/context bloat (see " +
+          "'Input tokens / request')." +
+          (eff.hasEval
+            ? ""
+            : " Note: no evaluation scores are present in the current data, so " +
+              "output quality can't be factored in.")
         }
       >
         {eff.isLoading ? (

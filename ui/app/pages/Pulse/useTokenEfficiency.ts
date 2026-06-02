@@ -36,6 +36,8 @@ export interface TokenEfficiency {
   inputTokensPerRequest: number;
   truncationRatePct: number;
   costPer1kOutput: number | null;
+  /** Whether any LLM span in scope carries an evaluation/quality score. */
+  hasEval: boolean;
   isLoading: boolean;
   error?: Error;
 }
@@ -51,6 +53,7 @@ export const useTokenEfficiency = (): TokenEfficiency => {
     output_tokens?: number;
     requests?: number;
     truncations?: number;
+    eval_spans?: number;
     dur_s?: number;
   }>(
     canQuery
@@ -64,6 +67,7 @@ export const useTokenEfficiency = (): TokenEfficiency => {
     let output = 0;
     let requests = 0;
     let truncations = 0;
+    let evalSpans = 0;
     let durS = 0;
     let cost = 0;
     for (const r of data?.records ?? []) {
@@ -73,6 +77,7 @@ export const useTokenEfficiency = (): TokenEfficiency => {
       output += outTok;
       requests += num(r.requests);
       truncations += num(r.truncations);
+      evalSpans += num(r.eval_spans);
       durS += num(r.dur_s);
       // Ratios are scale-invariant, so sampling extrapolation isn't needed —
       // price the sampled tokens directly with the per-model rate.
@@ -103,6 +108,7 @@ export const useTokenEfficiency = (): TokenEfficiency => {
       inputTokensPerRequest: requests > 0 ? input / requests : 0,
       truncationRatePct: requests > 0 ? (truncations / requests) * 100 : 0,
       costPer1kOutput: output > 0 ? cost / (output / 1000) : null,
+      hasEval: evalSpans > 0,
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
