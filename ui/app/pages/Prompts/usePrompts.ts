@@ -47,6 +47,7 @@ export interface PromptRow {
   provider: string | null;
   model: string | null;
   agent: string | null;
+  temperature: number | null;
   inTokens: number;
   outTokens: number;
   durationMs: number;
@@ -73,6 +74,7 @@ interface PromptRecord {
   provider?: string | null;
   model?: string | null;
   agent?: string | null;
+  temperature?: number | null;
   in_tok?: number;
   out_tok?: number;
   duration_ms?: number;
@@ -276,6 +278,8 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
         model: r.model ? canonicalizeModel(r.model).label : null,
         agent:
           r.agent ?? (traceId ? traceAgent.get(traceId) ?? null : null),
+        temperature:
+          typeof r.temperature === "number" ? r.temperature : null,
         inTokens: num(r.in_tok),
         outTokens: num(r.out_tok),
         durationMs: num(r.duration_ms),

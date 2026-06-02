@@ -182,6 +182,23 @@ export const PromptDetailPanel = ({
   const traceLogs = useTraceLogs(prompt.traceId, prompt.timestampMs);
   const spanDetail = usePromptSpanDetail(prompt.spanId);
 
+  // Log counts shown in the Info tab are derived from the TRACE's logs (same
+  // source as the Logs tab). The per-span counts were wrong: WARN/ERROR logs in
+  // a trace usually belong to spans other than the LLM-call span, so a span_id
+  // match returned 0 even when the trace clearly had error/warning logs.
+  const logCounts = useMemo(() => {
+    let error = 0;
+    let warning = 0;
+    let info = 0;
+    for (const l of traceLogs.logs) {
+      const s = l.status.toUpperCase();
+      if (s === "ERROR" || s === "SEVERE" || s === "FATAL") error++;
+      else if (s === "WARN" || s === "WARNING") warning++;
+      else info++;
+    }
+    return { error, warning, info };
+  }, [traceLogs.logs]);
+
   const searchTerm = search.trim().toLowerCase();
   const showSearch = activeTab === "trace" || activeTab === "logs";
 
@@ -437,7 +454,7 @@ export const PromptDetailPanel = ({
               Logs
             </Text>
             <Text>
-              {spanDetail.isLoading ? (
+              {traceLogs.isLoading ? (
                 <Text as="span" style={{ color: "var(--text-3)" }}>
                   loading…
                 </Text>
@@ -446,23 +463,24 @@ export const PromptDetailPanel = ({
                   <Text
                     as="span"
                     style={{
-                      color:
-                        spanDetail.errorLogs > 0 ? "var(--red)" : "var(--text)",
+                      color: logCounts.error > 0 ? "var(--red)" : "var(--text)",
                     }}
                   >
-                    {spanDetail.errorLogs} error
+                    {logCounts.error} error
                   </Text>
                   {" · "}
                   <Text
                     as="span"
                     style={{
                       color:
-                        spanDetail.warningLogs > 0
-                          ? "var(--amber)"
-                          : "var(--text)",
+                        logCounts.warning > 0 ? "var(--amber)" : "var(--text)",
                     }}
                   >
-                    {spanDetail.warningLogs} warning
+                    {logCounts.warning} warning
+                  </Text>
+                  {" · "}
+                  <Text as="span" style={{ color: "var(--text-3)" }}>
+                    {logCounts.info} info
                   </Text>
                 </>
               )}

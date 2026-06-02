@@ -18,7 +18,7 @@ import { usePersistedState } from "../../state/usePersistedState";
 import { PromptDetailPanel } from "./PromptDetailPanel";
 
 export type PromptView = "stream" | "metadata" | "evaluations";
-type VisibleColumn = "in_cost" | "out_cost" | "system_prompt";
+type VisibleColumn = "temperature" | "in_cost" | "out_cost" | "system_prompt";
 type SortKey = "timestampMs" | "inTokens" | "outTokens" | "durationMs";
 type SortDir = "asc" | "desc";
 
@@ -82,6 +82,49 @@ const TypeChip = ({ label }: { label: string }) => (
     {label}
   </span>
 );
+
+// Error rows get a noticeable red gradient (strong on the left, fading right)
+// plus a solid red left border — clearly distinct from the subtle selected tint.
+const ERROR_ROW_BG =
+  "linear-gradient(90deg, color-mix(in oklab, var(--red) 22%, transparent), color-mix(in oklab, var(--red) 5%, transparent))";
+
+// Temperature color band: cold (deterministic) → hot (creative).
+const tempColor = (t: number): string => {
+  if (t <= 0.3) return "var(--blue)";
+  if (t <= 0.6) return "var(--green-2)";
+  if (t <= 0.85) return "var(--amber)";
+  return "var(--red)";
+};
+
+/**
+ * Compact temperature pill — a small color-banded chip showing the value
+ * (0–1+). Tinted background + matching text/border keep it readable while
+ * occupying minimal width. Empty (no temperature emitted) renders as "—".
+ */
+const TempCell = ({ t }: { t: number | null }) => {
+  if (t == null) {
+    return <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>;
+  }
+  const c = tempColor(t);
+  return (
+    <span
+      title={`temperature ${t}`}
+      style={{
+        display: "inline-block",
+        padding: "1px 7px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 600,
+        fontVariantNumeric: "tabular-nums",
+        color: c,
+        background: `color-mix(in oklab, ${c} 16%, transparent)`,
+        border: `1px solid color-mix(in oklab, ${c} 35%, transparent)`,
+      }}
+    >
+      {t.toFixed(2)}
+    </span>
+  );
+};
 
 const Cell = ({
   children,
@@ -278,7 +321,7 @@ const ColumnSelector = ({
             boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
           }}
         >
-          {["in_cost", "out_cost", "system_prompt"].map((col) => (
+          {["temperature", "in_cost", "out_cost", "system_prompt"].map((col) => (
             <label
               key={col}
               style={{
@@ -297,11 +340,13 @@ const ColumnSelector = ({
                 onChange={() => onToggle(col as VisibleColumn)}
                 style={{ cursor: "pointer" }}
               />
-              {col === "in_cost"
-                ? "In cost"
-                : col === "out_cost"
-                  ? "Out cost"
-                  : "System prompt"}
+              {col === "temperature"
+                ? "Temperature"
+                : col === "in_cost"
+                  ? "In cost"
+                  : col === "out_cost"
+                    ? "Out cost"
+                    : "System prompt"}
             </label>
           ))}
         </div>
@@ -331,6 +376,9 @@ const StreamHeader = ({
     <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
       Out tok
     </HeaderCell>
+    {visibleCols.has("temperature") && (
+      <HeaderCell width={64} align="right">Temp</HeaderCell>
+    )}
     <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
       Duration
     </HeaderCell>
@@ -386,12 +434,16 @@ const StreamRow = ({
         alignItems: "center",
         padding: "0 10px",
         borderTop: "1px solid var(--border)",
-        borderLeft: isSelected ? "3px solid var(--blue)" : "3px solid transparent",
+        borderLeft: isSelected
+          ? "3px solid var(--blue)"
+          : prompt.hasError
+            ? "3px solid var(--red)"
+            : "3px solid transparent",
         cursor: "pointer",
         background: isSelected
           ? "color-mix(in oklab, var(--blue) 8%, transparent)"
           : prompt.hasError
-            ? "color-mix(in oklab, var(--red) 4%, transparent)"
+            ? ERROR_ROW_BG
             : undefined,
       }}
     >
@@ -410,6 +462,11 @@ const StreamRow = ({
       <Cell width={70} align="right" mono>
         {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
       </Cell>
+      {visibleCols.has("temperature") && (
+        <Cell width={64} align="right">
+          <TempCell t={prompt.temperature} />
+        </Cell>
+      )}
       <Cell width={90} align="right" mono>
         {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
       </Cell>
@@ -463,6 +520,9 @@ const MetadataHeader = ({
     <HeaderCell width={140}>AI app</HeaderCell>
     <HeaderCell width={160}>Model</HeaderCell>
     <HeaderCell width={110}>Type</HeaderCell>
+    {visibleCols.has("temperature") && (
+      <HeaderCell width={64} align="right">Temp</HeaderCell>
+    )}
     <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
       Duration
     </HeaderCell>
@@ -511,11 +571,17 @@ const MetadataRow = ({
         alignItems: "center",
         padding: "0 10px",
         borderTop: "1px solid var(--border)",
-        borderLeft: isSelected ? "3px solid var(--blue)" : "3px solid transparent",
+        borderLeft: isSelected
+          ? "3px solid var(--blue)"
+          : prompt.hasError
+            ? "3px solid var(--red)"
+            : "3px solid transparent",
         cursor: "pointer",
         background: isSelected
           ? "color-mix(in oklab, var(--blue) 8%, transparent)"
-          : undefined,
+          : prompt.hasError
+            ? ERROR_ROW_BG
+            : undefined,
       }}
     >
       <Cell width={80}>
@@ -533,6 +599,11 @@ const MetadataRow = ({
           <TypeChip label={prompt.typeLabel} />
         </Flex>
       </Cell>
+      {visibleCols.has("temperature") && (
+        <Cell width={64} align="right">
+          <TempCell t={prompt.temperature} />
+        </Cell>
+      )}
       <Cell width={90} align="right" mono>
         {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
       </Cell>
@@ -629,15 +700,17 @@ export const PromptsTable = ({
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState("");
+  // v2 key: adds the new Temperature column (on by default) without inheriting
+  // older persisted selections that predate it.
   const [visibleColsArray, setVisibleColsArray] = usePersistedState<VisibleColumn[]>(
-    "ai-obs.prompts-visible-cols",
-    ["in_cost", "out_cost"],
+    "ai-obs.prompts-visible-cols.v2",
+    ["temperature", "in_cost", "out_cost"],
   );
   // Handle migration from old Set-based storage: if the loaded value is not an array,
   // treat it as invalid and use the default
   const validVisibleColsArray: VisibleColumn[] = Array.isArray(visibleColsArray)
     ? visibleColsArray
-    : (["in_cost", "out_cost"] as VisibleColumn[]);
+    : (["temperature", "in_cost", "out_cost"] as VisibleColumn[]);
   const visibleCols = new Set(validVisibleColsArray);
 
   const toggleSort = (key: SortKey) =>

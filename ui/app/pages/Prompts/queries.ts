@@ -160,6 +160,7 @@ ${searchClause}
     service_id = coalesce(dt.smartscape.service, dt.entity.service),
     model = model_name,
     agent = gen_ai.agent.name,
+    temperature = gen_ai.request.temperature,
     in_tok,
     out_tok,
     duration_ms,
