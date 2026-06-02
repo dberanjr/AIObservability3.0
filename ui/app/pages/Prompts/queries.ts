@@ -55,14 +55,16 @@ const sidebarClauses = (sidebar?: PromptsSidebarFilter): string => {
   }
   const lat = sidebar?.latency;
   if (lat) {
-    // duration is nanoseconds; the UI specifies milliseconds.
-    const ns = (ms: number) => Math.max(0, Math.round(ms)) * 1000000;
+    // `duration` is a DQL duration-typed column — it must be compared against a
+    // duration literal (e.g. `3000ms`), NOT a raw nanosecond integer (that
+    // silently matches nothing). The UI specifies milliseconds.
+    const ms = (v: number) => `${Math.max(0, Math.round(v))}ms`;
     if (lat.op === "gt" && lat.min != null) {
-      lines.push(`| filter duration > ${ns(lat.min)}`);
+      lines.push(`| filter duration > ${ms(lat.min)}`);
     } else if (lat.op === "lt" && lat.max != null) {
-      lines.push(`| filter duration < ${ns(lat.max)}`);
+      lines.push(`| filter duration < ${ms(lat.max)}`);
     } else if (lat.op === "between" && lat.min != null && lat.max != null) {
-      lines.push(`| filter duration >= ${ns(lat.min)} and duration <= ${ns(lat.max)}`);
+      lines.push(`| filter duration >= ${ms(lat.min)} and duration <= ${ms(lat.max)}`);
     }
   }
   return lines.join("\n");

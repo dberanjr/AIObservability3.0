@@ -331,6 +331,9 @@ const StreamHeader = ({
     <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
       Out tok
     </HeaderCell>
+    <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
+      Duration
+    </HeaderCell>
     {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
     {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
     <HeaderCell>Input</HeaderCell>
@@ -406,6 +409,9 @@ const StreamRow = ({
       </Cell>
       <Cell width={70} align="right" mono>
         {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
+      </Cell>
+      <Cell width={90} align="right" mono>
+        {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
       </Cell>
       {visibleCols.has("in_cost") && (
         <Cell width={70} align="right" mono>
