@@ -1,4 +1,8 @@
-import { sendIntent, type SendIntentOptions } from "@dynatrace-sdk/navigation";
+import {
+  sendIntent,
+  getIntentLink,
+  type SendIntentOptions,
+} from "@dynatrace-sdk/navigation";
 
 /**
  * Cross-app navigation via the Dynatrace intent system.
@@ -85,7 +89,7 @@ const dqlStr = (s: string): string => s.replace(/\\/g, "\\\\").replace(/"/g, '\\
  * recommending) the Distributed Tracing app in "Open with…". See the
  * trace-exemplar pattern in the Application Tracing docs.
  */
-const buildTraceExemplarQuery = (ctx: IntentContext): string => {
+export const buildTraceExemplarQuery = (ctx: IntentContext): string => {
   const { from, to } = traceWindow(ctx.startMs);
   const filters: string[] = [];
   if (ctx.traceId) {
@@ -123,6 +127,24 @@ export const openInTraces = (ctx: IntentContext = {}): void => {
   const dql = ctx.dql ?? buildTraceExemplarQuery(ctx);
   safeSend({ "dt.query": dql });
 };
+
+/**
+ * Build the App-Shell intent URL for a trace drill — the same trace-exemplar
+ * payload as {@link openInTraces}, but returned as a link instead of navigating.
+ * We embed this in an <iframe> so the Distributed Tracing view renders inside a
+ * modal without the user leaving the AI Observability app. Returns null if the
+ * platform can't produce a link (errors are swallowed, never thrown to render).
+ */
+export const getTraceIntentLink = (ctx: IntentContext = {}): string | null => {
+  try {
+    const dql = ctx.dql ?? buildTraceExemplarQuery(ctx);
+    return getIntentLink({ "dt.query": dql });
+  } catch {
+    return null;
+  }
+};
+
+export type { IntentContext };
 
 /**
  * Service-entity intent — `dt.entity.service` is the canonical semantic key,

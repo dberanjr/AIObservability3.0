@@ -49,18 +49,44 @@ const getSpanColor = (span: TraceSpan): string => {
   return "var(--text-3)";
 };
 
+/** True when any searchable field on the span contains `term` (lower-cased). */
+export const spanMatchesTerm = (span: TraceSpan, term: string): boolean => {
+  if (!term) return false;
+  const hay = [
+    span.name,
+    span.service,
+    span.provider,
+    span.model,
+    span.operation,
+    span.agentName,
+    span.toolName,
+    span.workflow,
+    span.exceptionType,
+    span.exceptionMsg,
+    span.spanId,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(term);
+};
+
 const TraceTreeNode = ({
   node,
   selectedSpanId,
   onSelectSpan,
+  highlight,
 }: {
   node: TraceNode;
   selectedSpanId: string | null;
   onSelectSpan: (spanId: string) => void;
+  highlight?: string;
 }) => {
   const [expanded, setExpanded] = useState(true);
   const isSelected = node.span.spanId === selectedSpanId;
   const color = getSpanColor(node.span);
+  const isMatch = !!highlight && spanMatchesTerm(node.span, highlight);
+  const dimmed = !!highlight && !isMatch;
 
   return (
     <div>
@@ -75,8 +101,17 @@ const TraceTreeNode = ({
           gap: 6,
           padding: "6px 8px",
           borderRadius: 4,
-          background: isSelected ? "color-mix(in oklab, var(--blue) 12%, transparent)" : undefined,
-          borderLeft: isSelected ? "2px solid var(--blue)" : "2px solid transparent",
+          background: isSelected
+            ? "color-mix(in oklab, var(--blue) 12%, transparent)"
+            : isMatch
+              ? "color-mix(in oklab, var(--amber) 18%, transparent)"
+              : undefined,
+          borderLeft: isSelected
+            ? "2px solid var(--blue)"
+            : isMatch
+              ? "2px solid var(--amber)"
+              : "2px solid transparent",
+          opacity: dimmed ? 0.45 : 1,
           width: "100%",
           minHeight: 32,
         }}
@@ -151,6 +186,7 @@ const TraceTreeNode = ({
               node={child}
               selectedSpanId={selectedSpanId}
               onSelectSpan={onSelectSpan}
+              highlight={highlight}
             />
           ))}
         </div>
@@ -257,9 +293,11 @@ const SpanAttributesPanel = ({ span }: SpanAttributesPanelProps) => (
 export interface TraceTreeProps {
   spans: TraceSpan[];
   isLoading: boolean;
+  /** Search term — matching spans are highlighted, non-matches dimmed. */
+  highlight?: string;
 }
 
-export const TraceTree = ({ spans, isLoading }: TraceTreeProps) => {
+export const TraceTree = ({ spans, isLoading, highlight }: TraceTreeProps) => {
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const roots = useMemo(() => buildTree(spans), [spans]);
   const selectedSpan = useMemo(
@@ -292,6 +330,7 @@ export const TraceTree = ({ spans, isLoading }: TraceTreeProps) => {
             node={root}
             selectedSpanId={selectedSpanId}
             onSelectSpan={setSelectedSpanId}
+            highlight={highlight}
           />
         ))}
       </div>

@@ -71,10 +71,14 @@ export interface UseTraceSpansResult {
 
 export const useTraceSpans = (
   traceId: string | null,
+  startMs?: number,
 ): UseTraceSpansResult => {
+  // ignoreGlobalFilter: a single-trace lookup must always resolve every span
+  // in the trace. Injecting the toolbar's attribute filter (e.g. an agent
+  // name) would drop most spans and break the waterfall.
   const { data, isLoading, error } = useScopedDql<TraceSpanRecord>(
-    traceId ? buildTraceSpansQuery(traceId) : "",
-    { enabled: !!traceId, staleTime: 30_000 },
+    traceId ? buildTraceSpansQuery(traceId, startMs) : "",
+    { enabled: !!traceId, staleTime: 30_000, ignoreGlobalFilter: true },
   );
 
   return useMemo<UseTraceSpansResult>(() => {

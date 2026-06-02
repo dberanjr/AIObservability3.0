@@ -2,18 +2,21 @@ import React, { useState, useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { WarningIcon } from "@dynatrace/strato-icons";
+import { TextInput } from "@dynatrace/strato-components/forms";
+import { WarningIcon, MagnifyingGlassIcon } from "@dynatrace/strato-icons";
 import { sendIntent } from "@dynatrace-sdk/navigation";
 import { fmtMs, fmtTokens } from "../../data/format";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
 import { useTraceSpans } from "./useTraceSpans";
+import { useTraceLogs } from "./useTraceLogs";
 import { usePromptSpanDetail } from "./usePromptSpanDetail";
 import { TraceTree } from "./TraceTree";
-import { openInTraces } from "../../lib/intents";
+import { LogsPanel } from "./LogsPanel";
+import { TraceModal } from "./TraceModal";
 
-type DetailTab = "trace" | "prompts" | "eval" | "info";
+type DetailTab = "prompts" | "trace" | "logs" | "eval" | "info";
 
 const Bubble = ({
   label,
@@ -168,8 +171,17 @@ export const PromptDetailPanel = ({
   onClose,
 }: PromptDetailPanelProps) => {
   const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
-  const { spans, isLoading, error } = useTraceSpans(prompt.traceId);
+  const [search, setSearch] = useState("");
+  const [traceModalOpen, setTraceModalOpen] = useState(false);
+  const { spans, isLoading, error } = useTraceSpans(
+    prompt.traceId,
+    prompt.timestampMs,
+  );
+  const traceLogs = useTraceLogs(prompt.traceId, prompt.timestampMs);
   const spanDetail = usePromptSpanDetail(prompt.spanId);
+
+  const searchTerm = search.trim().toLowerCase();
+  const showSearch = activeTab === "trace" || activeTab === "logs";
 
   const inputText =
     privacy === "mask" ? maskPII(prompt.promptText) : prompt.promptText;
@@ -185,14 +197,10 @@ export const PromptDetailPanel = ({
     [spans],
   );
 
-  const handleViewTrace = () => {
-    if (prompt.traceId) {
-      openInTraces({
-        traceId: prompt.traceId,
-        spanId: prompt.spanId ?? undefined,
-        startMs: prompt.timestampMs,
-      });
-    }
+  const traceCtx = {
+    traceId: prompt.traceId ?? undefined,
+    spanId: prompt.spanId ?? undefined,
+    startMs: prompt.timestampMs,
   };
 
   const handleUserSession = () => {
@@ -213,28 +221,68 @@ export const PromptDetailPanel = ({
             onChange={setActiveTab}
             options={[
               { value: "prompts", label: "Prompts" },
-              { value: "eval", label: "Eval" },
               { value: "trace", label: "Trace" },
+              { value: "logs", label: "Logs" },
+              { value: "eval", label: "Eval" },
               { value: "info", label: "Info" },
             ]}
           />
         </Flex>
 
+        {showSearch && (
+          <Flex alignItems="center" gap={6}>
+            <MagnifyingGlassIcon
+              size={14}
+              style={{ color: "var(--text-3)", flex: "0 0 auto" }}
+            />
+            <div style={{ flex: 1 }}>
+              <TextInput
+                name="trace-log-search"
+                value={search}
+                onChange={setSearch}
+                placeholder={
+                  activeTab === "trace"
+                    ? "Highlight spans by name, service, model, attribute…"
+                    : "Filter logs by message or attribute…"
+                }
+              />
+            </div>
+          </Flex>
+        )}
+
         {activeTab === "trace" && (
           <Flex flexDirection="column" gap={8}>
-            <TraceTree spans={spans} isLoading={isLoading} />
+            <TraceTree
+              spans={spans}
+              isLoading={isLoading}
+              highlight={searchTerm}
+            />
             {error && (
               <Text style={{ fontSize: 11, color: "var(--red)" }}>
                 Error loading trace: {error.message}
               </Text>
             )}
             <Flex gap={6}>
-              <Button onClick={handleViewTrace}>View trace</Button>
+              <Button
+                variant="accent"
+                onClick={() => setTraceModalOpen(true)}
+                disabled={!prompt.traceId}
+              >
+                Open trace
+              </Button>
               <Button onClick={handleUserSession} disabled={!sessionId}>
                 User session
               </Button>
             </Flex>
           </Flex>
+        )}
+
+        {activeTab === "logs" && (
+          <LogsPanel
+            logs={traceLogs.logs}
+            isLoading={traceLogs.isLoading}
+            highlight={searchTerm}
+          />
         )}
 
         {activeTab === "prompts" && (
@@ -456,6 +504,12 @@ export const PromptDetailPanel = ({
           </div>
         )}
       </Flex>
+
+      <TraceModal
+        show={traceModalOpen}
+        onClose={() => setTraceModalOpen(false)}
+        ctx={traceCtx}
+      />
     </div>
   );
 };

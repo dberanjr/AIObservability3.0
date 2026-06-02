@@ -200,12 +200,40 @@ ${globalFilterClauses(filters)}
 `.trim();
 
 /**
+ * Bracket a fetch window around a known epoch-ms timestamp (±30m). Grail is
+ * time-partitioned, so scoping the window to the record's time turns a 24h
+ * scan into a tiny one — and a trace older than 24h (the previous fixed
+ * window) is found at all. Falls back to now()-24h when no timestamp is known.
+ */
+const traceWindow = (
+  startMs?: number,
+): { from: string; to: string } => {
+  if (typeof startMs === "number" && Number.isFinite(startMs)) {
+    const pad = 30 * 60 * 1000;
+    return {
+      from: `"${new Date(startMs - pad).toISOString()}"`,
+      to: `"${new Date(startMs + pad).toISOString()}"`,
+    };
+  }
+  return { from: "now()-24h", to: "now()" };
+};
+
+/**
  * Fetches all spans within a trace for the detail panel trace tree view.
  * Used to build the span hierarchy and show metadata for each span.
+ *
+ * `trace.id` is a `uid`-typed column, so it must be compared with `toUid(...)`
+ * — comparing it to a bare string literal silently matches nothing (this was
+ * the bug that left the Trace tab perpetually empty).
  */
-export const buildTraceSpansQuery = (traceId: string): string => `
-fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
-| filter trace.id == "${traceId}"
+export const buildTraceSpansQuery = (
+  traceId: string,
+  startMs?: number,
+): string => {
+  const { from, to } = traceWindow(startMs);
+  return `
+fetch spans, samplingRatio: 1, from: ${from}, to: ${to}, scanLimitGBytes: 100
+| filter trace.id == toUid("${dqlEscape(traceId)}")
 | dedup {span.id}
 | fieldsAdd
     duration_ms = duration / 1000000,
@@ -215,7 +243,7 @@ fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
     span_id = span.id,
     parent_span_id = span.parent_id,
     name = span.name,
-    service = service.name,
+    service = coalesce(service.name, getNodeName(dt.smartscape.service)),
     duration_ms,
     timestamp = start_time,
     has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
@@ -233,6 +261,35 @@ fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 100
 | sort timestamp asc
 | limit 100
 `.trim();
+};
+
+/**
+ * Logs correlated to a trace, for the detail panel's Logs tab. Logs carry
+ * `trace_id` / `span_id` as plain string fields (hex, not uid), so we match
+ * `trace_id` by string equality. Scoped to ±30m around the prompt timestamp to
+ * keep the (very large) logs table scan bounded. Returns up to 200 rows; the
+ * UI paginates them 10 at a time.
+ */
+export const buildTraceLogsQuery = (
+  traceId: string,
+  startMs?: number,
+): string => {
+  const { from, to } = traceWindow(startMs);
+  return `
+fetch logs, from: ${from}, to: ${to}, scanLimitGBytes: 500
+| filter trace_id == "${dqlEscape(traceId)}"
+| fields
+    timestamp,
+    status,
+    loglevel,
+    content,
+    span_id,
+    source = coalesce(log.source, dt.process.name, k8s.namespace.name, ""),
+    namespace = k8s.namespace.name
+| sort timestamp asc
+| limit 200
+`.trim();
+};
 
 /**
  * Full detail for a single span (the popup's Info tab). Enriches the row with
