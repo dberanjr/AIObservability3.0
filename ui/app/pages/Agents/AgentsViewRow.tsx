@@ -6,12 +6,12 @@ import { SettingIcon, AiIcon } from "@dynatrace/strato-icons";
 import { useSLA } from "../../components/SLAConfig/SLAContext";
 
 export type AgentView = "all" | "slow" | "expensive" | "used";
-export type AgentFramework =
-  | "all"
-  | "AgentExecutor"
-  | "LangGraph"
-  | "RunnableSequence"
-  | "retrieval_chain";
+/**
+ * Replaces the old framework filter (gen_ai.framework has 0 rows in this
+ * tenant). Operation type comes from gen_ai.operation.name on the LLM spans
+ * trace-linked to each agent.
+ */
+export type AgentOperation = "all" | "chat" | "text_completion" | "embeddings";
 
 const VIEW_OPTIONS: { value: AgentView; label: string }[] = [
   { value: "all", label: "All" },
@@ -20,12 +20,11 @@ const VIEW_OPTIONS: { value: AgentView; label: string }[] = [
   { value: "used", label: "Most used" },
 ];
 
-const FRAMEWORK_OPTIONS: { value: AgentFramework; label: string }[] = [
+const OPERATION_OPTIONS: { value: AgentOperation; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "AgentExecutor", label: "AgentExec" },
-  { value: "LangGraph", label: "LangGraph" },
-  { value: "RunnableSequence", label: "RunnableSeq" },
-  { value: "retrieval_chain", label: "retrieval_chain" },
+  { value: "chat", label: "Chat" },
+  { value: "text_completion", label: "Completion" },
+  { value: "embeddings", label: "Embeddings" },
 ];
 
 interface SegmentedProps<T extends string> {
@@ -95,18 +94,18 @@ const Segmented = <T extends string>({
 
 export interface AgentsViewRowProps {
   view: AgentView;
-  framework: AgentFramework;
+  operation: AgentOperation;
   onViewChange: (v: AgentView) => void;
-  onFrameworkChange: (f: AgentFramework) => void;
+  onOperationChange: (f: AgentOperation) => void;
   onSetupDetector: () => void;
   onConfigureSLA: () => void;
 }
 
 export const AgentsViewRow = ({
   view,
-  framework,
+  operation,
   onViewChange,
-  onFrameworkChange,
+  onOperationChange,
   onSetupDetector,
   onConfigureSLA,
 }: AgentsViewRowProps) => {
@@ -120,10 +119,10 @@ export const AgentsViewRow = ({
         onChange={onViewChange}
       />
       <Segmented
-        label="Framework"
-        value={framework}
-        options={FRAMEWORK_OPTIONS}
-        onChange={onFrameworkChange}
+        label="Operation"
+        value={operation}
+        options={OPERATION_OPTIONS}
+        onChange={onOperationChange}
       />
       <Flex flexGrow={1} />
       <Button variant="default" onClick={onSetupDetector}>

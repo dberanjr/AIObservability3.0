@@ -14,15 +14,17 @@ import { AgentsTable } from "./AgentsTable";
 import { AgentsTilesRow } from "./AgentsTilesRow";
 import {
   AgentsViewRow,
-  type AgentFramework,
+  type AgentOperation,
   type AgentView,
 } from "./AgentsViewRow";
 import { EvaluationBanner } from "./EvaluationBanner";
+import { LatencyTierPanel } from "./LatencyTierPanel";
 import { OrchestrationSection } from "./OrchestrationSection";
 import { UpstreamServicesTable } from "./UpstreamServicesTable";
 import { useAgentEval } from "./useAgentEval";
 import { useAgents } from "./useAgents";
 import { useDegradedAgents } from "./useDegradedAgents";
+import { useOrchestrationNodes } from "./useOrchestrationNodes";
 import { useUpstreamServices } from "./useUpstreamServices";
 
 const SLOW_VIEW_P90_MS = 2000;
@@ -33,17 +35,18 @@ const AgentsPageBody = () => {
   const evalSnap = useAgentEval();
   const upstream = useUpstreamServices();
   const degraded = useDegradedAgents(agentsResult.all);
+  const orchestrationNodes = useOrchestrationNodes();
 
   const [view, setView] = useState<AgentView>("all");
-  const [framework, setFramework] = useState<AgentFramework>("all");
+  const [operation, setOperation] = useState<AgentOperation>("all");
   const [previewEval, setPreviewEval] = useState(false);
   const [slaOpen, setSlaOpen] = useState(false);
   const [detectorOpen, setDetectorOpen] = useState(false);
 
   const filteredSubstantive = useMemo(() => {
     let rows = agentsResult.substantive;
-    if (framework !== "all") {
-      rows = rows.filter((r) => r.framework === framework);
+    if (operation !== "all") {
+      rows = rows.filter((r) => r.operations.includes(operation));
     }
     if (view === "slow") {
       rows = rows.filter((r) => r.p90Ms > SLOW_VIEW_P90_MS);
@@ -53,12 +56,8 @@ const AgentsPageBody = () => {
       rows = [...rows].sort((a, b) => b.invocations - a.invocations).slice(0, 50);
     }
     return rows;
-  }, [agentsResult.substantive, view, framework]);
+  }, [agentsResult.substantive, view, operation]);
 
-  const filteredOrchestration = useMemo(() => {
-    if (framework === "all") return agentsResult.orchestration;
-    return agentsResult.orchestration.filter((r) => r.framework === framework);
-  }, [agentsResult.orchestration, framework]);
 
   // Suggested thresholds: fleet P90 × 1.5 / P99 × 1.5 / 5% errors / $0.05 / invocation.
   const suggested = useMemo(() => {
@@ -83,6 +82,7 @@ const AgentsPageBody = () => {
     evalSnap.error ??
     upstream.error ??
     degraded.error ??
+    orchestrationNodes.error ??
     null;
 
   return (
@@ -97,9 +97,9 @@ const AgentsPageBody = () => {
 
         <AgentsViewRow
           view={view}
-          framework={framework}
+          operation={operation}
           onViewChange={setView}
-          onFrameworkChange={setFramework}
+          onOperationChange={setOperation}
           onSetupDetector={() => setDetectorOpen(true)}
           onConfigureSLA={() => setSlaOpen(true)}
         />
@@ -120,6 +120,8 @@ const AgentsPageBody = () => {
           isLoading={agentsResult.isLoading}
         />
 
+        <LatencyTierPanel />
+
         <div
           style={{
             display: "grid",
@@ -135,7 +137,7 @@ const AgentsPageBody = () => {
           />
         </div>
 
-        <OrchestrationSection rows={filteredOrchestration} />
+        <OrchestrationSection rows={orchestrationNodes.nodes} />
 
         <DegradedTrendPanel
           items={degraded.items}

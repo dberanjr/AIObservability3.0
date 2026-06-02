@@ -28,7 +28,7 @@ ${globalFilterClauses(filters)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type), 1, else: 0),
+    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
     has_llm = if(isNotNull(gen_ai.provider.name), 1, else: 0),
     has_tool = if(isNotNull(gen_ai.tool.name), 1, else: 0),
     ttft_ms = if(isNotNull(gen_ai.usage.time_to_first_token), toDouble(gen_ai.usage.time_to_first_token), else: null)
@@ -46,10 +46,14 @@ ${globalFilterClauses(filters)}
     avg_ttft_ms = avg(ttft_ms),
     models = collectDistinct(gen_ai.request.model),
     framework = takeFirst(gen_ai.framework),
+    // Group by agent NAME only. The same agent is double-instrumented across
+    // two dt.entity.service entities (one named, one with service.name=null),
+    // which previously split each agent into duplicate rows. Collect both so
+    // the UI can show the named service and keep a stable row id.
+    services = collectDistinct(service.name),
+    service_ids = collectDistinct(dt.entity.service),
     by: {
-      agent = gen_ai.agent.name,
-      service = service.name,
-      service_id = dt.entity.service
+      agent = gen_ai.agent.name
     }
 | fieldsAdd
     avg_ms = avg_ns / 1000000,
@@ -59,6 +63,126 @@ ${globalFilterClauses(filters)}
     error_rate_pct = if(invocations > 0, toDouble(errors) / toDouble(invocations) * 100, else: 0)
 | sort invocations desc
 | limit 500
+`.trim();
+
+/**
+ * True node-level runtime breakdown for the "Orchestration & runtime nodes"
+ * section. A node is an individual runtime span (span.name) inside an agent
+ * execution — e.g. `predict_load_factor`, `get_batch_pipeline_snapshot`,
+ * `should_continue` — NOT the agent itself. We group by span.name + agent so
+ * the same node name under different agents stays distinct, and collect the
+ * (named + null) service entities so each node collapses to one row.
+ *
+ * Filters to internal spans that are neither LLM calls (no provider/model)
+ * nor the agent root, which is exactly the orchestration/runtime layer.
+ */
+export const buildOrchestrationNodesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  filters?: GlobalFilters,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
+| filter isNotNull(gen_ai.agent.name)
+| filter span.kind == "internal"
+| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
+| filter span.name != gen_ai.agent.name
+| summarize
+    invocations = count(),
+    avg_ns = avg(duration),
+    p90_ns = percentile(duration, 90),
+    p99_ns = percentile(duration, 99),
+    services = collectDistinct(service.name),
+    by: { node = span.name, agent = gen_ai.agent.name }
+| fieldsAdd
+    avg_ms = avg_ns / 1000000,
+    p90_ms = p90_ns / 1000000,
+    p99_ms = p99_ns / 1000000
+| sort invocations desc
+| limit 200
+`.trim();
+
+/**
+ * Trace-join: attribute LLM token usage to agents. In this tenant LLM calls
+ * run through a central `bos-proxy-core` service, so tokens/models/operations
+ * live on spans that do NOT carry gen_ai.agent.name. The only reliable link is
+ * trace.id — when the proxy LLM span shares a trace with an agent span we can
+ * attribute it. Many proxy calls start their own trace (no agent span), so
+ * this is intentionally partial; the UI shows "—" for unlinkable agents.
+ *
+ * Pass 1: per trace, resolve the agent and sum the LLM tokens + capture a
+ *         representative operation/model.
+ * Pass 2: keep only traces that contain BOTH an agent and an LLM span, then
+ *         aggregate per agent.
+ *
+ * Deliberately does NOT apply globalFilterClauses: those filter on
+ * gen_ai.agent.name which is null on LLM spans and would break the join. The
+ * main agents query already applies the global filter to the row list; this
+ * map only enriches matching agents.
+ */
+export const buildAgentTraceJoinQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.request.model)
+| fieldsAdd
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
+| summarize
+    agent = takeFirst(gen_ai.agent.name),
+    has_agent = countIf(isNotNull(gen_ai.agent.name)),
+    has_model = countIf(isNotNull(gen_ai.request.model)),
+    t_in = sum(in_tok),
+    t_out = sum(out_tok),
+    t_op = takeFirst(gen_ai.operation.name),
+    t_model = takeFirst(gen_ai.request.model),
+    by: { trace.id }
+| filter has_agent > 0 and has_model > 0
+| summarize
+    linked_traces = count(),
+    input_tokens = sum(t_in),
+    output_tokens = sum(t_out),
+    operations = collectDistinct(t_op),
+    models = collectDistinct(t_model),
+    by: { agent }
+| sort input_tokens desc
+| limit 500
+`.trim();
+
+/**
+ * Latency decomposition by execution tier. Classifies every AI span into one
+ * of five tiers and reports where wall-clock time goes:
+ *   - LLM         — model inference (gen_ai.provider.name set; the proxy calls)
+ *   - Retrieval/DB— embeddings + vector / SQL / RDS / catalog lookups
+ *   - Tool        — external/client tool calls
+ *   - Orchestration — internal runtime/router nodes
+ * Returns per-tier span count, summed ms, avg ms and p95 ms so the UI can show
+ * each tier's share of total execution time and per-call latency.
+ */
+export const buildLatencyDecompositionQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  filters?: GlobalFilters,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
+| filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.provider.name)
+| fieldsAdd lname = lower(span.name)
+| fieldsAdd tier = if(isNotNull(gen_ai.provider.name), "LLM",
+    else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "Retrieval/DB",
+    else: if(span.kind == "client" or contains(lname,"_tool"), "Tool",
+    else: "Orchestration")))
+| summarize
+    spans = count(),
+    total_ms = sum(duration) / 1000000,
+    avg_ms = avg(duration) / 1000000,
+    p95_ms = percentile(duration, 95) / 1000000,
+    by: { tier }
+| sort total_ms desc
 `.trim();
 
 /** Quality eval coverage and aggregate scores. */

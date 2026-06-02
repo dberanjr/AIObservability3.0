@@ -148,9 +148,16 @@ export const AIServicesTable = ({
         justifyContent="space-between"
         style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
       >
-        <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-          AI services
-        </Heading>
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+            AI services
+          </Heading>
+          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+            Any monitored service that emitted LLM spans
+            (<code>gen_ai.provider.name</code>) in scope — classified
+            automatically, no tagging required.
+          </Text>
+        </Flex>
         <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
           {rows.length} {rows.length === 1 ? "service" : "services"}
         </Text>
@@ -365,11 +372,12 @@ export const AIServicesTable = ({
           }}
         >
           Logical errors are HTTP 200 responses with payload-level failures.
-          Detection blends three signals: the OTel-standard{" "}
-          <code>gen_ai.error.type</code> span attribute, guardrail and
-          moderation activation events, and OTel refusal markers
-          (<code>gen_ai.response.refusal_reason</code>). Log-pattern matching for
-          empty completions runs alongside the spans pipeline and joins in here.
+          The load-bearing signal here is{" "}
+          <code>gen_ai.response.finish_reasons</code> containing{" "}
+          <code>max_tokens</code> (truncated output), <code>content_filter</code>,
+          or <code>refusal</code>. OTel markers (<code>gen_ai.error.type</code>,
+          guardrail/moderation events, <code>gen_ai.response.refusal_reason</code>)
+          are also counted when present, but emit no data in this environment.
         </Text>
       </Flex>
     </Flex>

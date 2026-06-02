@@ -92,11 +92,13 @@ describe("estimateCost", () => {
 });
 
 describe("PRICING table sanity", () => {
-  it("every entry has positive prices (except embeddings which have 0 output)", () => {
+  it("every entry has positive prices (except embeddings/rerank which have 0 output)", () => {
     for (const [key, entry] of Object.entries(PRICING)) {
       expect(entry.inputPerMTok).toBeGreaterThanOrEqual(0);
       expect(entry.outputPerMTok).toBeGreaterThanOrEqual(0);
-      if (!/embed/i.test(key)) {
+      // Embedding and rerank models produce no output tokens, so a 0 output
+      // price is valid for them.
+      if (!/embed|rerank/i.test(key)) {
         expect(entry.outputPerMTok).toBeGreaterThan(0);
       }
     }

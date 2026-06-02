@@ -47,6 +47,28 @@ export type ColorBlindFilter =
   | "tritanopia"
   | "achromatopsia";
 
+/**
+ * How the Tools tab defines a "tool". The BOS tenant barely emits
+ * gen_ai.tool.name (≈139 of 43B spans), so the strict OTel definition leaves
+ * the tab near-empty. "discovered" instead treats internal/MCP function spans
+ * (grouped by span.name) as tools. Default is "strict" per product decision.
+ */
+export type ToolsMode = "strict" | "discovered";
+
+/**
+ * Per-tab custom configuration. Extensible: add a key here and a control in
+ * the Tweaks panel's "Page configuration" section for any future per-tab knob.
+ */
+export interface PageConfig {
+  /** Tools tab: which span signal counts as a "tool". */
+  toolsMode: ToolsMode;
+  /**
+   * Agents tab: show the TTFT column. Off by default because
+   * gen_ai.usage.time_to_first_token is not instrumented in BOS (0 rows).
+   */
+  agentsShowTtft: boolean;
+}
+
 export interface TweaksState {
   theme: Theme;
   density: Density;
@@ -58,6 +80,8 @@ export interface TweaksState {
   chartCurve: ChartCurve;
   chartLabels: ChartLabels;
   colorBlindFilter: ColorBlindFilter;
+  /** Per-tab custom configuration (see PageConfig). */
+  pageConfig: PageConfig;
 }
 
 export const DEFAULT_TWEAKS: TweaksState = {
@@ -70,6 +94,10 @@ export const DEFAULT_TWEAKS: TweaksState = {
   chartCurve: "linear",
   chartLabels: "none",
   colorBlindFilter: "none",
+  pageConfig: {
+    toolsMode: "strict",
+    agentsShowTtft: false,
+  },
 };
 
 export interface TweaksContextValue extends TweaksState {
@@ -82,6 +110,8 @@ export interface TweaksContextValue extends TweaksState {
   setChartCurve: (v: ChartCurve) => void;
   setChartLabels: (v: ChartLabels) => void;
   setColorBlindFilter: (v: ColorBlindFilter) => void;
+  setToolsMode: (v: ToolsMode) => void;
+  setAgentsShowTtft: (v: boolean) => void;
   resetTweaks: () => void;
   isPanelOpen: boolean;
   openPanel: () => void;
@@ -139,8 +169,19 @@ export const TweaksProvider = ({
       <K extends keyof TweaksState>(key: K) =>
       (v: TweaksState[K]) =>
         setTweaks({ ...tweaks, [key]: v });
+    // Old persisted snapshots predate pageConfig — backfill defaults so the
+    // new controls always have a value to read/write.
+    const pageConfig: PageConfig = {
+      ...DEFAULT_TWEAKS.pageConfig,
+      ...tweaks.pageConfig,
+    };
+    const mergePage =
+      <K extends keyof PageConfig>(key: K) =>
+      (v: PageConfig[K]) =>
+        setTweaks({ ...tweaks, pageConfig: { ...pageConfig, [key]: v } });
     return {
       ...tweaks,
+      pageConfig,
       setTheme: merge("theme"),
       setDensity: merge("density"),
       setTileStyle: merge("tileStyle"),
@@ -150,6 +191,8 @@ export const TweaksProvider = ({
       setChartCurve: merge("chartCurve"),
       setChartLabels: merge("chartLabels"),
       setColorBlindFilter: merge("colorBlindFilter"),
+      setToolsMode: mergePage("toolsMode"),
+      setAgentsShowTtft: mergePage("agentsShowTtft"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),
       isPanelOpen,
       openPanel: () => setPanelOpen(true),

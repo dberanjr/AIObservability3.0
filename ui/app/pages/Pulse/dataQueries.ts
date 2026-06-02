@@ -5,6 +5,33 @@ import { dqlNormalizedProvider, dqlViaBedrock } from "../../detection/dql";
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
 /**
+ * Per-model token-efficiency inputs. Cost is computed in JS from per-model
+ * pricing, so this returns the raw aggregates: input/output tokens, request
+ * count, truncations (finish_reasons contains "max_tokens" = wasted/incomplete
+ * generation), and summed duration (for throughput). Grouped by model so the
+ * hook can price each correctly before aggregating.
+ */
+export const buildTokenEfficiencyQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.request.model)
+| fieldsAdd
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
+    trunc = if(contains(toString(gen_ai.response.finish_reasons), "max_tokens"), 1, else: 0)
+| summarize
+    input_tokens = sum(in_tok),
+    output_tokens = sum(out_tok),
+    requests = count(),
+    truncations = sum(trunc),
+    dur_s = sum(duration) / 1000000000,
+    by: { model = gen_ai.request.model }
+`.trim();
+
+/**
  * One row of aggregate signals used by the 9-tile summary row.
  * Tokens (current + spark series), p95 latency, error rate, distinct counts.
  *
@@ -22,7 +49,7 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type), 1, else: 0),
+    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
     mcp_server = if(matchesValue(traceloop.workflow.name, "*.mcp"), traceloop.workflow.name),
     mcp_tool   = if(matchesValue(traceloop.workflow.name, "*.mcp"), coalesce(gen_ai.tool.name, traceloop.entity.name))
 | summarize
@@ -125,7 +152,7 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type), 1, else: 0)
+    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
 | makeTimeseries
     tokens = sum(in_tok + out_tok),
     p95_ns = percentile(duration, 95),

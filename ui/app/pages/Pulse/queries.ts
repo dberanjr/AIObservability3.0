@@ -1,6 +1,47 @@
 import { dqlTimeArg, scopeFilterClause } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
+const tfTo = (tf: Timeframe): string => tf.to ?? "now()";
+
+/**
+ * Health drilldown — top contributing agents by P95 latency and error count,
+ * so the Platform Health card can explain *which* agents drive a degraded
+ * operational score.
+ */
+export const buildSlowAgentsQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name)
+| fieldsAdd is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+| summarize
+    p95_ms = percentile(duration, 95) / 1000000,
+    calls = count(),
+    errors = sum(is_error),
+    by: { name = gen_ai.agent.name }
+| fieldsAdd error_rate_pct = if(calls > 0, toDouble(errors) / toDouble(calls) * 100, else: 0)
+| sort p95_ms desc
+| limit 5
+`.trim();
+
+/** Health drilldown — slowest models by P95 (the inference tier contributors). */
+export const buildSlowModelsQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.request.model)
+| summarize
+    p95_ms = percentile(duration, 95) / 1000000,
+    calls = count(),
+    by: { name = gen_ai.request.model }
+| sort p95_ms desc
+| limit 5
+`.trim();
+
 /**
  * Operational signals: p95 latency, error rate, total span count for the resolved
  * services in the current scope timeframe. The detection layer (Session 4) will
@@ -14,7 +55,7 @@ export const buildOperationalQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
-| fieldsAdd is_error = if(isNotNull(exception.type), 1, else: 0)
+| fieldsAdd is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
 | summarize
     total = count(),
     errors = sum(is_error),

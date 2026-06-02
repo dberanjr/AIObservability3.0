@@ -9,6 +9,8 @@ import { useSegments } from "@dynatrace/strato-components/filters";
 import type { ResultRecord } from "@dynatrace-sdk/client-query";
 import { useScanLimit } from "./ScanLimitContext";
 import { useSampling } from "./SamplingContext";
+import { useGlobalFilters } from "./GlobalFilterContext";
+import { injectGlobalFilters } from "./queries";
 
 const SCAN_LIMIT_RE = /scanLimitGBytes:\s*\d+/g;
 const SAMPLING_RE = /samplingRatio:\s*\d+/g;
@@ -43,6 +45,13 @@ const applySampling = (query: string, samplingRatio: number): string => {
  */
 export interface UseScopedDqlExtra {
   ignoreScanLimit?: boolean;
+  /**
+   * Opt this query out of the global attribute filter injection. Use for
+   * queries that must see unfiltered data (e.g. filter value discovery) or
+   * where a span-level filter would break the query semantics (e.g. the agent
+   * trace-join, whose first stage must keep both agent and LLM spans).
+   */
+  ignoreGlobalFilter?: boolean;
 }
 
 /**
@@ -62,13 +71,20 @@ export function useScopedDql<T = ResultRecord>(
   const { scanLimitGb } = useScanLimit();
   const { samplingRatio } = useSampling();
   const { segments } = useSegments();
+  const { filters } = useGlobalFilters();
   const ignoreScanLimit = Boolean(options?.ignoreScanLimit);
+  const ignoreGlobalFilter = Boolean(options?.ignoreGlobalFilter);
 
   const queryInput = useMemo<string | DqlQueryParams>(() => {
     const scanRewritten = ignoreScanLimit
       ? query
       : applyScanLimit(query, scanLimitGb);
-    const rewritten = applySampling(scanRewritten, samplingRatio);
+    const sampled = applySampling(scanRewritten, samplingRatio);
+    // Inject the global attribute filter into every fetch query (unless the
+    // caller opted out) so the toolbar filter is truly app-wide.
+    const rewritten = ignoreGlobalFilter
+      ? sampled
+      : injectGlobalFilters(sampled, filters);
     if (!rewritten) return rewritten;
     if (!segments || segments.length === 0) return rewritten;
     return {
@@ -77,7 +93,15 @@ export function useScopedDql<T = ResultRecord>(
       // what ExecuteRequest.filterSegments expects.
       filterSegments: segments,
     };
-  }, [query, scanLimitGb, samplingRatio, segments, ignoreScanLimit]);
+  }, [
+    query,
+    scanLimitGb,
+    samplingRatio,
+    segments,
+    ignoreScanLimit,
+    ignoreGlobalFilter,
+    filters,
+  ]);
 
   // Strip the extension key before forwarding to the underlying hook.
   const forwarded: UseDqlOptions<T> | undefined = options

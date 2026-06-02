@@ -72,6 +72,23 @@ ${globalFilterClauses(filters)}
 `.trim();
 
 /**
+ * Trace → agent map. LLM-call spans (gen_ai.provider.name) carry no
+ * gen_ai.agent.name in this tenant, so the prompts list can't show which agent
+ * issued a call directly. This resolves the owning agent per trace.id so the
+ * hook can backfill it — fixing the "only one agent shows" symptom.
+ */
+export const buildPromptAgentMapQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name)
+| summarize agent = takeFirst(gen_ai.agent.name), by: { trace_id = trace.id }
+| limit 5000
+`.trim();
+
+/**
  * Aggregate counts/averages for the 6-tile summary row.
  */
 export const buildPromptsSummaryQuery = (

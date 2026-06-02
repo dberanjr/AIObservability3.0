@@ -12,6 +12,7 @@ import {
   type AgentHealthStatus,
 } from "../../components/SLAConfig/agentHealthScore";
 import { useSLA } from "../../components/SLAConfig/SLAContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { StageBreakdownBar } from "./StageBreakdownBar";
 import type { AgentRow } from "./useAgents";
 
@@ -197,6 +198,8 @@ export interface AgentsTableProps {
 
 export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
   const { thresholds, hasActive } = useSLA();
+  const { pageConfig } = useTweaks();
+  const showTtft = pageConfig.agentsShowTtft;
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const toggle = (id: string) =>
@@ -231,7 +234,9 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
           <HeaderCell width={80} align="right">Inv</HeaderCell>
           <HeaderCell width={80} align="right">P90</HeaderCell>
           <HeaderCell width={80} align="right">P99</HeaderCell>
-          <HeaderCell width={80} align="right">TTFT</HeaderCell>
+          {showTtft && (
+            <HeaderCell width={80} align="right">TTFT</HeaderCell>
+          )}
           <HeaderCell width={70} align="right">Err</HeaderCell>
           <HeaderCell width={100} align="right">$/inv</HeaderCell>
           <HeaderCell width={140}>Stages</HeaderCell>
@@ -314,9 +319,11 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                   <Cell width={80} align="right" mono>
                     {fmtMs(r.p99Ms)}
                   </Cell>
-                  <Cell width={80} align="right">
-                    <TTFTValue value={r.ttftMs} />
-                  </Cell>
+                  {showTtft && (
+                    <Cell width={80} align="right">
+                      <TTFTValue value={r.ttftMs} />
+                    </Cell>
+                  )}
                   <Cell
                     width={70}
                     align="right"
@@ -326,7 +333,20 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                     {r.errors > 0 ? fmtPercent(r.errorRatePct) : "0%"}
                   </Cell>
                   <Cell width={100} align="right" mono>
-                    {fmtUSD(r.costPerInvocation)}
+                    {r.costAttributed ? (
+                      fmtUSD(r.costPerInvocation)
+                    ) : (
+                      <Text
+                        style={{
+                          fontFamily: "var(--mono, monospace)",
+                          fontSize: 12.5,
+                          color: "var(--text-4)",
+                        }}
+                        title="LLM tokens for this agent run through the central proxy in a separate trace and can't be attributed. Cost is shown where an LLM span shares the agent's trace."
+                      >
+                        —
+                      </Text>
+                    )}
                   </Cell>
                   <Cell width={140} style={{ overflow: "visible" }}>
                     <StageBreakdownBar stage={r.stage} />

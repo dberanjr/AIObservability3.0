@@ -63,6 +63,27 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "Anthropic",
     tier: "frontier",
   },
+  "claude-opus-4-7": {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "frontier",
+  },
+  "claude-opus-4-8": {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "frontier",
+  },
+  "claude-sonnet-4": {
+    inputPerMTok: 3,
+    outputPerMTok: 15,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "high",
+  },
   "claude-3-7-sonnet": {
     inputPerMTok: 3,
     outputPerMTok: 15,
@@ -136,6 +157,22 @@ export const PRICING: Record<string, ModelPricing> = {
     contextWindow: 1_048_576,
     provider: "Google",
     tier: "mid",
+  },
+
+  // Bedrock embeddings & rerank
+  "titan-embed-text": {
+    inputPerMTok: 0.02,
+    outputPerMTok: 0,
+    contextWindow: 8_192,
+    provider: "AWS Bedrock",
+    tier: "low",
+  },
+  "rerank-v3-5": {
+    inputPerMTok: 2,
+    outputPerMTok: 0,
+    contextWindow: 4_096,
+    provider: "Cohere",
+    tier: "low",
   },
 
   // Embeddings

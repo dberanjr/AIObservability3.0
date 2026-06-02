@@ -11,6 +11,7 @@ import {
   type Density,
   type Theme,
   type TileStyle,
+  type ToolsMode,
 } from "./TweaksContext";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
@@ -288,6 +289,16 @@ const CHART_LABELS_OPTIONS: SegmentOption<ChartLabels>[] = [
   { value: "all", label: "all" },
 ];
 
+const TOOLS_MODE_OPTIONS: SegmentOption<ToolsMode>[] = [
+  { value: "strict", label: "Strict" },
+  { value: "discovered", label: "Discovered" },
+];
+
+const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
+];
+
 /**
  * Accent options render as colour swatches so users can preview the
  * mapping. Hex pulled from `theme/tokens.ts` brand palette.
@@ -474,6 +485,38 @@ export const TweaksPanel = () => {
                 value={t.colorBlindFilter}
                 onChange={t.setColorBlindFilter}
               />
+            </Flex>
+          </Flex>
+
+          <Flex flexDirection="column" gap={12}>
+            <SectionLabel>Page configuration</SectionLabel>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Tools tab · tool definition</FieldLabel>
+              <Segmented
+                ariaLabel="Tools mode"
+                options={TOOLS_MODE_OPTIONS}
+                value={t.pageConfig.toolsMode}
+                onChange={t.setToolsMode}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Strict counts only spans with{" "}
+                <code>gen_ai.tool.name</code>. Discovered treats MCP / internal
+                function spans (by span name) as tools.
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Agents tab · TTFT column</FieldLabel>
+              <Segmented
+                ariaLabel="Show TTFT column"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.agentsShowTtft ? "on" : "off"}
+                onChange={(v) => t.setAgentsShowTtft(v === "on")}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Off by default —{" "}
+                <code>gen_ai.usage.time_to_first_token</code> is not
+                instrumented in this environment.
+              </Text>
             </Flex>
           </Flex>
 

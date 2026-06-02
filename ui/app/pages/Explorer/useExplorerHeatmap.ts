@@ -7,7 +7,7 @@ import { buildServiceModelHeatmapQuery } from "./queries";
 import {
   PROVIDER_COLOR,
   normalizeProvider,
-  stripModelVersion,
+  canonicalizeModel,
   type ProviderId,
 } from "../../detection/attributes";
 
@@ -68,7 +68,7 @@ export const useExplorerHeatmap = (): UseExplorerHeatmapResult => {
 
     for (const r of data?.records ?? []) {
       if (!r.service || !r.service_id || !r.model) continue;
-      const modelKey = stripModelVersion(r.model);
+      const modelKey = canonicalizeModel(r.model).label;
       const provider = normalizeProvider(r.system, r.model);
 
       let row = rowMap.get(r.service_id);

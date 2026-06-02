@@ -3,9 +3,10 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
-import { buildAgentsQuery } from "./queries";
+import { buildAgentsQuery, buildAgentTraceJoinQuery } from "./queries";
 import { estimateCost, getPricing } from "../../data/pricing";
 import { partitionAgents } from "../../detection/classifier";
+import { canonicalizeModel } from "../../detection/attributes";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -15,8 +16,8 @@ const num = (v: unknown): number => {
 
 interface AgentRecord {
   agent?: string;
-  service?: string;
-  service_id?: string;
+  services?: Array<string | null>;
+  service_ids?: Array<string | null>;
   invocations?: number;
   p50_ms?: number;
   p90_ms?: number;
@@ -31,6 +32,23 @@ interface AgentRecord {
   models?: string[];
   framework?: string;
   error_rate_pct?: number;
+}
+
+interface TraceJoinRecord {
+  agent?: string;
+  linked_traces?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  operations?: Array<string | null>;
+  models?: Array<string | null>;
+}
+
+interface TraceJoinInfo {
+  inputTokens: number;
+  outputTokens: number;
+  operations: string[];
+  models: string[];
+  linkedTraces: number;
 }
 
 export interface StageBreakdown {
@@ -63,6 +81,14 @@ export interface AgentRow {
   ttftMs: number | null;
   cost: number;
   costPerInvocation: number;
+  /**
+   * True when LLM token cost was attributable to this agent via shared
+   * trace.id with proxy LLM spans. When false the UI shows "—" instead of
+   * $0, because tokens live on the central proxy in a separate trace.
+   */
+  costAttributed: boolean;
+  /** Distinct gen_ai.operation.name values seen in this agent's traces. */
+  operations: string[];
   stage: StageBreakdown;
   isOrchestration: boolean;
 }
@@ -99,33 +125,89 @@ export const useAgents = (): UseAgentsResult => {
     { enabled: canQuery, staleTime: 60_000 },
   );
 
+  // Secondary query: attribute LLM cost/operations to agents via trace.id.
+  // Opts out of global-filter injection: its first stage must keep BOTH agent
+  // and LLM (null-agent) spans, which a span-level filter would break.
+  const { data: joinData } = useScopedDql<TraceJoinRecord>(
+    canQuery ? buildAgentTraceJoinQuery(serviceIds, scope.timeframe) : "",
+    { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
+  );
+
   return useMemo<UseAgentsResult>(() => {
+    // Build the agent → trace-join map first so the row loop can enrich.
+    const joinByAgent = new Map<string, TraceJoinInfo>();
+    for (const j of joinData?.records ?? []) {
+      if (!j.agent) continue;
+      joinByAgent.set(j.agent, {
+        inputTokens: num(j.input_tokens),
+        outputTokens: num(j.output_tokens),
+        operations: (j.operations ?? []).filter(
+          (o): o is string => typeof o === "string" && o.length > 0,
+        ),
+        models: (j.models ?? []).filter(
+          (m): m is string => typeof m === "string" && m.length > 0,
+        ),
+        linkedTraces: num(j.linked_traces),
+      });
+    }
+
     const all: AgentRow[] = [];
     for (const r of data?.records ?? []) {
-      if (!r.agent || !r.service_id) continue;
-      const models = (r.models ?? []).filter(
-        (m): m is string => typeof m === "string" && m.length > 0,
+      if (!r.agent) continue;
+      // Each agent is collected across its (named + null) service entities.
+      // Prefer the named service for display and the named entity id for the
+      // row key; fall back to the first available so the row still renders.
+      const serviceList = (r.services ?? []).filter(
+        (s): s is string => typeof s === "string" && s.length > 0,
       );
-      // Cost per agent: blended over the models the agent invoked. We don't
-      // get per-row I/O split by model from this aggregation, so we apply the
-      // dominant model's pricing as a first approximation.
-      const dominant = models[0];
-      const pricing = getPricing(dominant);
-      const inputTokens = num(r.input_tokens);
-      const outputTokens = num(r.output_tokens);
+      const serviceIdList = (r.service_ids ?? []).filter(
+        (s): s is string => typeof s === "string" && s.length > 0,
+      );
+      const service = serviceList[0] ?? "";
+      const serviceId = serviceIdList[0] ?? r.agent;
       const invocations = num(r.invocations);
       const llmCount = num(r.llm_count);
       const toolCount = num(r.tool_count);
-      const cost = estimateCost(inputTokens, outputTokens, pricing);
-      const costPerInvocation = invocations > 0 ? cost / invocations : 0;
-      const hasLlmChild = llmCount > 0;
+      // Token/cost attribution: agent spans carry no tokens (LLM calls run
+      // through the proxy), so prefer the trace-join numbers. Fall back to the
+      // agent-span tokens (usually 0) only when there's no link.
+      const join = joinByAgent.get(r.agent);
+      const costAttributed = !!join && join.linkedTraces > 0;
+      const joinModels = join?.models ?? [];
+      const agentSpanModels = (r.models ?? []).filter(
+        (m): m is string => typeof m === "string" && m.length > 0,
+      );
+      // Prefer canonical model labels from the trace-join; de-dup.
+      const models = Array.from(
+        new Set(
+          (joinModels.length > 0 ? joinModels : agentSpanModels).map(
+            (m) => canonicalizeModel(m).label,
+          ),
+        ),
+      );
+      const inputTokens = costAttributed
+        ? join!.inputTokens
+        : num(r.input_tokens);
+      const outputTokens = costAttributed
+        ? join!.outputTokens
+        : num(r.output_tokens);
+      // Price with the dominant linked model (raw id for pricing lookup).
+      const pricing = getPricing(joinModels[0] ?? agentSpanModels[0]);
+      const cost = costAttributed
+        ? estimateCost(inputTokens, outputTokens, pricing)
+        : 0;
+      const costPerInvocation =
+        costAttributed && invocations > 0 ? cost / invocations : 0;
+      const operations = join?.operations ?? [];
+      // hasLlmChild now also true when the trace-join linked LLM spans.
+      const hasLlmChild = llmCount > 0 || costAttributed;
       const hasToolChild = toolCount > 0;
       const stage = computeStage(r);
       const ttftRaw = toNum(r.avg_ttft_ms);
       all.push({
         agent: r.agent,
-        service: r.service ?? "",
-        serviceId: r.service_id,
+        service,
+        serviceId,
         framework: r.framework ?? null,
         models,
         invocations,
@@ -144,6 +226,8 @@ export const useAgents = (): UseAgentsResult => {
         ttftMs: Number.isFinite(ttftRaw) ? ttftRaw : null,
         cost,
         costPerInvocation,
+        costAttributed,
+        operations,
         stage,
         isOrchestration: false,
       });
@@ -169,5 +253,5 @@ export const useAgents = (): UseAgentsResult => {
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading, filters]);
+  }, [data, joinData, isLoading, error, servicesLoading, filters]);
 };

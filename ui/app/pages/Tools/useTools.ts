@@ -6,12 +6,13 @@ import {
   canQueryScope,
   useResolvedServices,
 } from "../../scope/useResolvedServices";
-import { buildToolsQuery } from "./queries";
+import { buildToolsQuery, buildDiscoveredToolsQuery } from "./queries";
 import {
   CATEGORY_COLOR,
   inferToolCategory,
   type ToolCategory,
 } from "./categories";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -97,12 +98,21 @@ export const useTools = (): UseToolsResult => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
   const resolution = useResolvedServices();
+  const { pageConfig } = useTweaks();
   const canQuery = canQueryScope(resolution);
 
-  const { data, isLoading, error } = useScopedDql<ToolRecord>(
-    canQuery ? buildToolsQuery(resolution.serviceIds, scope.timeframe, filters) : "",
-    { enabled: canQuery, staleTime: 60_000 },
-  );
+  // Tools mode (Tweaks → Page configuration): "strict" reads gen_ai.tool.name
+  // (near-empty in this tenant); "discovered" treats internal function spans
+  // as tools so the tab is populated.
+  const query = canQuery
+    ? pageConfig.toolsMode === "discovered"
+      ? buildDiscoveredToolsQuery(resolution.serviceIds, scope.timeframe, filters)
+      : buildToolsQuery(resolution.serviceIds, scope.timeframe, filters)
+    : "";
+  const { data, isLoading, error } = useScopedDql<ToolRecord>(query, {
+    enabled: canQuery,
+    staleTime: 60_000,
+  });
 
   return useMemo<UseToolsResult>(() => {
     const tools: Tool[] = [];
