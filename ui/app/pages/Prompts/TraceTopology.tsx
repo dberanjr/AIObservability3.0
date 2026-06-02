@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
-import { Checkbox, Select } from "@dynatrace/strato-components/forms";
+import { Checkbox } from "@dynatrace/strato-components/forms";
 import { ServicesIcon } from "@dynatrace/strato-icons";
 import { fmtTokens, fmtMs } from "../../data/format";
 import { getPricing, estimateCost } from "../../data/pricing";
@@ -249,11 +249,11 @@ const sublabel = (n: TopoNode, by: SizeBy): string => {
 };
 
 const SIZE_OPTIONS: { value: SizeBy; label: string }[] = [
-  { value: "none", label: "Uniform size" },
-  { value: "inTok", label: "Size by in tokens" },
-  { value: "outTok", label: "Size by out tokens" },
-  { value: "duration", label: "Size by duration" },
-  { value: "cost", label: "Size by cost" },
+  { value: "none", label: "Uniform" },
+  { value: "inTok", label: "In tokens" },
+  { value: "outTok", label: "Out tokens" },
+  { value: "duration", label: "Duration" },
+  { value: "cost", label: "Cost" },
 ];
 const CAT_TOGGLES: { key: keyof IndicatorState; label: string }[] = [
   { key: "agent", label: "Agent calls" },
@@ -454,22 +454,55 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
             </Flex>
           ))}
         </Flex>
-        <div style={{ minWidth: 180 }}>
-          <Select<string>
-            name="topo-size-by"
-            value={sizeBy}
-            onChange={(v) => v && setSizeBy(v as SizeBy)}
+        <Flex alignItems="center" gap={8}>
+          <Text
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+            }}
           >
-            <Select.Trigger placeholder="Uniform size" aria-label="Size nodes by" />
-            <Select.Content>
-              {SIZE_OPTIONS.map((o) => (
-                <Select.Option key={o.value} value={o.value}>
+            Size by
+          </Text>
+          <div
+            role="radiogroup"
+            aria-label="Size nodes by"
+            style={{
+              display: "inline-flex",
+              padding: 2,
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 999,
+            }}
+          >
+            {SIZE_OPTIONS.map((o) => {
+              const active = o.value === sizeBy;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setSizeBy(o.value)}
+                  style={{
+                    all: "unset",
+                    cursor: "pointer",
+                    padding: "4px 12px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: active ? 600 : 500,
+                    color: active ? "var(--text)" : "var(--text-2)",
+                    background: active ? "var(--surface)" : "transparent",
+                  }}
+                >
                   {o.label}
-                </Select.Option>
-              ))}
-            </Select.Content>
-          </Select>
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        </Flex>
       </Flex>
     </Flex>
   );
