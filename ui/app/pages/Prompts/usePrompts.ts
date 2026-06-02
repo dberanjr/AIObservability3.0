@@ -17,7 +17,18 @@ const num = (v: unknown): number => {
 
 const bool = (v: unknown): boolean => v === true || v === "true";
 
-const str = (v: unknown): string => (typeof v === "string" ? v : "");
+// Prompt/response content is usually a string, but some instrumentations emit
+// gen_ai.input.messages / output.messages as a record or array — render those
+// as pretty JSON so the table/popup still show something useful.
+const str = (v: unknown): string => {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+};
 
 export type PromptKind = "LLM" | "Agent";
 
@@ -28,6 +39,7 @@ export interface PromptRow {
   typeLabel: string;
   service: string;
   serviceId: string;
+  provider: string | null;
   model: string | null;
   agent: string | null;
   inTokens: number;
@@ -53,6 +65,7 @@ interface PromptRecord {
   type_label?: string;
   service?: string;
   service_id?: string;
+  provider?: string | null;
   model?: string | null;
   agent?: string | null;
   in_tok?: number;
@@ -193,6 +206,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
         typeLabel: str(r.type_label) || "completion",
         service: str(r.service),
         serviceId: str(r.service_id),
+        provider: r.provider ?? null,
         model: r.model ? canonicalizeModel(r.model).label : null,
         agent:
           r.agent ?? (traceId ? traceAgent.get(traceId) ?? null : null),

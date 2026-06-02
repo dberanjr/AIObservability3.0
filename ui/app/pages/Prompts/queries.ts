@@ -16,44 +16,58 @@ export const buildPromptsListQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
-// Include BOTH instrumentation paths: proxy LLM spans (gen_ai.provider.name +
-// tokens, no content) AND LangChain spans (gen_ai.prompt/completion content +
-// gen_ai.system, no provider). The old filter only matched the former, which
-// is why prompt/response content never appeared.
-| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.system) or isNotNull(gen_ai.prompt.0.content) or isNotNull(gen_ai.completion.0.content) or isNotNull(gen_ai.agent.name)
+// An LLM "prompt" span = has a provider/system and is a chat/completion call.
+// This matches both instrumentation paths (proxy gen_ai.provider.name and
+// LangChain gen_ai.system) and is the convention the platform AI app uses.
+| filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)
+| filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
 | fieldsAdd
-    kind = if(isNotNull(gen_ai.request.model) or isNotNull(gen_ai.system) or isNotNull(gen_ai.prompt.0.content), "LLM", else: "Agent"),
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     duration_ms = duration / 1000000,
+    ai_provider = coalesce(gen_ai.system, gen_ai.provider.name),
+    // User/input message — handle message arrays and role-positioned prompts.
     prompt_text = coalesce(
+      gen_ai.input.messages,
+      gen_ai.prompt.0.user,
+      if(gen_ai.prompt.2.role == "user", gen_ai.prompt.2.content),
+      if(gen_ai.prompt.1.role == "user", gen_ai.prompt.1.content),
+      if(gen_ai.prompt.0.role == "user", gen_ai.prompt.0.content),
       gen_ai.prompt.0.content,
-      gen_ai.prompt.content,
-      gen_ai.prompt,
       ""
     ),
     response_text = coalesce(
+      gen_ai.output.messages,
       gen_ai.completion.0.content,
       gen_ai.response.content,
-      gen_ai.completion,
       ""
     ),
-    system_prompt = if(gen_ai.prompt.0.role == "system", gen_ai.prompt.0.content, else: null),
+    system_prompt = coalesce(
+      gen_ai.system_instructions,
+      if(gen_ai.prompt.0.role == "system", gen_ai.prompt.0.content),
+      if(gen_ai.prompt.1.role == "system", gen_ai.prompt.1.content),
+      if(gen_ai.prompt.2.role == "system", gen_ai.prompt.2.content)
+    ),
     pii_detected = coalesce(toBoolean(gen_ai.privacy.pii_detected), false),
     has_warning = coalesce(toBoolean(gen_ai.response.warning), false),
-    has_error = if(isNotNull(exception.type), true, else: false),
-    type_label = coalesce(gen_ai.operation.name, llm.request.type, gen_ai.kind, "completion"),
-    model_name = coalesce(gen_ai.request.model, gen_ai.model, gen_ai.system.model, ""),
+    has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
+    type_label = coalesce(llm.request.type, gen_ai.operation.name, "chat"),
+    model_name = coalesce(gen_ai.response.model, gen_ai.request.model, gen_ai.model, ""),
     eval_hallucination = toDouble(gen_ai.evaluation.hallucination),
     eval_correctness = toDouble(gen_ai.evaluation.correctness),
     eval_faithfulness = toDouble(gen_ai.evaluation.faithfulness),
     eval_relevance = toDouble(gen_ai.evaluation.relevance)
+| fieldsAdd kind = if(isNotNull(gen_ai.agent.name), "Agent", else: "LLM")
+// Keep only rows that carry a prompt or response (or are errors). This drops
+// the central-proxy spans, which have tokens but no content.
+| filter prompt_text != "" or response_text != "" or span.status_code == "error"
 | fields
-    timestamp,
+    timestamp = start_time,
     kind,
     type_label,
-    service = service.name,
-    service_id = dt.entity.service,
+    provider = ai_provider,
+    service = coalesce(service.name, getNodeName(dt.smartscape.service)),
+    service_id = coalesce(dt.smartscape.service, dt.entity.service),
     model = model_name,
     agent = gen_ai.agent.name,
     in_tok,
@@ -103,13 +117,14 @@ export const buildPromptsSummaryQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
-| filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+| filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)
+| filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     pii = if(coalesce(toBoolean(gen_ai.privacy.pii_detected), false), 1, else: 0),
     warn = if(coalesce(toBoolean(gen_ai.response.warning), false), 1, else: 0),
-    err = if(isNotNull(exception.type), 1, else: 0)
+    err = if(isNotNull(exception.type) or span.status_code == "error", 1, else: 0)
 | summarize
     total = count(),
     avg_duration_ms = avg(duration) / 1000000,
