@@ -1,8 +1,4 @@
-import {
-  sendIntent,
-  getIntentLink,
-  type SendIntentOptions,
-} from "@dynatrace-sdk/navigation";
+import { sendIntent, type SendIntentOptions } from "@dynatrace-sdk/navigation";
 
 /**
  * Cross-app navigation via the Dynatrace intent system.
@@ -64,84 +60,69 @@ const safeSend = (
   }
 };
 
+const dqlStr = (s: string): string =>
+  s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
 /**
- * Bracket a `fetch spans` window around a known epoch-ms timestamp. A ±30m
- * pad comfortably contains a trace while keeping the scan tiny. Falls back to
- * the last 24h when no timestamp is known (e.g. entity-only finding drills).
+ * The Distributed Tracing app handles the `view-traces` intent, which takes a
+ * `dt.filter` (its own filter DSL — NOT DQL) plus a `dt.timeframe`. This is the
+ * contract observed from the Services app's "View traces" link, e.g.:
+ *   /ui/intent/dynatrace.distributedtracing/view-traces#
+ *     {"dt.filter":"dt.smartscape.service = SERVICE-… AND
+ *       dt.smartscape.service.entity.name = ReserveController",
+ *      "dt.timeframe":{ "from": "…", "to": "…" }}
+ * The app does NOT handle `dt.query`, so the previous exemplar approach never
+ * surfaced it in "Open with…".
  */
-const traceWindow = (startMs?: number): { from: string; to: string } => {
+const DT_TRACING_APP_ID = "dynatrace.distributedtracing";
+const DT_VIEW_TRACES_INTENT_ID = "view-traces";
+
+/**
+ * Absolute ISO timeframe bracketing the record (±30m). Wide enough to contain
+ * the trace, tight enough that the Distributed Tracing app loads quickly.
+ */
+const traceTimeframe = (startMs?: number): { from: string; to: string } => {
   if (typeof startMs === "number" && Number.isFinite(startMs)) {
     const pad = 30 * 60 * 1000;
     return {
-      from: `"${new Date(startMs - pad).toISOString()}"`,
-      to: `"${new Date(startMs + pad).toISOString()}"`,
+      from: new Date(startMs - pad).toISOString(),
+      to: new Date(startMs + pad).toISOString(),
     };
   }
-  return { from: "now()-24h", to: "now()" };
+  const now = Date.now();
+  return {
+    from: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+    to: new Date(now).toISOString(),
+  };
 };
 
-const dqlStr = (s: string): string => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-
 /**
- * Build a "trace exemplar" DQL query — one whose result columns are exactly
- * `trace.id` (uid) + `start_time` (timestamp). That pairing is what the
- * platform's intent resolver recognises as trace-shaped, surfacing (and
- * recommending) the Distributed Tracing app in "Open with…". See the
- * trace-exemplar pattern in the Application Tracing docs.
+ * Build the `dt.filter` value for the view-traces intent. Trace/entity ids are
+ * single tokens (no spaces) so they pass unquoted, matching the Services app's
+ * generated filter; a display name is quoted in case it contains spaces.
  */
-export const buildTraceExemplarQuery = (ctx: IntentContext): string => {
-  const { from, to } = traceWindow(ctx.startMs);
-  const filters: string[] = [];
-  if (ctx.traceId) {
-    filters.push(`trace.id == toUid("${dqlStr(ctx.traceId)}")`);
-  } else if (ctx.entityId) {
-    filters.push(`dt.entity.service == "${dqlStr(ctx.entityId)}"`);
-  } else if (ctx.entity) {
-    // Findings pass a display name, not an id — match the common gen_ai
-    // naming attributes so an entity-scoped drill still lands on its traces.
-    const e = dqlStr(ctx.entity);
-    filters.push(
-      `(contains(gen_ai.agent.name, "${e}") or contains(gen_ai.request.model, "${e}") or contains(dt.service.name, "${e}"))`,
-    );
-  }
-  return [
-    `fetch spans, from: ${from}, to: ${to}`,
-    ...(filters.length ? [`| filter ${filters.join(" and ")}`] : []),
-    "| summarize { count(), trace = takeAny(record(start_time, trace.id)) }, by: { trace.id }",
-    "| fields trace.id = trace[trace.id], start_time = trace[start_time], spans = `count()`",
-    "| sort start_time desc",
-    "| limit 50",
-  ].join("\n");
+const buildTraceFilter = (ctx: IntentContext): string | null => {
+  if (ctx.traceId) return `trace.id = ${ctx.traceId}`;
+  if (ctx.entityId) return `dt.smartscape.service = ${ctx.entityId}`;
+  if (ctx.entity)
+    return `dt.smartscape.service.entity.name = "${dqlStr(ctx.entity)}"`;
+  return null;
 };
 
 /**
- * Drill into a distributed trace. Builds a trace-exemplar query (result =
- * trace.id + start_time) and sends it UNPINNED so the platform routes it to
- * the Distributed Tracing app's waterfall view. We deliberately do NOT pin
- * `recommendedAppId`/`recommendedIntentId` here: the Distributed Tracing app
- * registers itself as the handler for trace-shaped results, and pinning the
- * Notebooks app (the previous behaviour) is exactly what forced these drills
- * into a notebook instead of the trace view.
+ * Drill into a distributed trace — opens the Distributed Tracing app directly
+ * on the trace via its `view-traces` intent (pinned, so no "Open with…"
+ * picker). The DT app cannot be embedded in an <iframe> (platform CSP blocks
+ * it), so this navigates; the in-app modal renders our own waterfall instead.
  */
 export const openInTraces = (ctx: IntentContext = {}): void => {
-  const dql = ctx.dql ?? buildTraceExemplarQuery(ctx);
-  safeSend({ "dt.query": dql });
-};
-
-/**
- * Build the App-Shell intent URL for a trace drill — the same trace-exemplar
- * payload as {@link openInTraces}, but returned as a link instead of navigating.
- * We embed this in an <iframe> so the Distributed Tracing view renders inside a
- * modal without the user leaving the AI Observability app. Returns null if the
- * platform can't produce a link (errors are swallowed, never thrown to render).
- */
-export const getTraceIntentLink = (ctx: IntentContext = {}): string | null => {
-  try {
-    const dql = ctx.dql ?? buildTraceExemplarQuery(ctx);
-    return getIntentLink({ "dt.query": dql });
-  } catch {
-    return null;
-  }
+  const filter = buildTraceFilter(ctx);
+  const payload: IntentPayload = { "dt.timeframe": traceTimeframe(ctx.startMs) };
+  if (filter) payload["dt.filter"] = filter;
+  safeSend(payload, {
+    recommendedAppId: DT_TRACING_APP_ID,
+    recommendedIntentId: DT_VIEW_TRACES_INTENT_ID,
+  });
 };
 
 export type { IntentContext };

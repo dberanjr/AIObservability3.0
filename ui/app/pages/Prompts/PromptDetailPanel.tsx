@@ -509,6 +509,8 @@ export const PromptDetailPanel = ({
         show={traceModalOpen}
         onClose={() => setTraceModalOpen(false)}
         ctx={traceCtx}
+        spans={spans}
+        isLoading={isLoading}
       />
     </div>
   );

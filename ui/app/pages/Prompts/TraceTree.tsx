@@ -295,9 +295,16 @@ export interface TraceTreeProps {
   isLoading: boolean;
   /** Search term — matching spans are highlighted, non-matches dimmed. */
   highlight?: string;
+  /** Max height of the scrollable tree area (px). Defaults to 300. */
+  maxHeight?: number;
 }
 
-export const TraceTree = ({ spans, isLoading, highlight }: TraceTreeProps) => {
+export const TraceTree = ({
+  spans,
+  isLoading,
+  highlight,
+  maxHeight = 300,
+}: TraceTreeProps) => {
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const roots = useMemo(() => buildTree(spans), [spans]);
   const selectedSpan = useMemo(
@@ -323,7 +330,7 @@ export const TraceTree = ({ spans, isLoading, highlight }: TraceTreeProps) => {
 
   return (
     <div>
-      <div style={{ maxHeight: 300, overflow: "auto", marginBottom: 12 }}>
+      <div style={{ maxHeight, overflow: "auto", marginBottom: 12 }}>
         {roots.map((root) => (
           <TraceTreeNode
             key={root.span.spanId}
