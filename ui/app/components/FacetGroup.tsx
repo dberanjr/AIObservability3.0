@@ -100,7 +100,11 @@ export const FacetGroup = ({
   const [expanded, setExpanded] = useState(false);
   const limit = maxVisible ?? options.length;
   const visible = expanded ? options : options.slice(0, limit);
-  const hiddenCount = options.length - visible.length;
+  // The list is collapsible whenever there are more options than the limit —
+  // independent of the current expanded state, so the toggle stays available to
+  // collapse again after expanding (it counts hidden-when-collapsed items).
+  const collapsible = options.length > limit;
+  const hiddenCount = options.length - limit;
 
   const toggle = (value: string) => {
     if (selected.includes(value)) {
@@ -139,7 +143,7 @@ export const FacetGroup = ({
           ))}
         </Flex>
       )}
-      {hiddenCount > 0 && (
+      {collapsible && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
