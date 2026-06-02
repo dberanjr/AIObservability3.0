@@ -38,7 +38,9 @@ type SortKey =
   | "inTokens"
   | "outTokens"
   | "durationMs"
-  | "temperature";
+  | "temperature"
+  | "inCost"
+  | "outCost";
 type SortDir = "asc" | "desc";
 
 const VIEW_OPTIONS: { value: PromptView; label: string }[] = [
@@ -480,8 +482,16 @@ const StreamHeader = ({
         Duration
       </HeaderCell>
     )}
-    {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
-    {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
+    {visibleCols.has("in_cost") && (
+      <HeaderCell width={70} align="right" sortBy="inCost" activeSort={sort} onSort={onSort}>
+        In cost
+      </HeaderCell>
+    )}
+    {visibleCols.has("out_cost") && (
+      <HeaderCell width={70} align="right" sortBy="outCost" activeSort={sort} onSort={onSort}>
+        Out cost
+      </HeaderCell>
+    )}
     {visibleCols.has("input") && <HeaderCell>Input</HeaderCell>}
     {visibleCols.has("output") && <HeaderCell>Output</HeaderCell>}
     {visibleCols.has("system_prompt") && <HeaderCell width={140}>System prompt</HeaderCell>}
@@ -724,8 +734,16 @@ const MetadataHeader = ({
         Out tok
       </HeaderCell>
     )}
-    {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
-    {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
+    {visibleCols.has("in_cost") && (
+      <HeaderCell width={70} align="right" sortBy="inCost" activeSort={sort} onSort={onSort}>
+        In cost
+      </HeaderCell>
+    )}
+    {visibleCols.has("out_cost") && (
+      <HeaderCell width={70} align="right" sortBy="outCost" activeSort={sort} onSort={onSort}>
+        Out cost
+      </HeaderCell>
+    )}
     {visibleCols.has("trace_id") && <HeaderCell>Trace ID</HeaderCell>}
     {visibleCols.has("system_prompt") && <HeaderCell width={140}>System prompt</HeaderCell>}
     <HeaderCell width={24}>{""}</HeaderCell>
