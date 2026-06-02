@@ -3,31 +3,37 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { useTokenEfficiency } from "./useTokenEfficiency";
 
 const TileShell = ({
   label,
   hint,
+  info,
   children,
 }: {
   label: string;
   hint?: string;
+  info?: string;
   children: React.ReactNode;
 }) => (
   <Surface elevation="raised" padding={16}>
     <Flex flexDirection="column" gap={8} style={{ minWidth: 0 }}>
       <Flex flexDirection="column" gap={2}>
-        <Text
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "var(--text-3)",
-          }}
-        >
-          {label}
-        </Text>
+        <Flex alignItems="center" gap={6}>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+            }}
+          >
+            {label}
+          </Text>
+          {info && <InfoTooltip text={info} />}
+        </Flex>
         {hint && (
           <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>{hint}</Text>
         )}
@@ -97,6 +103,15 @@ export const TokenEfficiencyTiles = () => {
       <TileShell
         label="Token efficiency score"
         hint="Cost / throughput / waste — not quality-adjusted"
+        info={
+          "0–100 composite of how effectively tokens are turned into output. " +
+          "Weighted: output leverage 50% (output ÷ total tokens), completion 30% " +
+          "(1 − truncation rate, where a response cut off by max_tokens counts as " +
+          "waste), and throughput 20% (output tokens/sec vs a 60 tok/s target). " +
+          "It's a cost/throughput/waste measure — NOT output quality, since this " +
+          "environment emits no evaluation scores. Higher is better; a low score " +
+          "is usually driven by input/context bloat (see 'Input tokens / request')."
+        }
       >
         {eff.isLoading ? (
           <Skeleton style={{ height: 30, width: 90 }} />
@@ -130,6 +145,14 @@ export const TokenEfficiencyTiles = () => {
       <TileShell
         label="Output per dollar"
         hint="Output tokens generated per $ spent"
+        info={
+          "Output tokens produced per US dollar of model spend (total output " +
+          "tokens ÷ total cost). A plain, benchmark-free efficiency metric — " +
+          "higher is better. It naturally penalizes large input/context per " +
+          "request, since input tokens add cost without adding output. Cost is " +
+          "computed per model from the rates in Model Rates; see 'Cost / 1K " +
+          "output tokens' and 'Throughput' below for the drivers."
+        }
       >
         {eff.isLoading ? (
           <Skeleton style={{ height: 30, width: 90 }} />
