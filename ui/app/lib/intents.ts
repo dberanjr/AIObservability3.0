@@ -125,6 +125,23 @@ export const openInTraces = (ctx: IntentContext = {}): void => {
   });
 };
 
+/**
+ * Open a specific span in the Distributed Tracing app. Filters the view-traces
+ * intent to the trace AND the span so the app lands on the trace and scopes to
+ * the chosen span. Requires ctx.spanId; trace.id narrows the match.
+ */
+export const openSpanInTraces = (ctx: IntentContext = {}): void => {
+  const parts: string[] = [];
+  if (ctx.traceId) parts.push(`trace.id = ${ctx.traceId}`);
+  if (ctx.spanId) parts.push(`span.id = ${ctx.spanId}`);
+  const payload: IntentPayload = { "dt.timeframe": traceTimeframe(ctx.startMs) };
+  if (parts.length) payload["dt.filter"] = parts.join(" AND ");
+  safeSend(payload, {
+    recommendedAppId: DT_TRACING_APP_ID,
+    recommendedIntentId: DT_VIEW_TRACES_INTENT_ID,
+  });
+};
+
 export type { IntentContext };
 
 /**

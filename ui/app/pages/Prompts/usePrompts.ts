@@ -6,7 +6,12 @@ import {
   canQueryScope,
   useResolvedServices,
 } from "../../scope/useResolvedServices";
-import { buildPromptsListQuery, buildPromptAgentMapQuery } from "./queries";
+import {
+  buildPromptsListQuery,
+  buildPromptAgentMapQuery,
+  buildPromptFacetValuesQuery,
+  type LatencyFilter,
+} from "./queries";
 import { canonicalizeModel } from "../../detection/attributes";
 import { toNum } from "../../data/format";
 
@@ -94,18 +99,33 @@ const parseTimestamp = (v: unknown): number => {
   return Date.now();
 };
 
+export type { LatencyFilter };
+
 export interface PromptsFilter {
   search?: string;
   kinds?: PromptKind[];
   services?: string[];
   models?: string[];
   agents?: string[];
+  providers?: string[];
+  operations?: string[];
+  onlyErrors?: boolean;
+  onlyPii?: boolean;
+  onlyWarnings?: boolean;
+  latency?: LatencyFilter;
+}
+
+export interface FacetValue {
+  value: string;
+  count?: number;
 }
 
 export interface PromptsFacets {
-  services: Array<{ value: string; count: number }>;
-  models: Array<{ value: string; count: number }>;
-  agents: Array<{ value: string; count: number }>;
+  services: FacetValue[];
+  models: FacetValue[];
+  agents: FacetValue[];
+  providers: FacetValue[];
+  operations: FacetValue[];
   kinds: Array<{ value: PromptKind; count: number }>;
 }
 
@@ -157,6 +177,12 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     services: filter.services,
     kinds: filter.kinds,
     search: filter.search,
+    providers: filter.providers,
+    operations: filter.operations,
+    onlyErrors: filter.onlyErrors,
+    onlyPii: filter.onlyPii,
+    onlyWarnings: filter.onlyWarnings,
+    latency: filter.latency,
   };
   const query = useMemo(
     () =>
@@ -176,6 +202,14 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       filter.services?.join(","),
       filter.kinds?.join(","),
       filter.search,
+      filter.providers?.join(","),
+      filter.operations?.join(","),
+      filter.onlyErrors,
+      filter.onlyPii,
+      filter.onlyWarnings,
+      filter.latency?.op,
+      filter.latency?.min,
+      filter.latency?.max,
     ],
   );
 
@@ -190,6 +224,20 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
   const { data: agentMapData } = useScopedDql<{ trace_id?: string; agent?: string }>(
     canQuery ? buildPromptAgentMapQuery(resolution.serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
+  );
+
+  // Sidebar facet OPTIONS, discovered server-side across all AI spans (not just
+  // the 200 content rows). Ignores the global filter so the option lists stay
+  // complete/discoverable. Fixes the previously-empty Agent facet.
+  const { data: facetData } = useScopedDql<{
+    agents?: unknown;
+    models?: unknown;
+    providers?: unknown;
+    operations?: unknown;
+    services?: unknown;
+  }>(
+    canQuery ? buildPromptFacetValuesQuery(resolution.serviceIds, scope.timeframe) : "",
+    { enabled: canQuery, staleTime: 300_000, ignoreGlobalFilter: true },
   );
 
   return useMemo<UsePromptsResult>(() => {
@@ -249,7 +297,39 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     const serviceCounts = countBy(prompts, (r) => r.service);
     const modelCounts = countBy(prompts, (r) => r.model);
     const agentCounts = countBy(prompts, (r) => r.agent);
+    const providerCounts = countBy(prompts, (r) => r.provider);
+    const operationCounts = countBy(prompts, (r) => r.typeLabel);
     const kindCounts = countBy(prompts, (r) => r.kind);
+
+    // collectDistinct() yields a JS array of strings (or null entries).
+    const arr = (v: unknown): string[] =>
+      Array.isArray(v)
+        ? v.filter((x): x is string => typeof x === "string" && x.length > 0)
+        : [];
+    const fr = facetData?.records?.[0];
+    const discoveredModels = Array.from(
+      new Set(arr(fr?.models).map((m) => canonicalizeModel(m).label)),
+    );
+
+    // Merge server-discovered option values with client-row counts. Values only
+    // seen server-side show no count; counts sort the list, then alpha.
+    const mergeFacet = (
+      discovered: string[],
+      counts: Map<string, number>,
+    ): FacetValue[] => {
+      const values = new Set<string>([
+        ...discovered,
+        ...Array.from(counts.keys()).filter(
+          (v): v is string => typeof v === "string" && v.length > 0,
+        ),
+      ]);
+      return Array.from(values)
+        .map((value) => ({ value, count: counts.get(value) }))
+        .sort(
+          (a, b) =>
+            (b.count ?? 0) - (a.count ?? 0) || a.value.localeCompare(b.value),
+        );
+    };
 
     const hasContent = prompts.some(
       (p) => p.promptText.length > 0 || p.responseText.length > 0,
@@ -285,17 +365,11 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       prompts,
       filtered,
       facets: {
-        services: Array.from(serviceCounts.entries())
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count),
-        models: Array.from(modelCounts.entries())
-          .filter(([value]) => value && value.length > 0)
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count),
-        agents: Array.from(agentCounts.entries())
-          .filter(([value]) => value && value.length > 0)
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count),
+        services: mergeFacet(arr(fr?.services), serviceCounts),
+        models: mergeFacet(discoveredModels, modelCounts),
+        agents: mergeFacet(arr(fr?.agents), agentCounts),
+        providers: mergeFacet(arr(fr?.providers), providerCounts),
+        operations: mergeFacet(arr(fr?.operations), operationCounts),
         kinds: (["LLM", "Agent"] as const).map<{ value: PromptKind; count: number }>((k) => ({
           value: k,
           count: kindCounts.get(k) ?? 0,
@@ -310,6 +384,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
   }, [
     data,
     agentMapData,
+    facetData,
     isLoading,
     error,
     resolution.isLoading,

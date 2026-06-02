@@ -3,16 +3,70 @@ import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
+/** Response-time (duration) filter expressed in milliseconds. */
+export interface LatencyFilter {
+  op: "gt" | "lt" | "between";
+  min?: number;
+  max?: number;
+}
+
 /** Sidebar facet selections applied server-side so the 200-row cap is taken
- *  AFTER filtering (not before). Service + kind + search are pushed into DQL;
- *  model/agent stay client-side (canonical label / trace-backfilled). */
+ *  AFTER filtering (not before). Service + kind + search + provider + operation
+ *  + status (errors/pii/warnings) + latency are pushed into DQL; model/agent
+ *  stay client-side (canonical label / trace-backfilled). */
 export interface PromptsSidebarFilter {
   services?: string[];
   kinds?: string[];
   search?: string;
+  providers?: string[];
+  operations?: string[];
+  onlyErrors?: boolean;
+  onlyPii?: boolean;
+  onlyWarnings?: boolean;
+  latency?: LatencyFilter;
 }
 
 const SVC_EXPR = `coalesce(service.name, getNodeName(dt.smartscape.service))`;
+const PROVIDER_EXPR = `coalesce(gen_ai.system, gen_ai.provider.name)`;
+
+/** Build the server-side clauses for the extended sidebar filters. */
+const sidebarClauses = (sidebar?: PromptsSidebarFilter): string => {
+  const lines: string[] = [];
+  if (sidebar?.providers?.length) {
+    lines.push(
+      `| filter in(${PROVIDER_EXPR}, array(${dqlIdArray(sidebar.providers)}))`,
+    );
+  }
+  if (sidebar?.operations?.length) {
+    lines.push(
+      `| filter in(gen_ai.operation.name, array(${dqlIdArray(sidebar.operations)}))`,
+    );
+  }
+  if (sidebar?.onlyErrors) {
+    lines.push(
+      `| filter isNotNull(exception.type) or span.status_code == "error"`,
+    );
+  }
+  if (sidebar?.onlyPii) {
+    lines.push(`| filter toBoolean(gen_ai.privacy.pii_detected) == true`);
+  }
+  if (sidebar?.onlyWarnings) {
+    lines.push(`| filter toBoolean(gen_ai.response.warning) == true`);
+  }
+  const lat = sidebar?.latency;
+  if (lat) {
+    // duration is nanoseconds; the UI specifies milliseconds.
+    const ns = (ms: number) => Math.max(0, Math.round(ms)) * 1000000;
+    if (lat.op === "gt" && lat.min != null) {
+      lines.push(`| filter duration > ${ns(lat.min)}`);
+    } else if (lat.op === "lt" && lat.max != null) {
+      lines.push(`| filter duration < ${ns(lat.max)}`);
+    } else if (lat.op === "between" && lat.min != null && lat.max != null) {
+      lines.push(`| filter duration >= ${ns(lat.min)} and duration <= ${ns(lat.max)}`);
+    }
+  }
+  return lines.join("\n");
+};
 
 /**
  * Per-prompt rows for the Stream / Metadata views. Reads a small set of
@@ -39,6 +93,7 @@ export const buildPromptsListQuery = (
   const searchClause = q
     ? `| filter contains(lower(prompt_text), "${dqlEscape(q)}") or contains(lower(response_text), "${dqlEscape(q)}") or contains(lower(coalesce(system_prompt, "")), "${dqlEscape(q)}")`
     : "";
+  const extraClauses = sidebarClauses(sidebar);
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
@@ -50,6 +105,7 @@ ${globalFilterClauses(filters)}
 | filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
 ${svcClause}
 ${kindClause}
+${extraClauses}
 // Collapse duplicate span records (this tenant double-emits some spans).
 | dedup {span.id}
 | fieldsAdd
@@ -121,6 +177,27 @@ ${searchClause}
 | limit 200
 `.trim();
 };
+
+/**
+ * Distinct facet values for the sidebar — discovered SERVER-SIDE across all
+ * AI spans (not just the 200 content rows). This is why the Agent facet was
+ * empty before: agent names live on agent-type spans, which the content-row
+ * projection never includes. One scan, collectDistinct per attribute.
+ */
+export const buildPromptFacetValuesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
+| summarize
+    agents = collectDistinct(gen_ai.agent.name),
+    models = collectDistinct(coalesce(gen_ai.response.model, gen_ai.request.model, gen_ai.model)),
+    providers = collectDistinct(${PROVIDER_EXPR}),
+    operations = collectDistinct(gen_ai.operation.name),
+    services = collectDistinct(${SVC_EXPR})
+`.trim();
 
 /**
  * Trace → agent map. LLM-call spans (gen_ai.provider.name) carry no
@@ -246,9 +323,18 @@ fetch spans, samplingRatio: 1, from: ${from}, to: ${to}, scanLimitGBytes: 100
     service = coalesce(service.name, getNodeName(dt.smartscape.service)),
     duration_ms,
     timestamp = start_time,
+    end_time,
     has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
-    gen_ai_provider = gen_ai.provider.name,
-    gen_ai_model = gen_ai.request.model,
+    span_kind = span.kind,
+    status_code = span.status_code,
+    is_root = request.is_root_span,
+    endpoint = endpoint.name,
+    code_function = code.function,
+    code_namespace = code.namespace,
+    cpu_ms = span.timing.cpu / 1000000,
+    cpu_self_ms = span.timing.cpu_self / 1000000,
+    gen_ai_provider = coalesce(gen_ai.system, gen_ai.provider.name),
+    gen_ai_model = coalesce(gen_ai.request.model, gen_ai.response.model, gen_ai.model),
     gen_ai_operation = gen_ai.operation.name,
     agent_name = gen_ai.agent.name,
     tool_name = gen_ai.tool.name,

@@ -15,6 +15,7 @@ import { usePromptSpanDetail } from "./usePromptSpanDetail";
 import { TraceTree } from "./TraceTree";
 import { LogsPanel } from "./LogsPanel";
 import { TraceModal } from "./TraceModal";
+import { openSpanInTraces } from "../../lib/intents";
 
 type DetailTab = "prompts" | "trace" | "logs" | "eval" | "info";
 
@@ -173,6 +174,7 @@ export const PromptDetailPanel = ({
   const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
   const [search, setSearch] = useState("");
   const [traceModalOpen, setTraceModalOpen] = useState(false);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const { spans, isLoading, error } = useTraceSpans(
     prompt.traceId,
     prompt.timestampMs,
@@ -256,6 +258,8 @@ export const PromptDetailPanel = ({
               spans={spans}
               isLoading={isLoading}
               highlight={searchTerm}
+              selectedSpanId={selectedSpanId}
+              onSelectSpan={setSelectedSpanId}
             />
             {error && (
               <Text style={{ fontSize: 11, color: "var(--red)" }}>
@@ -269,6 +273,18 @@ export const PromptDetailPanel = ({
                 disabled={!prompt.traceId}
               >
                 Open trace
+              </Button>
+              <Button
+                onClick={() =>
+                  openSpanInTraces({
+                    traceId: prompt.traceId ?? undefined,
+                    spanId: selectedSpanId ?? undefined,
+                    startMs: prompt.timestampMs,
+                  })
+                }
+                disabled={!selectedSpanId}
+              >
+                Open span
               </Button>
               <Button onClick={handleUserSession} disabled={!sessionId}>
                 User session

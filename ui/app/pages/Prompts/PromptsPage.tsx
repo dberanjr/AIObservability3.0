@@ -91,7 +91,11 @@ export const PromptsPage = () => {
             </Text>
           </Flex>
         )}
-        <PromptsTilesRow summary={summary} />
+        <PromptsTilesRow
+          summary={summary}
+          filter={filter}
+          onFilterChange={setFilter}
+        />
         <PromptQualityAnalytics quality={quality} />
 
         <PromptsTable

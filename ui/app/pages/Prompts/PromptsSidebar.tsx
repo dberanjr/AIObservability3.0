@@ -1,11 +1,112 @@
 import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
-import { TextInput } from "@dynatrace/strato-components/forms";
+import {
+  TextInput,
+  Checkbox,
+  Select,
+  NumberInputV2,
+} from "@dynatrace/strato-components/forms";
 import { FacetGroup } from "../../components/FacetGroup";
-import type { PromptKind, PromptsFacets, PromptsFilter } from "./usePrompts";
+import type {
+  PromptKind,
+  PromptsFacets,
+  PromptsFilter,
+  LatencyFilter,
+} from "./usePrompts";
 
 export type PrivacyMode = "mask" | "raw";
+
+type LatOp = "any" | "gt" | "lt" | "between";
+
+/** Errors / PII / Warnings quick toggles. */
+const StatusToggles = ({
+  filter,
+  onFilterChange,
+}: {
+  filter: PromptsFilter;
+  onFilterChange: (next: PromptsFilter) => void;
+}) => {
+  const rows: Array<{ key: keyof PromptsFilter; label: string }> = [
+    { key: "onlyErrors", label: "Errored requests" },
+    { key: "onlyPii", label: "PII detected" },
+    { key: "onlyWarnings", label: "Warnings" },
+  ];
+  return (
+    <Flex flexDirection="column" gap={6}>
+      <SegLabel>Status</SegLabel>
+      <Flex flexDirection="column" gap={2}>
+        {rows.map((r) => (
+          <Flex key={r.key} alignItems="center" gap={6} style={{ padding: "3px 6px" }}>
+            <Checkbox
+              name={r.key}
+              value={Boolean(filter[r.key])}
+              onChange={(checked) =>
+                onFilterChange({ ...filter, [r.key]: checked ? true : undefined })
+              }
+              aria-label={r.label}
+            />
+            <Text style={{ fontSize: 12.5, color: "var(--text)" }}>{r.label}</Text>
+          </Flex>
+        ))}
+      </Flex>
+    </Flex>
+  );
+};
+
+/** Response-time (duration) filter: >, <, or between, in milliseconds. */
+const LatencyControl = ({
+  value,
+  onChange,
+}: {
+  value?: LatencyFilter;
+  onChange: (next: LatencyFilter | undefined) => void;
+}) => {
+  const op: LatOp = value?.op ?? "any";
+  const setOp = (next: LatOp) => {
+    if (next === "any") return onChange(undefined);
+    onChange({ op: next, min: value?.min, max: value?.max });
+  };
+  const setMin = (n: number | null | undefined) =>
+    op !== "any" && onChange({ op, min: n ?? undefined, max: value?.max });
+  const setMax = (n: number | null | undefined) =>
+    op !== "any" && onChange({ op, min: value?.min, max: n ?? undefined });
+
+  return (
+    <Flex flexDirection="column" gap={6}>
+      <SegLabel>Response time (ms)</SegLabel>
+      <Select<string>
+        name="latency-op"
+        value={op}
+        onChange={(v) => v && setOp(v as LatOp)}
+      >
+        <Select.Trigger placeholder="Any" aria-label="Response time operator" />
+        <Select.Content>
+          <Select.Option value="any">Any</Select.Option>
+          <Select.Option value="gt">Greater than</Select.Option>
+          <Select.Option value="lt">Less than</Select.Option>
+          <Select.Option value="between">Between</Select.Option>
+        </Select.Content>
+      </Select>
+      {(op === "gt" || op === "between") && (
+        <NumberInputV2
+          name="latency-min"
+          value={value?.min ?? null}
+          onChange={setMin}
+          placeholder={op === "between" ? "Min ms" : "Min ms (>)"}
+        />
+      )}
+      {(op === "lt" || op === "between") && (
+        <NumberInputV2
+          name="latency-max"
+          value={value?.max ?? null}
+          onChange={setMax}
+          placeholder={op === "between" ? "Max ms" : "Max ms (<)"}
+        />
+      )}
+    </Flex>
+  );
+};
 
 const SegLabel = ({ children }: { children: React.ReactNode }) => (
   <Text
@@ -169,6 +270,47 @@ export const PromptsSidebar = ({
           })
         }
         maxVisible={6}
+      />
+
+      <FacetGroup
+        label="Provider"
+        options={facets.providers.map((p) => ({
+          value: p.value,
+          label: p.value,
+          count: p.count,
+        }))}
+        selected={filter.providers ?? []}
+        onChange={(next) =>
+          onFilterChange({
+            ...filter,
+            providers: next.length > 0 ? next : undefined,
+          })
+        }
+        maxVisible={6}
+      />
+
+      <FacetGroup
+        label="Operation"
+        options={facets.operations.map((o) => ({
+          value: o.value,
+          label: o.value,
+          count: o.count,
+        }))}
+        selected={filter.operations ?? []}
+        onChange={(next) =>
+          onFilterChange({
+            ...filter,
+            operations: next.length > 0 ? next : undefined,
+          })
+        }
+        maxVisible={6}
+      />
+
+      <StatusToggles filter={filter} onFilterChange={onFilterChange} />
+
+      <LatencyControl
+        value={filter.latency}
+        onChange={(next) => onFilterChange({ ...filter, latency: next })}
       />
 
       <PrivacySegment value={privacy} onChange={onPrivacyChange} />

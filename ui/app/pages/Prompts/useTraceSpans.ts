@@ -19,7 +19,16 @@ export interface TraceSpan {
   service: string;
   durationMs: number;
   timestampMs: number;
+  endTimeMs: number | null;
   isError: boolean;
+  spanKind: string | null;
+  statusCode: string | null;
+  isRoot: boolean | null;
+  endpoint: string | null;
+  codeFunction: string | null;
+  codeNamespace: string | null;
+  cpuMs: number | null;
+  cpuSelfMs: number | null;
   provider: string | null;
   model: string | null;
   operation: string | null;
@@ -40,7 +49,16 @@ interface TraceSpanRecord {
   service?: string;
   duration_ms?: number;
   timestamp?: string | number;
+  end_time?: string | number | null;
   has_error?: boolean | string;
+  span_kind?: string | null;
+  status_code?: string | null;
+  is_root?: boolean | string | null;
+  endpoint?: string | null;
+  code_function?: string | null;
+  code_namespace?: string | null;
+  cpu_ms?: number | null;
+  cpu_self_ms?: number | null;
   gen_ai_provider?: string | null;
   gen_ai_model?: string | null;
   gen_ai_operation?: string | null;
@@ -88,6 +106,8 @@ export const useTraceSpans = (
 
     const spans: TraceSpan[] = [];
     for (const r of data?.records ?? []) {
+      const nOrNull = (v: unknown): number | null =>
+        v == null ? null : num(v);
       spans.push({
         spanId: str(r.span_id),
         parentSpanId: r.parent_span_id ?? null,
@@ -95,7 +115,17 @@ export const useTraceSpans = (
         service: str(r.service),
         durationMs: num(r.duration_ms),
         timestampMs: parseTimestamp(r.timestamp),
+        endTimeMs: r.end_time == null ? null : parseTimestamp(r.end_time),
         isError: bool(r.has_error),
+        spanKind: r.span_kind ?? null,
+        statusCode: r.status_code ?? null,
+        isRoot:
+          r.is_root == null ? null : r.is_root === true || r.is_root === "true",
+        endpoint: r.endpoint ?? null,
+        codeFunction: r.code_function ?? null,
+        codeNamespace: r.code_namespace ?? null,
+        cpuMs: nOrNull(r.cpu_ms),
+        cpuSelfMs: nOrNull(r.cpu_self_ms),
         provider: r.gen_ai_provider ?? null,
         model: r.gen_ai_model ?? null,
         operation: r.gen_ai_operation ?? null,
