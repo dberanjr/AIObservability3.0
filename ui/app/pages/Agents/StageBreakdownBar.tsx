@@ -6,8 +6,8 @@ import type { StageBreakdown } from "./useAgents";
 const STAGES: Array<{ key: keyof StageBreakdown; label: string; color: string }> = [
   { key: "llm", label: "LLM", color: "var(--blue)" },
   { key: "tool", label: "Tool", color: "var(--cyan)" },
+  { key: "retrieval", label: "Retrieval", color: "var(--amber)" },
   { key: "orch", label: "Orch", color: "var(--purple)" },
-  { key: "wait", label: "Wait", color: "var(--text-4)" },
 ];
 
 export interface StageBreakdownBarProps {

@@ -115,6 +115,13 @@ const AgentsPageBody = () => {
           onPreviewToggle={setPreviewEval}
         />
 
+        <DegradedTrendPanel
+          items={degraded.items}
+          isLoading={degraded.isLoading}
+          subtitle="Top 5 slow agents (P90 > 2s) versus their rolling 7d baseline"
+          emptyMessage="No agents above the slow threshold in the current scope."
+        />
+
         <AgentsHero
           agents={agentsResult.all}
           isLoading={agentsResult.isLoading}
@@ -138,13 +145,6 @@ const AgentsPageBody = () => {
         </div>
 
         <OrchestrationSection rows={orchestrationNodes.nodes} />
-
-        <DegradedTrendPanel
-          items={degraded.items}
-          isLoading={degraded.isLoading}
-          subtitle="Top 5 slow agents (P90 > 2s) versus their rolling 7d baseline"
-          emptyMessage="No agents above the slow threshold in the current scope."
-        />
       </Flex>
 
       <SLAConfigDrawer

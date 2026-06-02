@@ -70,7 +70,7 @@ export const AgentsHero = ({ agents, isLoading }: AgentsHeroProps) => {
       agents
         .filter((a) => !a.isOrchestration)
         .sort((a, b) => b.p90Ms - a.p90Ms)
-        .slice(0, 10),
+        .slice(0, 25),
     [agents],
   );
 
@@ -106,7 +106,7 @@ export const AgentsHero = ({ agents, isLoading }: AgentsHeroProps) => {
 
       <ChartCard
         title="P90 latency by agent"
-        sub="Top 10 — red bars cross the runaway threshold (10 min)"
+        sub="Sorted by P90 · scroll for more — red bars cross the runaway threshold (10 min)"
       >
         {isLoading && topByP90.length === 0 ? (
           <Skeleton style={{ height: 200 }} />
@@ -115,20 +115,29 @@ export const AgentsHero = ({ agents, isLoading }: AgentsHeroProps) => {
             No agent data in the current scope.
           </Text>
         ) : (
-          <BarList
-            color={(item) => {
-              if (item.value > 600_000) return "var(--red)";
-              if (item.value > 2000) return "var(--amber)";
-              return "var(--blue)";
-            }}
-            items={topByP90.map((a) => ({
-              key: a.agent,
-              label: a.agent,
-              value: a.p90Ms,
-              displayValue: fmtMs(a.p90Ms),
-              secondary: `${a.service} · ${fmtCount(a.invocations)} inv`,
-            }))}
-          />
+          <div
+            style={{ maxHeight: 200, overflowY: "auto", paddingRight: 4 }}
+          >
+            <BarList
+              color={(item) => {
+                if (item.value > 600_000) return "var(--red)";
+                if (item.value > 2000) return "var(--amber)";
+                return "var(--blue)";
+              }}
+              items={topByP90.map((a) => ({
+                key: a.agent,
+                label: a.agent,
+                value: a.p90Ms,
+                displayValue: fmtMs(a.p90Ms),
+                secondary: `${a.service} · ${fmtCount(a.invocations)} inv`,
+                filter: {
+                  attribute: "gen_ai.agent.name",
+                  values: [a.agent],
+                  label: "agent",
+                },
+              }))}
+            />
+          </div>
         )}
       </ChartCard>
     </div>

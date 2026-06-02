@@ -1,4 +1,4 @@
-import { dqlEscape, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
+import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -29,9 +29,15 @@ ${globalFilterClauses(filters)}
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
-    has_llm = if(isNotNull(gen_ai.provider.name), 1, else: 0),
-    has_tool = if(isNotNull(gen_ai.tool.name), 1, else: 0),
+    lname = lower(span.name),
     ttft_ms = if(isNotNull(gen_ai.usage.time_to_first_token), toDouble(gen_ai.usage.time_to_first_token), else: null)
+| fieldsAdd
+    // Classify each span in the agent's (single-service) trace into a stage.
+    // LLM is usually ~0 here because model calls run on the shared proxy in a
+    // separate trace — see "Latency by execution tier" for the LLM share.
+    span_tier = if(isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.system), "llm",
+      else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "retrieval",
+      else: if(span.kind == "client" or contains(lname,"_tool"), "tool", else: "orch")))
 | summarize
     invocations = count(),
     p50_ns = percentile(duration, 50),
@@ -41,8 +47,10 @@ ${globalFilterClauses(filters)}
     errors = sum(is_error),
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
-    llm_count = sum(has_llm),
-    tool_count = sum(has_tool),
+    llm_spans = countIf(span_tier == "llm"),
+    tool_spans = countIf(span_tier == "tool"),
+    retrieval_spans = countIf(span_tier == "retrieval"),
+    orch_spans = countIf(span_tier == "orch"),
     avg_ttft_ms = avg(ttft_ms),
     models = collectDistinct(gen_ai.request.model),
     framework = takeFirst(gen_ai.framework),
@@ -211,8 +219,12 @@ ${globalFilterClauses(filters)}
     with_success = sum(has_success)
 `.trim();
 
-/** Upstream service callers — best-effort via parent.service.name attribute. */
-export const buildUpstreamServicesQuery = (
+/**
+ * Step 1 for upstream services: the dt.entity.service IDs that host AI agents
+ * in scope. parent.service.name is NOT emitted on spans, so upstream callers
+ * must come from Smartscape topology (step 2) keyed by these service IDs.
+ */
+export const buildAiServiceIdsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
@@ -221,14 +233,32 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
-| filter isNotNull(parent.service.name)
-| summarize
-    calls = count(),
-    agents = countDistinct(gen_ai.agent.name),
-    by: { upstream = parent.service.name }
-| sort calls desc
-| limit 20
+| summarize by: { svc = dt.entity.service }
+| limit 200
 `.trim();
+
+/**
+ * Step 2: upstream service dependencies from Smartscape. Finds services that
+ * "call" the AI services (topology edges, not span attributes), resolving both
+ * ends to service names. `services` is the count of distinct AI services each
+ * upstream calls. Returns nothing for services with no monitored callers
+ * (e.g. entry points called only by external clients).
+ */
+export const buildUpstreamSmartscapeQuery = (aiServiceIds: string[]): string => {
+  if (aiServiceIds.length === 0) return "";
+  return `
+smartscapeEdges type:"calls"
+| filter in(target_id, array(${dqlIdArray(aiServiceIds)}))
+| join [ smartscapeNodes type:"SERVICE" | fields source_id = id, upstream = name ], kind: inner, on: { source_id }, prefix: "s."
+| join [ smartscapeNodes type:"SERVICE" | fields target_id = id, target_name = name ], kind: inner, on: { target_id }, prefix: "t."
+| summarize
+    services = countDistinct(target_id),
+    targets = collectDistinct(\`t.target_name\`),
+    by: { upstream = \`s.upstream\` }
+| sort services desc
+| limit 25
+`.trim();
+};
 
 /** Per-agent invocations timeseries for the hero chart. */
 export const buildInvocationsSeriesQuery = (

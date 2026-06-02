@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount } from "../../data/format";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import type { UseUpstreamServicesResult } from "./useUpstreamServices";
 
 export interface UpstreamServicesTableProps {
@@ -21,7 +22,7 @@ export const UpstreamServicesTable = ({ result }: UpstreamServicesTableProps) =>
           Upstream services
         </Heading>
         <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-          Services that called these agents — causal chain origin
+          Services that call these AI services — from Smartscape topology
         </Text>
       </Flex>
 
@@ -36,9 +37,8 @@ export const UpstreamServicesTable = ({ result }: UpstreamServicesTableProps) =>
           color: "var(--text-3)",
         }}
       >
-        <span style={{ flex: 1 }}>Upstream</span>
-        <span style={{ width: 80, textAlign: "right" }}>Calls</span>
-        <span style={{ width: 80, textAlign: "right" }}>Agents</span>
+        <span style={{ flex: 1 }}>Upstream service</span>
+        <span style={{ width: 90, textAlign: "right" }}>AI services</span>
       </Flex>
 
       {result.isLoading && result.rows.length === 0 ? (
@@ -48,9 +48,13 @@ export const UpstreamServicesTable = ({ result }: UpstreamServicesTableProps) =>
           ))}
         </Flex>
       ) : result.rows.length === 0 ? (
-        <Flex style={{ padding: "24px 16px" }}>
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No upstream services attributed in the current scope.
+        <Flex style={{ padding: "16px" }}>
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.5 }}>
+            No upstream callers found in Smartscape for these AI services — they
+            aren't called by other <em>monitored</em> services (callers are
+            external clients, or the dependency isn't captured as a
+            service-level call). This reads Smartscape <code>calls</code> edges,
+            not span attributes.
           </Text>
         </Flex>
       ) : (
@@ -73,30 +77,25 @@ export const UpstreamServicesTable = ({ result }: UpstreamServicesTableProps) =>
                 whiteSpace: "nowrap",
               }}
             >
-              {r.upstream}
+              <FilterTrigger
+                attribute="service.name"
+                value={r.upstream}
+                label="upstream service"
+              >
+                {r.upstream}
+              </FilterTrigger>
             </Text>
             <Text
               style={{
-                width: 80,
+                width: 90,
                 textAlign: "right",
                 fontFamily: "var(--mono, monospace)",
                 fontSize: 12.5,
                 fontVariantNumeric: "tabular-nums",
               }}
+              title={r.targets.join(", ")}
             >
-              {fmtCount(r.calls)}
-            </Text>
-            <Text
-              style={{
-                width: 80,
-                textAlign: "right",
-                fontFamily: "var(--mono, monospace)",
-                fontSize: 12.5,
-                fontVariantNumeric: "tabular-nums",
-                color: "var(--text-2)",
-              }}
-            >
-              {fmtCount(r.agents)}
+              {fmtCount(r.services)}
             </Text>
           </Flex>
         ))

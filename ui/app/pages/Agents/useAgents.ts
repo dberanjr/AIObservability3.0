@@ -26,8 +26,10 @@ interface AgentRecord {
   errors?: number;
   input_tokens?: number;
   output_tokens?: number;
-  llm_count?: number;
-  tool_count?: number;
+  llm_spans?: number;
+  tool_spans?: number;
+  retrieval_spans?: number;
+  orch_spans?: number;
   avg_ttft_ms?: number | null;
   models?: string[];
   framework?: string;
@@ -52,11 +54,16 @@ interface TraceJoinInfo {
 }
 
 export interface StageBreakdown {
-  /** Fractions sum to ~1. */
+  /**
+   * Share of the agent's own (single-service) child spans by stage. Fractions
+   * sum to ~1. LLM is usually ~0 because model calls run on the shared proxy in
+   * separate traces — this reflects the agent's local orchestration/tool/
+   * retrieval composition, not LLM time.
+   */
   llm: number;
   tool: number;
+  retrieval: number;
   orch: number;
-  wait: number;
 }
 
 export interface AgentRow {
@@ -102,15 +109,18 @@ export interface UseAgentsResult {
 }
 
 const computeStage = (rec: AgentRecord): StageBreakdown => {
-  const total = num(rec.invocations);
-  if (total === 0) return { llm: 0, tool: 0, orch: 0, wait: 0 };
-  const llmFrac = num(rec.llm_count) / total;
-  const toolFrac = num(rec.tool_count) / total;
-  // Orchestration: heuristic placeholder until parent-child tree query lands.
-  const orchFrac = Math.max(0, 0.15 - llmFrac * 0.1);
-  const sum = Math.min(1, llmFrac + toolFrac + orchFrac);
-  const wait = Math.max(0, 1 - sum);
-  return { llm: llmFrac, tool: toolFrac, orch: orchFrac, wait };
+  const llm = num(rec.llm_spans);
+  const tool = num(rec.tool_spans);
+  const retrieval = num(rec.retrieval_spans);
+  const orch = num(rec.orch_spans);
+  const total = llm + tool + retrieval + orch;
+  if (total === 0) return { llm: 0, tool: 0, retrieval: 0, orch: 0 };
+  return {
+    llm: llm / total,
+    tool: tool / total,
+    retrieval: retrieval / total,
+    orch: orch / total,
+  };
 };
 
 export const useAgents = (): UseAgentsResult => {
@@ -166,8 +176,8 @@ export const useAgents = (): UseAgentsResult => {
       const service = serviceList[0] ?? "";
       const serviceId = serviceIdList[0] ?? r.agent;
       const invocations = num(r.invocations);
-      const llmCount = num(r.llm_count);
-      const toolCount = num(r.tool_count);
+      const llmCount = num(r.llm_spans);
+      const toolCount = num(r.tool_spans);
       // Token/cost attribution: agent spans carry no tokens (LLM calls run
       // through the proxy), so prefer the trace-join numbers. Fall back to the
       // agent-span tokens (usually 0) only when there's no link.

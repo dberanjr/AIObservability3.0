@@ -286,7 +286,7 @@ const CHART_LABELS_OPTIONS: SegmentOption<ChartLabels>[] = [
   { value: "peak", label: "peak" },
   { value: "minmax", label: "min/max" },
   { value: "interesting", label: "interesting" },
-  { value: "all", label: "all" },
+  { value: "all", label: "periodic" },
 ];
 
 const TOOLS_MODE_OPTIONS: SegmentOption<ToolsMode>[] = [
