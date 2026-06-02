@@ -7,6 +7,7 @@ import {
   WarningIcon,
 } from "@dynatrace/strato-icons";
 import { fmtCount, fmtMs } from "../../data/format";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import type { NodeRow } from "./useOrchestrationNodes";
 
 export interface OrchestrationSectionProps {
@@ -118,32 +119,44 @@ export const OrchestrationSection = ({ rows }: OrchestrationSectionProps) => {
                 borderTop: "1px solid var(--border)",
               }}
             >
-              <Text
-                style={{
-                  flex: 1,
-                  fontFamily: "var(--mono, monospace)",
-                  fontSize: 12,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {r.node}
-              </Text>
-              <Text
-                style={{
-                  width: 160,
-                  fontFamily: "var(--mono, monospace)",
-                  fontSize: 12,
-                  color: "var(--text-2)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={r.service}
-              >
-                {r.agent}
-              </Text>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <FilterTrigger attribute="span.name" value={r.node} label="node">
+                  <Text
+                    style={{
+                      fontFamily: "var(--mono, monospace)",
+                      fontSize: 12,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                    }}
+                  >
+                    {r.node}
+                  </Text>
+                </FilterTrigger>
+              </span>
+              <span style={{ width: 160 }}>
+                <FilterTrigger
+                  attribute="gen_ai.agent.name"
+                  value={r.agent}
+                  label="agent"
+                >
+                  <Text
+                    style={{
+                      fontFamily: "var(--mono, monospace)",
+                      fontSize: 12,
+                      color: "var(--text-2)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                    }}
+                    title={r.service}
+                  >
+                    {r.agent}
+                  </Text>
+                </FilterTrigger>
+              </span>
               <Text
                 style={{
                   width: 80,

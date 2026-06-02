@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtTokens } from "../../data/format";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import type { UseExplorerHeatmapResult } from "./useExplorerHeatmap";
 
 export interface ServiceModelHeatmapProps {
@@ -101,16 +102,23 @@ export const ServiceModelHeatmap = ({ result }: ServiceModelHeatmapProps) => (
                       flex: "0 0 auto",
                     }}
                   />
-                  <span
-                    style={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: CELL_W - 16,
-                    }}
+                  <FilterTrigger
+                    attribute="gen_ai.request.model"
+                    value={col.rawModels.length > 0 ? col.rawModels : col.model}
+                    label="model"
                   >
-                    {col.model}
-                  </span>
+                    <span
+                      style={{
+                        display: "block",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: CELL_W - 16,
+                      }}
+                    >
+                      {col.model}
+                    </span>
+                  </FilterTrigger>
                 </Flex>
               </div>
             ))}
@@ -144,7 +152,13 @@ export const ServiceModelHeatmap = ({ result }: ServiceModelHeatmapProps) => (
                         flex: "0 0 auto",
                       }}
                     />
-                    {row.service}
+                    <FilterTrigger
+                      attribute="service.name"
+                      value={row.service}
+                      label="service"
+                    >
+                      {row.service}
+                    </FilterTrigger>
                   </Flex>
                 </div>
                 {result.columns.map((col) => {
