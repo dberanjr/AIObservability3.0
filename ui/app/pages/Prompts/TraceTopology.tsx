@@ -6,6 +6,10 @@ import { Button } from "@dynatrace/strato-components/buttons";
 import { Checkbox } from "@dynatrace/strato-components/forms";
 import {
   ServicesIcon,
+  AgentIcon,
+  AIModelIcon,
+  SettingIcon,
+  ConnectorIcon,
   ZoomInIcon,
   ZoomOutIcon,
   ZoomToFitIcon,
@@ -280,8 +284,22 @@ const edgePath = (x1: number, y1: number, x2: number, y2: number): string => {
   return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
 };
 
-const fmtCost = (cents: number): string =>
-  cents > 0 ? `$${(cents / 100).toFixed(5)}` : "$0";
+const fmtCost = (cents: number): string => `$${(cents / 100).toFixed(5)}`;
+
+/**
+ * Pick a distinct icon per node type: agent, LLM, tool, MCP server (detected by
+ * an "mcp" hint in the label/service), and generic service spans.
+ */
+const iconForNode = (
+  label: string,
+  category: SpanCategory,
+): typeof ServicesIcon => {
+  if (/\bmcp\b|mcp[-_.]|[-_.]mcp/i.test(label)) return ConnectorIcon;
+  if (category === "agent") return AgentIcon;
+  if (category === "llm") return AIModelIcon;
+  if (category === "tool") return SettingIcon;
+  return ServicesIcon;
+};
 
 const sublabel = (n: TopoNode, by: SizeBy): string => {
   if (by === "inTok") return `${fmtTokens(n.inTok)} in`;
@@ -550,6 +568,7 @@ const TopologyGraph = ({
               {layout.nodes.map((n) => {
                 const color = CAT_COLOR[n.category];
                 const d = n.r * 2;
+                const NodeIcon = iconForNode(n.label, n.category);
                 return (
                   <div
                     key={n.key}
@@ -572,7 +591,7 @@ const TopologyGraph = ({
                         color,
                       }}
                     >
-                      <ServicesIcon size={Math.max(14, Math.min(26, n.r * 0.7))} />
+                      <NodeIcon size={Math.max(14, Math.min(26, n.r * 0.7))} />
                     </div>
                     <div
                       style={{
@@ -600,17 +619,18 @@ const TopologyGraph = ({
                       {n.isEntry ? (
                         <>
                           <Text
-                            style={{ fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}
+                            style={{ display: "block", fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}
                           >
                             {`${fmtMs(layout.totals.durationMs)} · ${fmtCost(layout.totals.cost)}`}
                           </Text>
-                          <Text style={{ fontSize: 10, color: "var(--text-3)" }}>
+                          <Text style={{ display: "block", fontSize: 10, color: "var(--text-3)" }}>
                             {`${fmtTokens(layout.totals.inTok)} in · ${fmtTokens(layout.totals.outTok)} out`}
                           </Text>
                         </>
                       ) : (
                         <Text
                           style={{
+                            display: "block",
                             fontSize: 10,
                             color: sizeBy === "none" ? "var(--text-3)" : "var(--text-2)",
                             fontWeight: sizeBy === "none" ? 400 : 600,
