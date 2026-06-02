@@ -192,7 +192,19 @@ const WaterfallRow = ({
     0.6,
     Math.min(100 - leftPct, (Math.max(0, span.durationMs) / total) * 100),
   );
-  const labelAfter = leftPct + widthPct < 80;
+  const endPct = leftPct + widthPct;
+  // Where to draw the duration label so it never collides with adjacent columns:
+  //  - wide bar  → inside, at the bar's right end (white text)
+  //  - room right → just after the bar end
+  //  - otherwise → just before the bar start (bar hugs the right edge)
+  const labelPlacement: "inside" | "after" | "before" =
+    widthPct >= 18 ? "inside" : endPct < 82 ? "after" : "before";
+  const labelStyle: React.CSSProperties =
+    labelPlacement === "inside"
+      ? { right: `${Math.max(0, 100 - endPct)}%`, marginRight: 6, color: "#fff" }
+      : labelPlacement === "after"
+        ? { left: `${endPct}%`, marginLeft: 4, color: "var(--text-3)" }
+        : { right: `${100 - leftPct}%`, marginRight: 4, color: "var(--text-3)" };
 
   return (
     <div
@@ -356,12 +368,9 @@ const WaterfallRow = ({
             display: "flex",
             alignItems: "center",
             fontSize: 10,
-            color: "var(--text-3)",
             whiteSpace: "nowrap",
             pointerEvents: "none",
-            ...(labelAfter
-              ? { left: `${leftPct + widthPct}%`, marginLeft: 4 }
-              : { right: `${100 - leftPct}%`, marginRight: 4 }),
+            ...labelStyle,
           }}
         >
           {fmtMs(span.durationMs)}

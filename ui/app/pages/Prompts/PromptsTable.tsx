@@ -18,7 +18,21 @@ import { usePersistedState } from "../../state/usePersistedState";
 import { PromptDetailPanel } from "./PromptDetailPanel";
 
 export type PromptView = "stream" | "metadata" | "evaluations";
-type VisibleColumn = "temperature" | "in_cost" | "out_cost" | "system_prompt";
+// Every column except Time is optional. Time is always shown as the anchor.
+type VisibleColumn =
+  | "service"
+  | "model"
+  | "type"
+  | "temperature"
+  | "duration"
+  | "in_tok"
+  | "out_tok"
+  | "in_cost"
+  | "out_cost"
+  | "input"
+  | "output"
+  | "trace_id"
+  | "system_prompt";
 type SortKey = "timestampMs" | "inTokens" | "outTokens" | "durationMs";
 type SortDir = "asc" | "desc";
 
@@ -27,6 +41,53 @@ const VIEW_OPTIONS: { value: PromptView; label: string }[] = [
   { value: "metadata", label: "Metadata" },
   { value: "evaluations", label: "Evaluations" },
 ];
+
+// Toggleable columns per view (Time is always shown and not listed here).
+const STREAM_COLUMNS: { key: VisibleColumn; label: string }[] = [
+  { key: "service", label: "AI app" },
+  { key: "model", label: "Model" },
+  { key: "in_tok", label: "In tokens" },
+  { key: "out_tok", label: "Out tokens" },
+  { key: "temperature", label: "Temperature" },
+  { key: "duration", label: "Duration" },
+  { key: "in_cost", label: "In cost" },
+  { key: "out_cost", label: "Out cost" },
+  { key: "input", label: "Input" },
+  { key: "output", label: "Output" },
+  { key: "system_prompt", label: "System prompt" },
+];
+const METADATA_COLUMNS: { key: VisibleColumn; label: string }[] = [
+  { key: "service", label: "AI app" },
+  { key: "model", label: "Model" },
+  { key: "type", label: "Type" },
+  { key: "temperature", label: "Temperature" },
+  { key: "duration", label: "Duration" },
+  { key: "in_tok", label: "In tokens" },
+  { key: "out_tok", label: "Out tokens" },
+  { key: "in_cost", label: "In cost" },
+  { key: "out_cost", label: "Out cost" },
+  { key: "trace_id", label: "Trace ID" },
+  { key: "system_prompt", label: "System prompt" },
+];
+const ALL_COLUMNS: VisibleColumn[] = [
+  "service",
+  "model",
+  "type",
+  "temperature",
+  "duration",
+  "in_tok",
+  "out_tok",
+  "in_cost",
+  "out_cost",
+  "input",
+  "output",
+  "trace_id",
+  "system_prompt",
+];
+// Everything on by default except the verbose System prompt.
+const DEFAULT_VISIBLE: VisibleColumn[] = ALL_COLUMNS.filter(
+  (c) => c !== "system_prompt",
+);
 
 const TimeCell = ({ ms }: { ms: number }) => {
   const date = new Date(ms);
@@ -269,9 +330,11 @@ const ViewSegmented = ({
 const ColumnSelector = ({
   visibleCols,
   onToggle,
+  columns,
 }: {
   visibleCols: Set<VisibleColumn>;
   onToggle: (col: VisibleColumn) => void;
+  columns: { key: VisibleColumn; label: string }[];
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -325,9 +388,22 @@ const ColumnSelector = ({
             boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
           }}
         >
-          {["temperature", "in_cost", "out_cost", "system_prompt"].map((col) => (
+          <Text
+            style={{
+              display: "block",
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+              padding: "2px 8px 6px",
+            }}
+          >
+            Columns
+          </Text>
+          {columns.map((col) => (
             <label
-              key={col}
+              key={col.key}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -340,17 +416,11 @@ const ColumnSelector = ({
             >
               <input
                 type="checkbox"
-                checked={visibleCols.has(col as VisibleColumn)}
-                onChange={() => onToggle(col as VisibleColumn)}
+                checked={visibleCols.has(col.key)}
+                onChange={() => onToggle(col.key)}
                 style={{ cursor: "pointer" }}
               />
-              {col === "temperature"
-                ? "Temperature"
-                : col === "in_cost"
-                  ? "In cost"
-                  : col === "out_cost"
-                    ? "Out cost"
-                    : "System prompt"}
+              {col.label}
             </label>
           ))}
         </div>
@@ -372,24 +442,30 @@ const StreamHeader = ({
     <HeaderCell width={132} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
       Time
     </HeaderCell>
-    <HeaderCell width={140}>AI app</HeaderCell>
-    <HeaderCell width={160}>Model</HeaderCell>
-    <HeaderCell width={70} align="right" sortBy="inTokens" activeSort={sort} onSort={onSort}>
-      In tok
-    </HeaderCell>
-    <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
-      Out tok
-    </HeaderCell>
+    {visibleCols.has("service") && <HeaderCell width={140}>AI app</HeaderCell>}
+    {visibleCols.has("model") && <HeaderCell width={160}>Model</HeaderCell>}
+    {visibleCols.has("in_tok") && (
+      <HeaderCell width={70} align="right" sortBy="inTokens" activeSort={sort} onSort={onSort}>
+        In tok
+      </HeaderCell>
+    )}
+    {visibleCols.has("out_tok") && (
+      <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
+        Out tok
+      </HeaderCell>
+    )}
     {visibleCols.has("temperature") && (
       <HeaderCell width={64} align="right">Temp</HeaderCell>
     )}
-    <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
-      Duration
-    </HeaderCell>
+    {visibleCols.has("duration") && (
+      <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
+        Duration
+      </HeaderCell>
+    )}
     {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
     {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
-    <HeaderCell>Input</HeaderCell>
-    <HeaderCell>Output</HeaderCell>
+    {visibleCols.has("input") && <HeaderCell>Input</HeaderCell>}
+    {visibleCols.has("output") && <HeaderCell>Output</HeaderCell>}
     {visibleCols.has("system_prompt") && <HeaderCell width={140}>System prompt</HeaderCell>}
     <HeaderCell width={24}>{""}</HeaderCell>
   </Flex>
@@ -401,18 +477,80 @@ const fmtUSD = (cents: number): string => {
   return `$${dollars.toFixed(5)}`;
 };
 
+// ---- Anomaly highlighting -------------------------------------------------
+// Flag unusually HIGH duration / token / cost values relative to the rows on
+// screen, so the user is visually cued to slow or expensive calls. Thresholds
+// are percentile-based (p90 → amber "elevated", p98 → red "outlier") and only
+// kick in once there are enough samples to be meaningful.
+interface Thr {
+  p90: number;
+  p98: number;
+}
+export interface AnomalyStats {
+  duration: Thr | null;
+  inTok: Thr | null;
+  outTok: Thr | null;
+  inCost: Thr | null;
+  outCost: Thr | null;
+}
+export const EMPTY_ANOMALY: AnomalyStats = {
+  duration: null,
+  inTok: null,
+  outTok: null,
+  inCost: null,
+  outCost: null,
+};
+
+const percentileAsc = (sorted: number[], p: number): number =>
+  sorted.length === 0
+    ? 0
+    : sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+
+const thresholdsFor = (values: number[]): Thr | null => {
+  const v = values.filter((n) => n > 0).sort((a, b) => a - b);
+  if (v.length < 5) return null; // too few samples to call anything anomalous
+  return { p90: percentileAsc(v, 90), p98: percentileAsc(v, 98) };
+};
+
+/** Color for a value given its column thresholds: red outlier, amber elevated. */
+const anomalyColor = (value: number, t: Thr | null): string | undefined => {
+  if (!t || value <= 0) return undefined;
+  if (value >= t.p98) return "var(--red)";
+  if (value >= t.p90) return "var(--amber)";
+  return undefined;
+};
+
+/** Build per-column thresholds from the displayed rows. */
+export const computeAnomalyStats = (rows: PromptRow[]): AnomalyStats => ({
+  duration: thresholdsFor(rows.map((r) => r.durationMs)),
+  inTok: thresholdsFor(rows.map((r) => r.inTokens)),
+  outTok: thresholdsFor(rows.map((r) => r.outTokens)),
+  inCost: thresholdsFor(
+    rows.map((r) =>
+      r.inTokens > 0 ? estimateCost(r.inTokens, 0, getPricing(r.model)) : 0,
+    ),
+  ),
+  outCost: thresholdsFor(
+    rows.map((r) =>
+      r.outTokens > 0 ? estimateCost(0, r.outTokens, getPricing(r.model)) : 0,
+    ),
+  ),
+});
+
 const StreamRow = ({
   prompt,
   privacy,
   onClick,
   isSelected,
   visibleCols,
+  stats,
 }: {
   prompt: PromptRow;
   privacy: PrivacyMode;
   onClick: (p: PromptRow) => void;
   isSelected: boolean;
   visibleCols: Set<VisibleColumn>;
+  stats: AnomalyStats;
 }) => {
   const inputText = privacy === "mask" ? maskPII(prompt.promptText) : prompt.promptText;
   const outputText =
@@ -421,6 +559,13 @@ const StreamRow = ({
   const pricing = getPricing(prompt.model);
   const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
   const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+
+  const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
+  const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
+  const durColor = anomalyColor(prompt.durationMs, stats.duration);
+  const inCostColor = anomalyColor(inCost, stats.inCost);
+  const outCostColor = anomalyColor(outCost, stats.outCost);
+  const bold = (c?: string) => (c ? { fontWeight: 600 } : undefined);
 
   return (
     <div
@@ -454,46 +599,60 @@ const StreamRow = ({
       <Cell width={132}>
         <TimeCell ms={prompt.timestampMs} />
       </Cell>
-      <Cell width={140} mono color="var(--text-2)">
-        {prompt.service}
-      </Cell>
-      <Cell width={160} mono color="var(--text-2)">
-        {prompt.model ?? "—"}
-      </Cell>
-      <Cell width={70} align="right" mono>
-        {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
-      </Cell>
-      <Cell width={70} align="right" mono>
-        {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
-      </Cell>
+      {visibleCols.has("service") && (
+        <Cell width={140} mono color="var(--text-2)">
+          {prompt.service}
+        </Cell>
+      )}
+      {visibleCols.has("model") && (
+        <Cell width={160} mono color="var(--text-2)">
+          {prompt.model ?? "—"}
+        </Cell>
+      )}
+      {visibleCols.has("in_tok") && (
+        <Cell width={70} align="right" mono color={inTokColor} style={bold(inTokColor)} title={inTokColor ? "Elevated input tokens" : undefined}>
+          {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
+        </Cell>
+      )}
+      {visibleCols.has("out_tok") && (
+        <Cell width={70} align="right" mono color={outTokColor} style={bold(outTokColor)} title={outTokColor ? "Elevated output tokens" : undefined}>
+          {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
+        </Cell>
+      )}
       {visibleCols.has("temperature") && (
         <Cell width={64} align="right">
           <TempCell t={prompt.temperature} />
         </Cell>
       )}
-      <Cell width={90} align="right" mono>
-        {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
-      </Cell>
+      {visibleCols.has("duration") && (
+        <Cell width={90} align="right" mono color={durColor} style={bold(durColor)} title={durColor ? "Elevated duration" : undefined}>
+          {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
+        </Cell>
+      )}
       {visibleCols.has("in_cost") && (
-        <Cell width={70} align="right" mono>
+        <Cell width={70} align="right" mono color={inCostColor} style={bold(inCostColor)} title={inCostColor ? "Elevated input cost" : undefined}>
           {fmtUSD(inCost)}
         </Cell>
       )}
       {visibleCols.has("out_cost") && (
-        <Cell width={70} align="right" mono>
+        <Cell width={70} align="right" mono color={outCostColor} style={bold(outCostColor)} title={outCostColor ? "Elevated output cost" : undefined}>
           {fmtUSD(outCost)}
         </Cell>
       )}
-      <Cell title={inputText}>
-        {inputText ? truncate(inputText, 80) : (
-          <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
-        )}
-      </Cell>
-      <Cell title={outputText}>
-        {outputText ? truncate(outputText, 80) : (
-          <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
-        )}
-      </Cell>
+      {visibleCols.has("input") && (
+        <Cell title={inputText}>
+          {inputText ? truncate(inputText, 80) : (
+            <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
+          )}
+        </Cell>
+      )}
+      {visibleCols.has("output") && (
+        <Cell title={outputText}>
+          {outputText ? truncate(outputText, 80) : (
+            <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
+          )}
+        </Cell>
+      )}
       {visibleCols.has("system_prompt") && (
         <Cell width={140} title={prompt.systemPrompt ?? undefined}>
           {prompt.systemPrompt ? truncate(prompt.systemPrompt, 40) : (
@@ -521,24 +680,30 @@ const MetadataHeader = ({
     <HeaderCell width={132} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
       Time
     </HeaderCell>
-    <HeaderCell width={140}>AI app</HeaderCell>
-    <HeaderCell width={160}>Model</HeaderCell>
-    <HeaderCell width={110}>Type</HeaderCell>
+    {visibleCols.has("service") && <HeaderCell width={140}>AI app</HeaderCell>}
+    {visibleCols.has("model") && <HeaderCell width={160}>Model</HeaderCell>}
+    {visibleCols.has("type") && <HeaderCell width={110}>Type</HeaderCell>}
     {visibleCols.has("temperature") && (
       <HeaderCell width={64} align="right">Temp</HeaderCell>
     )}
-    <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
-      Duration
-    </HeaderCell>
-    <HeaderCell width={70} align="right" sortBy="inTokens" activeSort={sort} onSort={onSort}>
-      In tok
-    </HeaderCell>
-    <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
-      Out tok
-    </HeaderCell>
+    {visibleCols.has("duration") && (
+      <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
+        Duration
+      </HeaderCell>
+    )}
+    {visibleCols.has("in_tok") && (
+      <HeaderCell width={70} align="right" sortBy="inTokens" activeSort={sort} onSort={onSort}>
+        In tok
+      </HeaderCell>
+    )}
+    {visibleCols.has("out_tok") && (
+      <HeaderCell width={70} align="right" sortBy="outTokens" activeSort={sort} onSort={onSort}>
+        Out tok
+      </HeaderCell>
+    )}
     {visibleCols.has("in_cost") && <HeaderCell width={70} align="right">In cost</HeaderCell>}
     {visibleCols.has("out_cost") && <HeaderCell width={70} align="right">Out cost</HeaderCell>}
-    <HeaderCell>Trace ID</HeaderCell>
+    {visibleCols.has("trace_id") && <HeaderCell>Trace ID</HeaderCell>}
     {visibleCols.has("system_prompt") && <HeaderCell width={140}>System prompt</HeaderCell>}
     <HeaderCell width={24}>{""}</HeaderCell>
   </Flex>
@@ -549,15 +714,24 @@ const MetadataRow = ({
   onClick,
   isSelected,
   visibleCols,
+  stats,
 }: {
   prompt: PromptRow;
   onClick: (p: PromptRow) => void;
   isSelected: boolean;
   visibleCols: Set<VisibleColumn>;
+  stats: AnomalyStats;
 }) => {
   const pricing = getPricing(prompt.model);
   const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
   const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+
+  const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
+  const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
+  const durColor = anomalyColor(prompt.durationMs, stats.duration);
+  const inCostColor = anomalyColor(inCost, stats.inCost);
+  const outCostColor = anomalyColor(outCost, stats.outCost);
+  const bold = (c?: string) => (c ? { fontWeight: 600 } : undefined);
 
   return (
     <div
@@ -591,45 +765,59 @@ const MetadataRow = ({
       <Cell width={132}>
         <TimeCell ms={prompt.timestampMs} />
       </Cell>
-      <Cell width={140} mono color="var(--text-2)">
-        {prompt.service}
-      </Cell>
-      <Cell width={160} mono color="var(--text-2)">
-        {prompt.model ?? "—"}
-      </Cell>
-      <Cell width={110}>
-        <Flex gap={4}>
-          <KindChip kind={prompt.kind} />
-          <TypeChip label={prompt.typeLabel} />
-        </Flex>
-      </Cell>
+      {visibleCols.has("service") && (
+        <Cell width={140} mono color="var(--text-2)">
+          {prompt.service}
+        </Cell>
+      )}
+      {visibleCols.has("model") && (
+        <Cell width={160} mono color="var(--text-2)">
+          {prompt.model ?? "—"}
+        </Cell>
+      )}
+      {visibleCols.has("type") && (
+        <Cell width={110}>
+          <Flex gap={4}>
+            <KindChip kind={prompt.kind} />
+            <TypeChip label={prompt.typeLabel} />
+          </Flex>
+        </Cell>
+      )}
       {visibleCols.has("temperature") && (
         <Cell width={64} align="right">
           <TempCell t={prompt.temperature} />
         </Cell>
       )}
-      <Cell width={90} align="right" mono>
-        {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
-      </Cell>
-      <Cell width={70} align="right" mono>
-        {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
-      </Cell>
-      <Cell width={70} align="right" mono>
-        {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
-      </Cell>
+      {visibleCols.has("duration") && (
+        <Cell width={90} align="right" mono color={durColor} style={bold(durColor)} title={durColor ? "Elevated duration" : undefined}>
+          {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
+        </Cell>
+      )}
+      {visibleCols.has("in_tok") && (
+        <Cell width={70} align="right" mono color={inTokColor} style={bold(inTokColor)} title={inTokColor ? "Elevated input tokens" : undefined}>
+          {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
+        </Cell>
+      )}
+      {visibleCols.has("out_tok") && (
+        <Cell width={70} align="right" mono color={outTokColor} style={bold(outTokColor)} title={outTokColor ? "Elevated output tokens" : undefined}>
+          {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
+        </Cell>
+      )}
       {visibleCols.has("in_cost") && (
-        <Cell width={70} align="right" mono>
+        <Cell width={70} align="right" mono color={inCostColor} style={bold(inCostColor)} title={inCostColor ? "Elevated input cost" : undefined}>
           {fmtUSD(inCost)}
         </Cell>
       )}
       {visibleCols.has("out_cost") && (
-        <Cell width={70} align="right" mono>
+        <Cell width={70} align="right" mono color={outCostColor} style={bold(outCostColor)} title={outCostColor ? "Elevated output cost" : undefined}>
           {fmtUSD(outCost)}
         </Cell>
       )}
-      <Cell mono color="var(--text-2)">
-        {prompt.traceId ?? "—"}
-      </Cell>
+      {visibleCols.has("trace_id") && (
+        <Cell mono color="var(--text-2)">
+          {prompt.traceId ?? "—"}
+        </Cell>
+      )}
       {visibleCols.has("system_prompt") && (
         <Cell width={140} title={prompt.systemPrompt ?? undefined}>
           {prompt.systemPrompt ? truncate(prompt.systemPrompt, 40) : (
@@ -704,17 +892,15 @@ export const PromptsTable = ({
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState("");
-  // v2 key: adds the new Temperature column (on by default) without inheriting
-  // older persisted selections that predate it.
+  // v3 key: every column except Time is now individually toggleable, so the
+  // stored value is the full set of shown columns (not just the extra ones).
   const [visibleColsArray, setVisibleColsArray] = usePersistedState<VisibleColumn[]>(
-    "ai-obs.prompts-visible-cols.v2",
-    ["temperature", "in_cost", "out_cost"],
+    "ai-obs.prompts-visible-cols.v3",
+    DEFAULT_VISIBLE,
   );
-  // Handle migration from old Set-based storage: if the loaded value is not an array,
-  // treat it as invalid and use the default
   const validVisibleColsArray: VisibleColumn[] = Array.isArray(visibleColsArray)
     ? visibleColsArray
-    : (["temperature", "in_cost", "out_cost"] as VisibleColumn[]);
+    : DEFAULT_VISIBLE;
   const visibleCols = new Set(validVisibleColsArray);
 
   const toggleSort = (key: SortKey) =>
@@ -753,6 +939,9 @@ export const PromptsTable = ({
     });
     return copy;
   }, [filtered, sort]);
+
+  // Anomaly thresholds derived from the rows currently in view.
+  const anomalyStats = useMemo(() => computeAnomalyStats(filtered), [filtered]);
 
   const selectedPrompt = useMemo(
     () => sorted.find((p) => p.id === selectedId) ?? null,
@@ -835,7 +1024,11 @@ export const PromptsTable = ({
               >
                 <RefreshIcon size={14} />
               </button>
-              <ColumnSelector visibleCols={visibleCols} onToggle={toggleColumn} />
+              <ColumnSelector
+                visibleCols={visibleCols}
+                onToggle={toggleColumn}
+                columns={view === "stream" ? STREAM_COLUMNS : METADATA_COLUMNS}
+              />
             </Flex>
 
             {view === "stream" ? (
@@ -867,6 +1060,7 @@ export const PromptsTable = ({
                       onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
                       isSelected={p.id === selectedId}
                       visibleCols={visibleCols}
+                      stats={anomalyStats}
                     />
                   ) : (
                     <MetadataRow
@@ -874,6 +1068,7 @@ export const PromptsTable = ({
                       onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
                       isSelected={p.id === selectedId}
                       visibleCols={visibleCols}
+                      stats={anomalyStats}
                     />
                   )}
                   {p.id === selectedId && (
