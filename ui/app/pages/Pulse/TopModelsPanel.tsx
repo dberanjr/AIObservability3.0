@@ -29,6 +29,11 @@ export const TopModelsPanel = ({ models, isLoading }: TopModelsPanelProps) => {
           value: m.inputTokens + m.outputTokens,
           displayValue: fmtTokens(m.inputTokens + m.outputTokens),
           secondary: `${m.provider.label} · ${m.requests.toLocaleString()} req`,
+          filter: {
+            attribute: "gen_ai.request.model",
+            values: m.rawModels,
+            label: "model",
+          },
         })),
     [models],
   );

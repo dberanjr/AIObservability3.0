@@ -13,6 +13,7 @@ import {
 } from "../../components/SLAConfig/agentHealthScore";
 import { useSLA } from "../../components/SLAConfig/SLAContext";
 import { useTweaks } from "../../tweaks/TweaksContext";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import { StageBreakdownBar } from "./StageBreakdownBar";
 import type { AgentRow } from "./useAgents";
 
@@ -301,9 +302,27 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                       <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
                     )}
                   </Cell>
-                  <Cell mono>{r.agent}</Cell>
+                  <Cell mono>
+                    <FilterTrigger
+                      attribute="gen_ai.agent.name"
+                      value={r.agent}
+                      label="agent"
+                    >
+                      {r.agent}
+                    </FilterTrigger>
+                  </Cell>
                   <Cell width={140} mono color="var(--text-2)">
-                    {r.service}
+                    {r.service ? (
+                      <FilterTrigger
+                        attribute="service.name"
+                        value={r.service}
+                        label="service"
+                      >
+                        {r.service}
+                      </FilterTrigger>
+                    ) : (
+                      r.service
+                    )}
                   </Cell>
                   <Cell width={80} align="right" mono>
                     {fmtCount(r.invocations)}

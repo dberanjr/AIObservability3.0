@@ -68,6 +68,8 @@ export const inferModelType = (
 export interface ModelRow {
   model: string;
   modelKey: string;
+  /** All raw gen_ai.request.model values merged under this canonical row. */
+  rawModels: string[];
   provider: { id: ProviderId; label: string; viaBedrock: boolean };
   providerColor: string;
   type: ModelType;
@@ -135,6 +137,7 @@ export const useModels = (): UseModelsResult => {
     interface Agg {
       key: string;
       label: string;
+      rawModels: Set<string>;
       requests: number;
       inputTokens: number;
       outputTokens: number;
@@ -164,6 +167,7 @@ export const useModels = (): UseModelsResult => {
         agg = {
           key,
           label,
+          rawModels: new Set<string>(),
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
@@ -182,6 +186,7 @@ export const useModels = (): UseModelsResult => {
         };
         byKey.set(key, agg);
       }
+      agg.rawModels.add(r.model);
       agg.requests += requests;
       agg.inputTokens += num(r.input_tokens);
       agg.outputTokens += num(r.output_tokens);
@@ -244,6 +249,7 @@ export const useModels = (): UseModelsResult => {
       models.push({
         model: agg.label,
         modelKey: agg.key,
+        rawModels: Array.from(agg.rawModels),
         provider,
         providerColor: PROVIDER_COLOR_LIGHT[provider.id],
         type,

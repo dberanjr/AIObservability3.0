@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { FilterTrigger } from "../FilterTrigger";
 
 export interface BarListItem {
   key: string;
@@ -10,6 +11,8 @@ export interface BarListItem {
   displayValue: string;
   /** Optional secondary line below the bar (e.g. "5,904 invocations"). */
   secondary?: string;
+  /** When set, the label becomes click-to-filter on this attribute/value(s). */
+  filter?: { attribute: string; values: string[]; label?: string };
 }
 
 export interface BarListProps {
@@ -39,20 +42,43 @@ export const BarList = ({
         return (
           <Flex key={item.key} flexDirection="column" gap={4}>
             <Flex alignItems="baseline" justifyContent="space-between" gap={8}>
-              <Text
-                style={{
-                  fontFamily: "var(--mono, monospace)",
-                  fontSize: 12.5,
-                  color: "var(--text)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  minWidth: 0,
-                  flex: 1,
-                }}
-              >
-                {item.label}
-              </Text>
+              {item.filter ? (
+                <FilterTrigger
+                  attribute={item.filter.attribute}
+                  value={item.filter.values}
+                  label={item.filter.label ?? item.label}
+                  style={{ minWidth: 0, flex: 1 }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: "var(--mono, monospace)",
+                      fontSize: 12.5,
+                      color: "var(--text)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </FilterTrigger>
+              ) : (
+                <Text
+                  style={{
+                    fontFamily: "var(--mono, monospace)",
+                    fontSize: 12.5,
+                    color: "var(--text)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    minWidth: 0,
+                    flex: 1,
+                  }}
+                >
+                  {item.label}
+                </Text>
+              )}
               <Text
                 style={{
                   fontSize: 12.5,

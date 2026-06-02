@@ -20,6 +20,7 @@ export const AgentCostBarList = ({ result }: AgentCostBarListProps) => {
     value: r.cost,
     displayValue: fmtUSD(r.cost),
     secondary: `${fmtTokens(r.tokens)} tokens · ${r.models.join(", ") || "model unknown"}`,
+    filter: { attribute: "gen_ai.agent.name", values: [r.agent], label: "agent" },
   }));
 
   return (

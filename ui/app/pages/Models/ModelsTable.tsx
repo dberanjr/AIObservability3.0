@@ -13,6 +13,7 @@ import {
   fmtTokens,
   fmtUSD,
 } from "../../data/format";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
 
 type SortKey =
@@ -316,7 +317,15 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 borderTop: "1px solid var(--border)",
               }}
             >
-              <Cell mono>{m.model}</Cell>
+              <Cell mono>
+                <FilterTrigger
+                  attribute="gen_ai.request.model"
+                  value={m.rawModels}
+                  label="model"
+                >
+                  {m.model}
+                </FilterTrigger>
+              </Cell>
               <Cell width={100}>
                 <TypeChip model={m} />
               </Cell>
