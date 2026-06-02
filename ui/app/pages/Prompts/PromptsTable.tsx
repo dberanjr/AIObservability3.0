@@ -253,6 +253,14 @@ const HeaderCell = ({
   const baseStyle: React.CSSProperties = {
     flex: width ? "0 0 auto" : 1,
     width,
+    // Match the data Cell: without minWidth:0 a flex item's default
+    // min-width:auto lets a long header label grow the cell past its set
+    // width, and the overage accumulates across columns — misaligning headers
+    // from their data. Clip with ellipsis instead.
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
     textAlign: align,
     padding: "8px 6px",
     fontSize: 10.5,
@@ -438,7 +446,10 @@ const StreamHeader = ({
   onSort: (key: SortKey) => void;
   visibleCols: Set<VisibleColumn>;
 }) => (
-  <Flex alignItems="center" style={{ padding: "0 10px" }}>
+  <Flex
+    alignItems="center"
+    style={{ padding: "0 10px", borderLeft: "3px solid transparent" }}
+  >
     <HeaderCell width={132} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
       Time
     </HeaderCell>
@@ -676,7 +687,10 @@ const MetadataHeader = ({
   onSort: (key: SortKey) => void;
   visibleCols: Set<VisibleColumn>;
 }) => (
-  <Flex alignItems="center" style={{ padding: "0 10px" }}>
+  <Flex
+    alignItems="center"
+    style={{ padding: "0 10px", borderLeft: "3px solid transparent" }}
+  >
     <HeaderCell width={132} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
       Time
     </HeaderCell>
