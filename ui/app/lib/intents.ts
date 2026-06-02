@@ -75,7 +75,13 @@ const dqlStr = (s: string): string =>
  * surfaced it in "Open with…".
  */
 const DT_TRACING_APP_ID = "dynatrace.distributedtracing";
+// `view-traces` opens the Explorer list (Requests/Spans). `view-trace` opens a
+// single trace's WATERFALL directly — it shows every span regardless of whether
+// the trace has a request-root span, so it works for agentic/OTel traces (which
+// have none, leaving the Explorer's default Requests view empty). Both intent
+// contracts confirmed via `dtctl get intents`.
 const DT_VIEW_TRACES_INTENT_ID = "view-traces";
+const DT_VIEW_TRACE_INTENT_ID = "view-trace";
 
 /**
  * Absolute ISO timeframe bracketing the record (±30m). Wide enough to contain
@@ -109,16 +115,45 @@ const buildTraceFilter = (ctx: IntentContext): string | null => {
   return null;
 };
 
+/** Common payload for the single-trace waterfall (`view-trace`) intent. */
+const traceWaterfallPayload = (ctx: IntentContext): IntentPayload => {
+  const payload: IntentPayload = {
+    "trace.id": ctx.traceId,
+    "dt.timeframe": traceTimeframe(ctx.startMs),
+  };
+  if (ctx.spanId) payload["span.id"] = ctx.spanId;
+  if (typeof ctx.startMs === "number" && Number.isFinite(ctx.startMs)) {
+    // Helps the app locate the trace's time partition / center the view.
+    payload["timestamp"] = new Date(ctx.startMs).toISOString();
+  }
+  return payload;
+};
+
 /**
- * Drill into a distributed trace — opens the Distributed Tracing app directly
- * on the trace via its `view-traces` intent (pinned, so no "Open with…"
- * picker). The DT app cannot be embedded in an <iframe> (platform CSP blocks
- * it), so this navigates; the in-app modal renders our own waterfall instead.
+ * Drill into a distributed trace. With a trace id we open the single-trace
+ * WATERFALL (`view-trace`) so every span shows even when the trace has no
+ * request-root span (agentic/OTel traces have none, which left the Explorer's
+ * default Requests view empty — the bug being fixed). Without a trace id (e.g.
+ * an entity-only finding drill) we fall back to the Explorer (`view-traces`)
+ * filtered to the entity, forced into Spans view.
  */
 export const openInTraces = (ctx: IntentContext = {}): void => {
+  if (ctx.traceId) {
+    // span.id isn't part of "open trace" — only "open span" focuses a span.
+    const { spanId: _omit, ...traceCtx } = ctx;
+    safeSend(traceWaterfallPayload(traceCtx), {
+      recommendedAppId: DT_TRACING_APP_ID,
+      recommendedIntentId: DT_VIEW_TRACE_INTENT_ID,
+    });
+    return;
+  }
   const filter = buildTraceFilter(ctx);
-  const payload: IntentPayload = { "dt.timeframe": traceTimeframe(ctx.startMs) };
-  if (filter) payload["dt.filter"] = filter;
+  const payload: IntentPayload = {
+    "dt.filter": filter ?? "span.id = *",
+    "dt.timeframe": traceTimeframe(ctx.startMs),
+    // Agentic spans aren't request roots, so prefer the Spans view.
+    viewMode: "spans",
+  };
   safeSend(payload, {
     recommendedAppId: DT_TRACING_APP_ID,
     recommendedIntentId: DT_VIEW_TRACES_INTENT_ID,
@@ -126,19 +161,17 @@ export const openInTraces = (ctx: IntentContext = {}): void => {
 };
 
 /**
- * Open a specific span in the Distributed Tracing app. Filters the view-traces
- * intent to the trace AND the span so the app lands on the trace and scopes to
- * the chosen span. Requires ctx.spanId; trace.id narrows the match.
+ * Open a specific span in the Distributed Tracing app — the single-trace
+ * waterfall (`view-trace`) scoped to the trace and focused on `span.id`.
  */
 export const openSpanInTraces = (ctx: IntentContext = {}): void => {
-  const parts: string[] = [];
-  if (ctx.traceId) parts.push(`trace.id = ${ctx.traceId}`);
-  if (ctx.spanId) parts.push(`span.id = ${ctx.spanId}`);
-  const payload: IntentPayload = { "dt.timeframe": traceTimeframe(ctx.startMs) };
-  if (parts.length) payload["dt.filter"] = parts.join(" AND ");
-  safeSend(payload, {
+  if (!ctx.traceId) {
+    openInTraces(ctx);
+    return;
+  }
+  safeSend(traceWaterfallPayload(ctx), {
     recommendedAppId: DT_TRACING_APP_ID,
-    recommendedIntentId: DT_VIEW_TRACES_INTENT_ID,
+    recommendedIntentId: DT_VIEW_TRACE_INTENT_ID,
   });
 };
 

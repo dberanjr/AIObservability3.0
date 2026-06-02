@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import {
@@ -54,7 +54,13 @@ const StatusToggles = ({
   );
 };
 
-/** Response-time (duration) filter: >, <, or between, in milliseconds. */
+/**
+ * Response-time (duration) filter: >, <, or between, in milliseconds.
+ *
+ * The number inputs are debounced — committing the filter (which triggers a new
+ * DQL query) only after 2s of inactivity, or immediately on Enter / blur — so
+ * typing "3000" doesn't fire four queries. The operator select commits at once.
+ */
 const LatencyControl = ({
   value,
   onChange,
@@ -63,14 +69,58 @@ const LatencyControl = ({
   onChange: (next: LatencyFilter | undefined) => void;
 }) => {
   const op: LatOp = value?.op ?? "any";
-  const setOp = (next: LatOp) => {
-    if (next === "any") return onChange(undefined);
-    onChange({ op: next, min: value?.min, max: value?.max });
+  const [draftMin, setDraftMin] = useState<number | null>(value?.min ?? null);
+  const [draftMax, setDraftMax] = useState<number | null>(value?.max ?? null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync drafts when the value changes externally (tile click, reset, etc.).
+  useEffect(() => {
+    setDraftMin(value?.min ?? null);
+    setDraftMax(value?.max ?? null);
+  }, [value?.min, value?.max]);
+
+  // Clear any pending debounce on unmount.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const commit = (
+    nextOp: LatOp,
+    min: number | null,
+    max: number | null,
+  ) => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    if (nextOp === "any") {
+      onChange(undefined);
+      return;
+    }
+    onChange({ op: nextOp, min: min ?? undefined, max: max ?? undefined });
   };
-  const setMin = (n: number | null | undefined) =>
-    op !== "any" && onChange({ op, min: n ?? undefined, max: value?.max });
-  const setMax = (n: number | null | undefined) =>
-    op !== "any" && onChange({ op, min: value?.min, max: n ?? undefined });
+
+  const scheduleCommit = (min: number | null, max: number | null) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => commit(op, min, max), 2000);
+  };
+
+  const setOp = (next: LatOp) => commit(next, draftMin, draftMax);
+  const onMin = (n: number | null) => {
+    setDraftMin(n);
+    scheduleCommit(n, draftMax);
+  };
+  const onMax = (n: number | null) => {
+    setDraftMax(n);
+    scheduleCommit(draftMin, n);
+  };
+  const commitNow = () => commit(op, draftMin, draftMax);
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") commitNow();
+  };
 
   return (
     <Flex flexDirection="column" gap={6}>
@@ -91,16 +141,20 @@ const LatencyControl = ({
       {(op === "gt" || op === "between") && (
         <NumberInputV2
           name="latency-min"
-          value={value?.min ?? null}
-          onChange={setMin}
+          value={draftMin}
+          onChange={onMin}
+          onBlur={commitNow}
+          onKeyDown={onKey}
           placeholder={op === "between" ? "Min ms" : "Min ms (>)"}
         />
       )}
       {(op === "lt" || op === "between") && (
         <NumberInputV2
           name="latency-max"
-          value={value?.max ?? null}
-          onChange={setMax}
+          value={draftMax}
+          onChange={onMax}
+          onBlur={commitNow}
+          onKeyDown={onKey}
           placeholder={op === "between" ? "Max ms" : "Max ms (<)"}
         />
       )}
