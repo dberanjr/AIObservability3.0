@@ -380,10 +380,13 @@ const TopologyGraph = ({
 
   const copyPng = async () => {
     try {
+      // Build a standalone SVG of ONLY the graph (nodes + edges, literal theme
+      // colors) and rasterize it. A data-URL (not a blob URL) keeps the image
+      // same-origin so the canvas isn't tainted — otherwise toBlob fails and
+      // nothing usable reaches the clipboard.
       const svgStr = buildExportSvg(layout, sizeBy);
-      const url = URL.createObjectURL(
-        new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" }),
-      );
+      const url =
+        "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
       const img = await new Promise<HTMLImageElement>((res, rej) => {
         const i = new Image();
         i.onload = () => res(i);
@@ -397,7 +400,6 @@ const TopologyGraph = ({
       const ctx = canvas.getContext("2d")!;
       ctx.scale(scale, scale);
       ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
       const png = await new Promise<Blob | null>((res) =>
         canvas.toBlob(res, "image/png"),
       );
