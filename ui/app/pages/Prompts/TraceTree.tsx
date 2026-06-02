@@ -26,7 +26,7 @@ export const spanCategory = (s: TraceSpan): SpanCategory => {
   return "other";
 };
 
-const CAT_COLOR: Record<SpanCategory, string> = {
+export const CAT_COLOR: Record<SpanCategory, string> = {
   agent: "var(--purple)",
   llm: "var(--blue)",
   tool: "var(--green)",
