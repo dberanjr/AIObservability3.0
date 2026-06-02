@@ -398,7 +398,7 @@ const StreamHeader = ({
 const fmtUSD = (cents: number): string => {
   if (!Number.isFinite(cents) || cents <= 0) return "—";
   const dollars = cents / 100;
-  return `$${dollars.toFixed(4)}`;
+  return `$${dollars.toFixed(5)}`;
 };
 
 const StreamRow = ({
