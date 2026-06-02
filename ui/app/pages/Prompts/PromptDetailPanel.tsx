@@ -1,9 +1,15 @@
 import React, { useState, useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Modal } from "@dynatrace/strato-components/overlays";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { TextInput } from "@dynatrace/strato-components/forms";
-import { WarningIcon, MagnifyingGlassIcon } from "@dynatrace/strato-icons";
+import {
+  WarningIcon,
+  MagnifyingGlassIcon,
+  CopyIcon,
+  MaximizeIcon,
+} from "@dynatrace/strato-icons";
 import { sendIntent } from "@dynatrace-sdk/navigation";
 import { fmtMs, fmtTokens } from "../../data/format";
 import type { PromptRow } from "./usePrompts";
@@ -19,27 +25,75 @@ import { openSpanInTraces } from "../../lib/intents";
 
 type DetailTab = "prompts" | "trace" | "logs" | "eval" | "info";
 
+/** Copy-to-clipboard button with brief "Copied" feedback. */
+const CopyButton = ({
+  text,
+  label,
+  title,
+}: {
+  text: string;
+  label?: string;
+  title?: string;
+}) => {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable — no-op */
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      title={title ?? "Copy to clipboard"}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 11,
+        color: copied ? "var(--green-2)" : "var(--text-3)",
+        padding: "2px 4px",
+      }}
+    >
+      <CopyIcon size={13} />
+      {label ? <span>{copied ? "Copied" : label}</span> : copied ? <span>Copied</span> : null}
+    </button>
+  );
+};
+
 const Bubble = ({
   label,
   color,
   text,
+  maxHeight = 200,
 }: {
   label: string;
   color: string;
   text: string;
+  maxHeight?: number;
 }) => (
   <Flex flexDirection="column" gap={4}>
-    <Text
-      style={{
-        fontSize: 10.5,
-        fontWeight: 600,
-        letterSpacing: "0.05em",
-        textTransform: "uppercase",
-        color,
-      }}
-    >
-      {label}
-    </Text>
+    <Flex alignItems="center" justifyContent="space-between">
+      <Text
+        style={{
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color,
+        }}
+      >
+        {label}
+      </Text>
+      {text ? <CopyButton text={text} title={`Copy ${label.toLowerCase()}`} /> : null}
+    </Flex>
     <div
       style={{
         padding: 12,
@@ -51,7 +105,7 @@ const Bubble = ({
         color: "var(--text)",
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
-        maxHeight: 200,
+        maxHeight,
         overflow: "auto",
       }}
     >
@@ -174,6 +228,7 @@ export const PromptDetailPanel = ({
   const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
   const [search, setSearch] = useState("");
   const [traceModalOpen, setTraceModalOpen] = useState(false);
+  const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const { spans, isLoading, error } = useTraceSpans(
     prompt.traceId,
@@ -210,6 +265,15 @@ export const PromptDetailPanel = ({
     privacy === "mask" && prompt.systemPrompt
       ? maskPII(prompt.systemPrompt)
       : prompt.systemPrompt;
+
+  // The whole prompt as one copyable block (only sections that exist).
+  const wholePrompt = useMemo(() => {
+    const parts: string[] = [];
+    if (systemText) parts.push(`[System]\n${systemText}`);
+    if (inputText) parts.push(`[Input]\n${inputText}`);
+    if (outputText) parts.push(`[Output]\n${outputText}`);
+    return parts.join("\n\n");
+  }, [systemText, inputText, outputText]);
 
   const sessionId = useMemo(
     () => spans.find((s) => s.sessionId)?.sessionId ?? null,
@@ -320,6 +384,28 @@ export const PromptDetailPanel = ({
 
         {activeTab === "prompts" && (
           <Flex flexDirection="column" gap={8}>
+            <Flex justifyContent="flex-end" gap={6}>
+              <Button
+                onClick={() => {
+                  navigator.clipboard?.writeText(wholePrompt).catch(() => {});
+                }}
+                disabled={!wholePrompt}
+              >
+                <Button.Prefix>
+                  <CopyIcon />
+                </Button.Prefix>
+                Copy all
+              </Button>
+              <Button
+                onClick={() => setPromptModalOpen(true)}
+                disabled={!wholePrompt}
+              >
+                <Button.Prefix>
+                  <MaximizeIcon />
+                </Button.Prefix>
+                Maximize
+              </Button>
+            </Flex>
             {prompt.piiDetected && <PIIBanner />}
             {systemText && (
               <Bubble label="System" color="var(--text-2)" text={systemText} />
@@ -546,6 +632,53 @@ export const PromptDetailPanel = ({
         spans={spans}
         isLoading={isLoading}
       />
+
+      <Modal
+        show={promptModalOpen}
+        onDismiss={() => setPromptModalOpen(false)}
+        size="large"
+        title="Prompt"
+        footer={
+          <Flex justifyContent="flex-end" gap={8}>
+            <Button onClick={() => setPromptModalOpen(false)}>Close</Button>
+            <Button
+              variant="accent"
+              onClick={() => {
+                navigator.clipboard?.writeText(wholePrompt).catch(() => {});
+              }}
+            >
+              <Button.Prefix>
+                <CopyIcon />
+              </Button.Prefix>
+              Copy all
+            </Button>
+          </Flex>
+        }
+      >
+        <Flex flexDirection="column" gap={12}>
+          {prompt.piiDetected && <PIIBanner />}
+          {systemText && (
+            <Bubble
+              label="System"
+              color="var(--text-2)"
+              text={systemText}
+              maxHeight={Math.round(window.innerHeight * 0.3)}
+            />
+          )}
+          <Bubble
+            label="Input"
+            color="var(--blue)"
+            text={inputText}
+            maxHeight={Math.round(window.innerHeight * 0.3)}
+          />
+          <Bubble
+            label="Output"
+            color="var(--purple)"
+            text={outputText}
+            maxHeight={Math.round(window.innerHeight * 0.3)}
+          />
+        </Flex>
+      </Modal>
     </div>
   );
 };
