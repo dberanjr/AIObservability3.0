@@ -55,23 +55,33 @@ const StatusToggles = ({
 };
 
 /**
- * Response-time (duration) filter: >, <, or between, in milliseconds.
+ * Numeric range filter: >, <, or between. Used for both Response time (ms) and
+ * Temperature.
  *
  * The number inputs are debounced — committing the filter (which triggers a new
  * DQL query) only after 1s of inactivity, or immediately on Enter / blur — so
- * typing "3000" doesn't fire four queries. The operator select commits at once.
+ * typing doesn't fire a query per keystroke. The operator select commits at once.
  */
-const LatencyControl = ({
+const RangeControl = ({
+  label,
+  name,
   value,
   onChange,
+  step,
+  unit,
 }: {
+  label: string;
+  name: string;
   value?: LatencyFilter;
   onChange: (next: LatencyFilter | undefined) => void;
+  step?: number;
+  unit?: string;
 }) => {
   const op: LatOp = value?.op ?? "any";
   const [draftMin, setDraftMin] = useState<number | null>(value?.min ?? null);
   const [draftMax, setDraftMax] = useState<number | null>(value?.max ?? null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suffix = unit ? ` ${unit}` : "";
 
   // Sync drafts when the value changes externally (tile click, reset, etc.).
   useEffect(() => {
@@ -124,13 +134,13 @@ const LatencyControl = ({
 
   return (
     <Flex flexDirection="column" gap={6}>
-      <SegLabel>Response time (ms)</SegLabel>
+      <SegLabel>{label}</SegLabel>
       <Select<string>
-        name="latency-op"
+        name={`${name}-op`}
         value={op}
         onChange={(v) => v && setOp(v as LatOp)}
       >
-        <Select.Trigger placeholder="Any" aria-label="Response time operator" />
+        <Select.Trigger placeholder="Any" aria-label={`${label} operator`} />
         <Select.Content>
           <Select.Option value="any">Any</Select.Option>
           <Select.Option value="gt">Greater than</Select.Option>
@@ -140,22 +150,24 @@ const LatencyControl = ({
       </Select>
       {(op === "gt" || op === "between") && (
         <NumberInputV2
-          name="latency-min"
+          name={`${name}-min`}
           value={draftMin}
           onChange={onMin}
           onBlur={commitNow}
           onKeyDown={onKey}
-          placeholder={op === "between" ? "Min ms" : "Min ms (>)"}
+          step={step}
+          placeholder={op === "between" ? `Min${suffix}` : `Min${suffix} (>)`}
         />
       )}
       {(op === "lt" || op === "between") && (
         <NumberInputV2
-          name="latency-max"
+          name={`${name}-max`}
           value={draftMax}
           onChange={onMax}
           onBlur={commitNow}
           onKeyDown={onKey}
-          placeholder={op === "between" ? "Max ms" : "Max ms (<)"}
+          step={step}
+          placeholder={op === "between" ? `Max${suffix}` : `Max${suffix} (<)`}
         />
       )}
     </Flex>
@@ -362,9 +374,21 @@ export const PromptsSidebar = ({
 
       <StatusToggles filter={filter} onFilterChange={onFilterChange} />
 
-      <LatencyControl
+      <RangeControl
+        label="Response time (ms)"
+        name="latency"
         value={filter.latency}
         onChange={(next) => onFilterChange({ ...filter, latency: next })}
+        step={1}
+        unit="ms"
+      />
+
+      <RangeControl
+        label="Temperature"
+        name="temperature"
+        value={filter.temperature}
+        onChange={(next) => onFilterChange({ ...filter, temperature: next })}
+        step={0.1}
       />
 
       <PrivacySegment value={privacy} onChange={onPrivacyChange} />

@@ -33,7 +33,12 @@ type VisibleColumn =
   | "output"
   | "trace_id"
   | "system_prompt";
-type SortKey = "timestampMs" | "inTokens" | "outTokens" | "durationMs";
+type SortKey =
+  | "timestampMs"
+  | "inTokens"
+  | "outTokens"
+  | "durationMs"
+  | "temperature";
 type SortDir = "asc" | "desc";
 
 const VIEW_OPTIONS: { value: PromptView; label: string }[] = [
@@ -466,7 +471,9 @@ const StreamHeader = ({
       </HeaderCell>
     )}
     {visibleCols.has("temperature") && (
-      <HeaderCell width={64} align="right">Temp</HeaderCell>
+      <HeaderCell width={64} align="right" sortBy="temperature" activeSort={sort} onSort={onSort}>
+        Temp
+      </HeaderCell>
     )}
     {visibleCols.has("duration") && (
       <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
@@ -698,7 +705,9 @@ const MetadataHeader = ({
     {visibleCols.has("model") && <HeaderCell width={160}>Model</HeaderCell>}
     {visibleCols.has("type") && <HeaderCell width={110}>Type</HeaderCell>}
     {visibleCols.has("temperature") && (
-      <HeaderCell width={64} align="right">Temp</HeaderCell>
+      <HeaderCell width={64} align="right" sortBy="temperature" activeSort={sort} onSort={onSort}>
+        Temp
+      </HeaderCell>
     )}
     {visibleCols.has("duration") && (
       <HeaderCell width={90} align="right" sortBy="durationMs" activeSort={sort} onSort={onSort}>
