@@ -1,7 +1,13 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
-import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  SettingIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+} from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
 import type { TraceSpan } from "./useTraceSpans";
 
@@ -10,43 +16,40 @@ interface TraceNode {
   children: TraceNode[];
 }
 
-const buildTree = (spans: TraceSpan[]): TraceNode[] => {
-  const spanMap = new Map<string, TraceNode>();
-  const roots: TraceNode[] = [];
+export type SpanCategory = "agent" | "llm" | "tool" | "other";
 
-  for (const span of spans) {
-    const node: TraceNode = { span, children: [] };
-    spanMap.set(span.spanId, node);
-  }
-
-  for (const node of spanMap.values()) {
-    if (node.span.parentSpanId) {
-      const parent = spanMap.get(node.span.parentSpanId);
-      if (parent) {
-        parent.children.push(node);
-      } else {
-        roots.push(node);
-      }
-    } else {
-      roots.push(node);
-    }
-  }
-
-  // Sort children by timestamp
-  const sortChildren = (node: TraceNode) => {
-    node.children.sort((a, b) => a.span.timestampMs - b.span.timestampMs);
-    node.children.forEach(sortChildren);
-  };
-  roots.forEach(sortChildren);
-
-  return roots;
+/** Classify a span for the waterfall's color, label, and Indicators filter. */
+export const spanCategory = (s: TraceSpan): SpanCategory => {
+  if (s.provider) return "llm";
+  if (s.agentName || s.tlKind === "workflow") return "agent";
+  if (s.toolName || s.tlKind === "task" || s.name.endsWith(".task")) return "tool";
+  return "other";
 };
 
-const getSpanColor = (span: TraceSpan): string => {
-  if (span.provider) return "var(--blue)";
-  if (span.agentName) return "var(--purple)";
-  if (span.toolName) return "var(--green)";
-  return "var(--text-3)";
+const CAT_COLOR: Record<SpanCategory, string> = {
+  agent: "var(--purple)",
+  llm: "var(--blue)",
+  tool: "var(--green)",
+  other: "var(--text-3)",
+};
+const CAT_LABEL: Record<SpanCategory, string> = {
+  agent: "agent",
+  llm: "llm",
+  tool: "tool",
+  other: "",
+};
+
+export interface IndicatorState {
+  agent: boolean;
+  llm: boolean;
+  tool: boolean;
+  other: boolean;
+}
+const DEFAULT_INDICATORS: IndicatorState = {
+  agent: true,
+  llm: true,
+  tool: true,
+  other: false,
 };
 
 /** True when any searchable field on the span contains `term` (lower-cased). */
@@ -71,76 +74,192 @@ export const spanMatchesTerm = (span: TraceSpan, term: string): boolean => {
   return hay.includes(term);
 };
 
-const TraceTreeNode = ({
-  node,
-  selectedSpanId,
-  onSelectSpan,
-  highlight,
-}: {
+interface FlatRow {
   node: TraceNode;
-  selectedSpanId: string | null;
-  onSelectSpan: (spanId: string) => void;
+  depth: number;
+}
+
+/** DFS flatten, skipping children of collapsed nodes. Order = waterfall order. */
+const flattenTree = (
+  roots: TraceNode[],
+  collapsed: Set<string>,
+): FlatRow[] => {
+  const out: FlatRow[] = [];
+  const walk = (node: TraceNode, depth: number) => {
+    out.push({ node, depth });
+    if (!collapsed.has(node.span.spanId)) {
+      node.children.forEach((c) => walk(c, depth + 1));
+    }
+  };
+  roots.forEach((r) => walk(r, 0));
+  return out;
+};
+
+/** The trace's time window: earliest start → latest end across all spans. */
+const traceWindow = (
+  spans: TraceSpan[],
+): { t0: number; total: number } => {
+  if (spans.length === 0) return { t0: 0, total: 1 };
+  let t0 = Infinity;
+  let t1 = -Infinity;
+  for (const s of spans) {
+    if (s.timestampMs < t0) t0 = s.timestampMs;
+    const end = s.timestampMs + Math.max(0, s.durationMs);
+    if (end > t1) t1 = end;
+  }
+  return { t0, total: Math.max(1, t1 - t0) };
+};
+
+/**
+ * Build the span tree keeping only spans whose category is enabled. Children of
+ * a hidden span re-attach to the nearest visible ancestor, so hiding e.g. the
+ * GET/SET "other" spans doesn't orphan the agent/LLM spans beneath them.
+ */
+const buildFilteredTree = (
+  spans: TraceSpan[],
+  enabled: IndicatorState,
+): TraceNode[] => {
+  const byId = new Map(spans.map((s) => [s.spanId, s]));
+  const visible = new Map<string, TraceSpan>();
+  for (const s of spans) if (enabled[spanCategory(s)]) visible.set(s.spanId, s);
+
+  const nearestVisibleParent = (s: TraceSpan): string | null => {
+    let p = s.parentSpanId;
+    while (p) {
+      if (visible.has(p)) return p;
+      p = byId.get(p)?.parentSpanId ?? null;
+    }
+    return null;
+  };
+
+  const nodes = new Map<string, TraceNode>();
+  visible.forEach((s) => nodes.set(s.spanId, { span: s, children: [] }));
+  const roots: TraceNode[] = [];
+  visible.forEach((s) => {
+    const node = nodes.get(s.spanId)!;
+    const pv = nearestVisibleParent(s);
+    if (pv && nodes.has(pv)) nodes.get(pv)!.children.push(node);
+    else roots.push(node);
+  });
+
+  const sortChildren = (node: TraceNode) => {
+    node.children.sort((a, b) => a.span.timestampMs - b.span.timestampMs);
+    node.children.forEach(sortChildren);
+  };
+  roots.sort((a, b) => a.span.timestampMs - b.span.timestampMs);
+  roots.forEach(sortChildren);
+  return roots;
+};
+
+// Width of the left Name column within the waterfall (% of the tree column).
+const NAME_FLEX = "0 0 44%";
+
+/** One waterfall row: indented name on the left, a positioned timing bar on a
+ *  shared timeline axis on the right. */
+const WaterfallRow = ({
+  row,
+  hasChildren,
+  isCollapsed,
+  onToggle,
+  isSelected,
+  onSelect,
+  highlight,
+  t0,
+  total,
+  showTokens,
+}: {
+  row: FlatRow;
+  hasChildren: boolean;
+  isCollapsed: boolean;
+  onToggle: (spanId: string) => void;
+  isSelected: boolean;
+  onSelect: (spanId: string) => void;
   highlight?: string;
+  t0: number;
+  total: number;
+  showTokens: boolean;
 }) => {
-  const [expanded, setExpanded] = useState(true);
-  const isSelected = node.span.spanId === selectedSpanId;
-  const color = getSpanColor(node.span);
-  const isMatch = !!highlight && spanMatchesTerm(node.span, highlight);
+  const { node, depth } = row;
+  const span = node.span;
+  const cat = spanCategory(span);
+  const color = CAT_COLOR[cat];
+  const prefix = cat === "other" ? span.spanKind : CAT_LABEL[cat];
+  const isMatch = !!highlight && spanMatchesTerm(span, highlight);
   const dimmed = !!highlight && !isMatch;
 
+  const leftPct = Math.max(0, Math.min(100, ((span.timestampMs - t0) / total) * 100));
+  const widthPct = Math.max(
+    0.6,
+    Math.min(100 - leftPct, (Math.max(0, span.durationMs) / total) * 100),
+  );
+  const labelAfter = leftPct + widthPct < 80;
+
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => onSelectSpan(node.span.spanId)}
+    <div
+      role="row"
+      tabIndex={0}
+      onClick={() => onSelect(span.spanId)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(span.spanId);
+        }
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        minHeight: 26,
+        cursor: "pointer",
+        borderLeft: isSelected
+          ? "2px solid var(--blue)"
+          : isMatch
+            ? "2px solid var(--amber)"
+            : "2px solid transparent",
+        background: isSelected
+          ? "color-mix(in oklab, var(--blue) 12%, transparent)"
+          : isMatch
+            ? "color-mix(in oklab, var(--amber) 16%, transparent)"
+            : undefined,
+        opacity: dimmed ? 0.5 : 1,
+      }}
+    >
+      {/* Name column */}
+      <div
         style={{
-          all: "unset",
-          cursor: "pointer",
+          flex: NAME_FLEX,
           display: "flex",
           alignItems: "center",
           gap: 6,
-          padding: "6px 8px",
-          borderRadius: 4,
-          background: isSelected
-            ? "color-mix(in oklab, var(--blue) 12%, transparent)"
-            : isMatch
-              ? "color-mix(in oklab, var(--amber) 18%, transparent)"
-              : undefined,
-          borderLeft: isSelected
-            ? "2px solid var(--blue)"
-            : isMatch
-              ? "2px solid var(--amber)"
-              : "2px solid transparent",
-          opacity: dimmed ? 0.45 : 1,
-          width: "100%",
-          minHeight: 32,
+          minWidth: 0,
+          paddingLeft: 6 + depth * 14,
+          paddingRight: 8,
         }}
       >
-        {node.children.length > 0 && (
+        {hasChildren ? (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setExpanded(!expanded);
+              onToggle(span.spanId);
             }}
             style={{
               all: "unset",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              padding: 0,
               flex: "0 0 auto",
             }}
+            aria-label={isCollapsed ? "Expand" : "Collapse"}
           >
-            {expanded ? (
-              <ChevronDownIcon size={14} style={{ color: "var(--text-3)" }} />
-            ) : (
+            {isCollapsed ? (
               <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
+            ) : (
+              <ChevronDownIcon size={14} style={{ color: "var(--text-3)" }} />
             )}
           </button>
+        ) : (
+          <div style={{ width: 14, flex: "0 0 auto" }} />
         )}
-        {node.children.length === 0 && <div style={{ width: 14 }} />}
-
         <div
           style={{
             width: 6,
@@ -150,47 +269,104 @@ const TraceTreeNode = ({
             flex: "0 0 auto",
           }}
         />
-
-        <Flex
-          flexDirection="column"
-          gap={2}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            overflow: "hidden",
-          }}
-        >
+        {prefix && (
           <Text
             style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: "var(--text)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              fontSize: 10.5,
+              fontWeight: 600,
+              color,
+              flex: "0 0 auto",
             }}
           >
-            {node.span.name}
+            {prefix}
           </Text>
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            {node.span.service} · {fmtMs(node.span.durationMs)}
-          </Text>
-        </Flex>
-      </button>
+        )}
+        <Text
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            color: "var(--text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+          }}
+        >
+          {span.name}
+        </Text>
+      </div>
 
-      {expanded && node.children.length > 0 && (
-        <div style={{ marginLeft: 16, borderLeft: "1px solid var(--border)" }}>
-          {node.children.map((child) => (
-            <TraceTreeNode
-              key={child.span.spanId}
-              node={child}
-              selectedSpanId={selectedSpanId}
-              onSelectSpan={onSelectSpan}
-              highlight={highlight}
-            />
-          ))}
-        </div>
+      {/* Token columns (only when the trace carries token data) */}
+      {showTokens && (
+        <>
+          <div
+            style={{
+              flex: "0 0 50px",
+              textAlign: "right",
+              paddingRight: 8,
+              fontSize: 11,
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--text-2)",
+            }}
+          >
+            {span.inTokens > 0 ? fmtTokens(span.inTokens) : ""}
+          </div>
+          <div
+            style={{
+              flex: "0 0 50px",
+              textAlign: "right",
+              paddingRight: 8,
+              fontSize: 11,
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--text-2)",
+            }}
+          >
+            {span.outTokens > 0 ? fmtTokens(span.outTokens) : ""}
+          </div>
+        </>
       )}
+
+      {/* Timeline column */}
+      <div
+        style={{
+          flex: "1 1 0",
+          minWidth: 80,
+          position: "relative",
+          height: 16,
+          borderLeft: "1px solid var(--border)",
+        }}
+      >
+        <div
+          title={`${fmtMs(span.durationMs)} · +${fmtMs(span.timestampMs - t0)} from start`}
+          style={{
+            position: "absolute",
+            left: `${leftPct}%`,
+            width: `${widthPct}%`,
+            top: 2,
+            height: 12,
+            borderRadius: 3,
+            background: color,
+          }}
+        />
+        <span
+          style={{
+            position: "absolute",
+            top: 0,
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            fontSize: 10,
+            color: "var(--text-3)",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            ...(labelAfter
+              ? { left: `${leftPct + widthPct}%`, marginLeft: 4 }
+              : { right: `${100 - leftPct}%`, marginRight: 4 }),
+          }}
+        >
+          {fmtMs(span.durationMs)}
+        </span>
+      </div>
     </div>
   );
 };
@@ -198,6 +374,8 @@ const TraceTreeNode = ({
 interface SpanAttributesPanelProps {
   span: TraceSpan;
   maxHeight?: number;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
 type AttrType = "string" | "number" | "bool" | "time" | "duration" | "id";
@@ -402,7 +580,12 @@ const AttrSection = ({
   );
 };
 
-const SpanAttributesPanel = ({ span, maxHeight }: SpanAttributesPanelProps) => {
+const SpanAttributesPanel = ({
+  span,
+  maxHeight,
+  maximized,
+  onToggleMaximize,
+}: SpanAttributesPanelProps) => {
   const [q, setQ] = useState("");
   const term = q.trim().toLowerCase();
   const sections = useMemo(() => {
@@ -420,22 +603,41 @@ const SpanAttributesPanel = ({ span, maxHeight }: SpanAttributesPanelProps) => {
 
   return (
     <Flex flexDirection="column" gap={8}>
-      <Flex flexDirection="column" gap={2}>
-        <Text
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: "var(--text)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {span.name}
-        </Text>
-        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-          {span.service} · {fmtMs(span.durationMs)}
-        </Text>
+      <Flex alignItems="flex-start" justifyContent="space-between" gap={8}>
+        <Flex flexDirection="column" gap={2} style={{ minWidth: 0 }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--text)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {span.name}
+          </Text>
+          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+            {span.service} · {fmtMs(span.durationMs)}
+          </Text>
+        </Flex>
+        {onToggleMaximize && (
+          <button
+            type="button"
+            onClick={onToggleMaximize}
+            title={maximized ? "Restore" : "Maximize attributes"}
+            aria-label={maximized ? "Restore attributes" : "Maximize attributes"}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              color: "var(--text-3)",
+              flex: "0 0 auto",
+              padding: 2,
+            }}
+          >
+            {maximized ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
+          </button>
+        )}
       </Flex>
       <input
         value={q}
@@ -495,6 +697,115 @@ export interface TraceTreeProps {
   onSelectSpan?: (spanId: string | null) => void;
 }
 
+const eyebrow: React.CSSProperties = {
+  fontSize: 10.5,
+  fontWeight: 600,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
+  color: "var(--text-3)",
+};
+
+const IND_ITEMS: { key: keyof IndicatorState; label: string }[] = [
+  { key: "agent", label: "Agent calls" },
+  { key: "llm", label: "LLM calls" },
+  { key: "tool", label: "Tool calls" },
+  { key: "other", label: "All other service spans" },
+];
+
+/** Gear → "Indicators" popover toggling which span categories the waterfall shows. */
+const IndicatorsMenu = ({
+  value,
+  onChange,
+}: {
+  value: IndicatorState;
+  onChange: (next: IndicatorState) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div style={{ position: "relative" }} ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Choose which spans to display"
+        aria-label="Indicators"
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          padding: 2,
+          color: "var(--text-3)",
+        }}
+      >
+        <SettingIcon size={14} />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "100%",
+            marginTop: 4,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: 8,
+            zIndex: 1000,
+            minWidth: 200,
+            boxShadow: "var(--shadow-lg, 0 12px 32px rgba(0,0,0,0.10))",
+          }}
+        >
+          <Text style={{ ...eyebrow, display: "block", padding: "2px 6px 6px" }}>
+            Indicators
+          </Text>
+          {IND_ITEMS.map((it) => (
+            <label
+              key={it.key}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px",
+                cursor: "pointer",
+                fontSize: 12.5,
+                color: "var(--text)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={value[it.key]}
+                onChange={() => onChange({ ...value, [it.key]: !value[it.key] })}
+                style={{ cursor: "pointer" }}
+              />
+              <span
+                aria-hidden
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  background: CAT_COLOR[it.key],
+                  flex: "0 0 auto",
+                }}
+              />
+              {it.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const TraceTree = ({
   spans,
   isLoading,
@@ -506,6 +817,9 @@ export const TraceTree = ({
   const [uncontrolledSelected, setUncontrolledSelected] = useState<string | null>(
     null,
   );
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [indicators, setIndicators] = useState<IndicatorState>(DEFAULT_INDICATORS);
+  const [attrsMaximized, setAttrsMaximized] = useState(false);
   const selectedSpanId =
     controlledSelected !== undefined ? controlledSelected : uncontrolledSelected;
   const selectSpan = (id: string) => {
@@ -513,12 +827,33 @@ export const TraceTree = ({
     const next = id === selectedSpanId ? null : id;
     if (onSelectSpan) onSelectSpan(next);
     if (controlledSelected === undefined) setUncontrolledSelected(next);
+    if (next === null) setAttrsMaximized(false);
   };
-  const roots = useMemo(() => buildTree(spans), [spans]);
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  const { t0, total } = useMemo(() => traceWindow(spans), [spans]);
+  const roots = useMemo(
+    () => buildFilteredTree(spans, indicators),
+    [spans, indicators],
+  );
+  const rows = useMemo(() => flattenTree(roots, collapsed), [roots, collapsed]);
+  const showTokens = useMemo(
+    () => spans.some((s) => s.inTokens > 0 || s.outTokens > 0),
+    [spans],
+  );
   const selectedSpan = useMemo(
     () => spans.find((s) => s.spanId === selectedSpanId) ?? null,
     [spans, selectedSpanId],
   );
+  // Maximized only takes effect with a span selected (so the waterfall is never
+  // hidden with nothing to show).
+  const maxed = attrsMaximized && !!selectedSpan;
 
   if (isLoading) {
     return (
@@ -545,23 +880,98 @@ export const TraceTree = ({
         alignItems: "flex-start",
       }}
     >
-      <div style={{ flex: "1 1 300px", minWidth: 260 }}>
-        <div style={{ maxHeight, overflow: "auto" }}>
-          {roots.map((root) => (
-            <TraceTreeNode
-              key={root.span.spanId}
-              node={root}
-              selectedSpanId={selectedSpanId}
-              onSelectSpan={selectSpan}
-              highlight={highlight}
-            />
-          ))}
+      {!maxed && (
+      <div style={{ flex: "1 1 360px", minWidth: 300 }}>
+        {/* Header: Name + Indicators gear, then the shared time axis. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "4px 0 6px",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <div
+            style={{
+              flex: NAME_FLEX,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingRight: 8,
+            }}
+          >
+            <Text style={eyebrow}>Name</Text>
+            <IndicatorsMenu value={indicators} onChange={setIndicators} />
+          </div>
+          {showTokens && (
+            <>
+              <div style={{ flex: "0 0 50px", textAlign: "right", paddingRight: 8 }}>
+                <Text style={eyebrow}>In</Text>
+              </div>
+              <div style={{ flex: "0 0 50px", textAlign: "right", paddingRight: 8 }}>
+                <Text style={eyebrow}>Out</Text>
+              </div>
+            </>
+          )}
+          <div
+            style={{
+              flex: "1 1 0",
+              minWidth: 80,
+              display: "flex",
+              justifyContent: "space-between",
+              borderLeft: "1px solid var(--border)",
+              paddingLeft: 6,
+            }}
+          >
+            <Text style={{ fontSize: 10, color: "var(--text-3)" }}>0</Text>
+            <Text style={{ fontSize: 10, color: "var(--text-3)" }}>
+              {fmtMs(total)}
+            </Text>
+          </div>
+        </div>
+
+        <div style={{ maxHeight, overflowY: "auto" }}>
+          {rows.length === 0 ? (
+            <div style={{ padding: 12, textAlign: "center" }}>
+              <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                No spans match the selected indicators.
+              </Text>
+            </div>
+          ) : (
+            rows.map(({ node, depth }) => (
+              <WaterfallRow
+                key={node.span.spanId}
+                row={{ node, depth }}
+                hasChildren={node.children.length > 0}
+                isCollapsed={collapsed.has(node.span.spanId)}
+                onToggle={toggleCollapse}
+                isSelected={node.span.spanId === selectedSpanId}
+                onSelect={selectSpan}
+                highlight={highlight}
+                t0={t0}
+                total={total}
+                showTokens={showTokens}
+              />
+            ))
+          )}
         </div>
       </div>
+      )}
 
-      <div style={{ flex: "1 1 300px", minWidth: 280, maxWidth: 380 }}>
+      <div
+        style={
+          maxed
+            ? { flex: "1 1 100%", minWidth: 0 }
+            : { flex: "1 1 300px", minWidth: 280, maxWidth: 380 }
+        }
+      >
         {selectedSpan ? (
-          <SpanAttributesPanel span={selectedSpan} maxHeight={maxHeight} />
+          <SpanAttributesPanel
+            span={selectedSpan}
+            maxHeight={maxed ? Math.round(maxHeight * 1.8) : maxHeight}
+            maximized={attrsMaximized}
+            onToggleMaximize={() => setAttrsMaximized((m) => !m)}
+          />
         ) : (
           <div
             style={{

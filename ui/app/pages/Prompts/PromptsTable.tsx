@@ -33,6 +33,10 @@ const TimeCell = ({ ms }: { ms: number }) => {
   const hh = String(date.getHours()).padStart(2, "0");
   const mm = String(date.getMinutes()).padStart(2, "0");
   const ss = String(date.getSeconds()).padStart(2, "0");
+  const datePart = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
   return (
     <Text
       style={{
@@ -42,7 +46,7 @@ const TimeCell = ({ ms }: { ms: number }) => {
         fontVariantNumeric: "tabular-nums",
       }}
     >
-      {hh}:{mm}:{ss}
+      {datePart} {hh}:{mm}:{ss}
     </Text>
   );
 };
@@ -365,7 +369,7 @@ const StreamHeader = ({
   visibleCols: Set<VisibleColumn>;
 }) => (
   <Flex alignItems="center" style={{ padding: "0 10px" }}>
-    <HeaderCell width={80} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
+    <HeaderCell width={132} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
       Time
     </HeaderCell>
     <HeaderCell width={140}>AI app</HeaderCell>
@@ -447,7 +451,7 @@ const StreamRow = ({
             : undefined,
       }}
     >
-      <Cell width={80}>
+      <Cell width={132}>
         <TimeCell ms={prompt.timestampMs} />
       </Cell>
       <Cell width={140} mono color="var(--text-2)">
@@ -514,7 +518,7 @@ const MetadataHeader = ({
   visibleCols: Set<VisibleColumn>;
 }) => (
   <Flex alignItems="center" style={{ padding: "0 10px" }}>
-    <HeaderCell width={80} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
+    <HeaderCell width={132} sortBy="timestampMs" activeSort={sort} onSort={onSort}>
       Time
     </HeaderCell>
     <HeaderCell width={140}>AI app</HeaderCell>
@@ -584,7 +588,7 @@ const MetadataRow = ({
             : undefined,
       }}
     >
-      <Cell width={80}>
+      <Cell width={132}>
         <TimeCell ms={prompt.timestampMs} />
       </Cell>
       <Cell width={140} mono color="var(--text-2)">

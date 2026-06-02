@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import {
+  CloseSidebarIcon,
+  OpenSidebarIcon,
+  FilterIcon,
+} from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
@@ -41,6 +46,10 @@ export const PromptsPage = () => {
       window.removeEventListener("scroll", compute, true);
     };
   }, []);
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState<boolean>(
+    "ai-obs.prompts-sidebar-collapsed",
+    false,
+  );
   const [privacy, setPrivacy] = usePersistedState<PrivacyMode>(
     "ai-obs.prompts-privacy",
     "mask",
@@ -71,7 +80,9 @@ export const PromptsPage = () => {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "248px minmax(0, 1fr)",
+        gridTemplateColumns: sidebarCollapsed
+          ? "36px minmax(0, 1fr)"
+          : "248px minmax(0, 1fr)",
         gap: 16,
         padding: "18px 20px 80px",
         alignItems: "start",
@@ -81,7 +92,8 @@ export const PromptsPage = () => {
           scrolls internally when taller than the viewport. The sidebar content
           is fluid-width and we reserve gutter space (scrollbar-gutter +
           paddingRight) so the scrollbar never overlaps the right-aligned facet
-          counts (the bug that hid the totals before). */}
+          counts (the bug that hid the totals before). Collapsible to reclaim
+          horizontal space for the table. */}
       <div
         ref={sidebarRef}
         style={{
@@ -89,18 +101,65 @@ export const PromptsPage = () => {
           top: 16,
           alignSelf: "start",
           maxHeight: sidebarMaxH ? `${sidebarMaxH}px` : "calc(100vh - 160px)",
-          overflowY: "auto",
-          paddingRight: 8,
-          scrollbarGutter: "stable",
+          overflowY: sidebarCollapsed ? "visible" : "auto",
+          paddingRight: sidebarCollapsed ? 0 : 8,
+          scrollbarGutter: sidebarCollapsed ? "auto" : "stable",
         }}
       >
-        <PromptsSidebar
-          facets={facets}
-          filter={filter}
-          privacy={privacy}
-          onFilterChange={setFilter}
-          onPrivacyChange={setPrivacy}
-        />
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(false)}
+            title="Show filters"
+            aria-label="Show filters"
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 0",
+              width: 36,
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text-2)",
+            }}
+          >
+            <OpenSidebarIcon size={16} />
+            <FilterIcon size={16} />
+          </button>
+        ) : (
+          <>
+            <Flex justifyContent="flex-end" style={{ marginBottom: 6 }}>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(true)}
+                title="Hide filters"
+                aria-label="Hide filters"
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: 4,
+                  borderRadius: 6,
+                  color: "var(--text-3)",
+                }}
+              >
+                <CloseSidebarIcon size={16} />
+              </button>
+            </Flex>
+            <PromptsSidebar
+              facets={facets}
+              filter={filter}
+              privacy={privacy}
+              onFilterChange={setFilter}
+              onPrivacyChange={setPrivacy}
+            />
+          </>
+        )}
       </div>
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
