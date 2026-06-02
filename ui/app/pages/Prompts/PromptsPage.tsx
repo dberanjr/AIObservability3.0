@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { ErrorBanner } from "../../components/ErrorState";
@@ -14,6 +14,33 @@ import { usePromptSummary } from "./usePromptSummary";
 export const PromptsPage = () => {
   const [filter, setFilter] = useState<PromptsFilter>({});
   const [view, setView] = useState<PromptView>("stream");
+  // Sticky sidebar height must equal the space from its (pinned) top to the
+  // viewport bottom — a fixed calc() guesses the page-header height wrong and
+  // pushes the bottom (Privacy) off-screen, unreachable by the inner scroll.
+  // Measure it from the element's actual top instead, on mount/scroll/resize.
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const [sidebarMaxH, setSidebarMaxH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    let raf = 0;
+    const compute = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = sidebarRef.current;
+        if (!el) return;
+        const top = el.getBoundingClientRect().top;
+        setSidebarMaxH(Math.max(220, window.innerHeight - top - 24));
+      });
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    // capture:true so the inner Page.Main scroll container's events are caught.
+    window.addEventListener("scroll", compute, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("scroll", compute, true);
+    };
+  }, []);
   const [privacy, setPrivacy] = usePersistedState<PrivacyMode>(
     "ai-obs.prompts-privacy",
     "mask",
@@ -56,11 +83,12 @@ export const PromptsPage = () => {
           paddingRight) so the scrollbar never overlaps the right-aligned facet
           counts (the bug that hid the totals before). */}
       <div
+        ref={sidebarRef}
         style={{
           position: "sticky",
           top: 16,
           alignSelf: "start",
-          maxHeight: "calc(100vh - 130px)",
+          maxHeight: sidebarMaxH ? `${sidebarMaxH}px` : "calc(100vh - 160px)",
           overflowY: "auto",
           paddingRight: 8,
           scrollbarGutter: "stable",
