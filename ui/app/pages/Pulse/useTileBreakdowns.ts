@@ -15,21 +15,24 @@ import {
 export interface BreakdownSlice {
   key: string;
   label: string;
-  /** Primary metric used for donut sizing (requests for models/servers,
-   * call count for tools). */
+  /** Primary metric used for donut sizing. */
   value: number;
-  /** Total input + output tokens summed across the slice's spans.
-   * Always 0 for MCP slices (MCP servers are separate service traces
-   * without LLM calls). */
+  /** Total tokens (input + output). Always 0 for MCP slices. */
   tokens: number;
-  /** Blended USD estimate derived from the tokens via pricing.ts. */
+  /** Blended USD cost estimate. Always 0 for MCP slices. */
   cost: number;
-  /** Average span duration in ms. Populated for MCP slices; 0 for models. */
+  /** Average span duration ms. 0 for model slices. */
   avgDurationMs: number;
-  /** P95 span duration in ms. Populated for MCP slices; 0 for models. */
+  /** Median (p50) span duration ms. */
+  p50DurationMs: number;
+  /** P95 span duration ms. */
   p95DurationMs: number;
-  /** Error count across spans in this slice. */
-  errors: number;
+  /** P99 span duration ms. */
+  p99DurationMs: number;
+  /** OTel span-level errors (span.status_code="error"). */
+  spanErrors: number;
+  /** Functional tool errors (isError present in response output). */
+  toolErrors: number;
   /** Click-to-filter target for this slice's label. */
   filter?: { attribute: string; values: string[]; label?: string };
 }
@@ -51,16 +54,22 @@ interface ModelRec {
 interface ServerRec {
   server?: string;
   requests?: number;
-  avg_duration_ms?: number;
-  p95_duration_ms?: number;
-  errors?: number;
+  avg_ms?: number;
+  p50_ms?: number;
+  p95_ms?: number;
+  p99_ms?: number;
+  span_errors?: number;
+  tool_errors?: number;
 }
 interface ToolRec {
   tool?: string;
   calls?: number;
-  avg_duration_ms?: number;
-  p95_duration_ms?: number;
-  errors?: number;
+  avg_ms?: number;
+  p50_ms?: number;
+  p95_ms?: number;
+  p99_ms?: number;
+  span_errors?: number;
+  tool_errors?: number;
 }
 
 const num = (v: unknown): number => {
@@ -68,20 +77,8 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/**
- * Blended pricing used for model slices. Matches the headline Spend tile.
- */
 const BLENDED_PRICING = getPricing("claude-sonnet-4-6");
 
-/**
- * Donut data for the Models / MCP Servers / MCP Tools summary tiles.
- *
- * Models slices carry tokens + cost (from gen_ai.usage.* on LLM spans).
- * MCP slices carry avgDurationMs + p95DurationMs instead — MCP server
- * processes are standalone services that don't emit token data (verified via
- * dtctl: 0 LLM calls in 820 MCP spans; span.parent_id=null confirms they are
- * separate traces from the agent).
- */
 export const useTileBreakdowns = (): UseTileBreakdownsResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
@@ -147,8 +144,11 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           tokens: agg.inputTokens + agg.outputTokens,
           cost: estimateCost(agg.inputTokens, agg.outputTokens, pricing),
           avgDurationMs: 0,
+          p50DurationMs: 0,
           p95DurationMs: 0,
-          errors: 0,
+          p99DurationMs: 0,
+          spanErrors: 0,
+          toolErrors: 0,
           filter: {
             attribute: "gen_ai.request.model",
             values: Array.from(agg.rawModels),
@@ -169,9 +169,12 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
         value: num(r.requests) * samplingRatio,
         tokens: 0,
         cost: 0,
-        avgDurationMs: num(r.avg_duration_ms),
-        p95DurationMs: num(r.p95_duration_ms),
-        errors: num(r.errors) * samplingRatio,
+        avgDurationMs: num(r.avg_ms),
+        p50DurationMs: num(r.p50_ms),
+        p95DurationMs: num(r.p95_ms),
+        p99DurationMs: num(r.p99_ms),
+        spanErrors: num(r.span_errors) * samplingRatio,
+        toolErrors: num(r.tool_errors) * samplingRatio,
         filter: {
           attribute: "traceloop.workflow.name",
           values: [r.server],
@@ -190,9 +193,12 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
         value: num(r.calls) * samplingRatio,
         tokens: 0,
         cost: 0,
-        avgDurationMs: num(r.avg_duration_ms),
-        p95DurationMs: num(r.p95_duration_ms),
-        errors: num(r.errors) * samplingRatio,
+        avgDurationMs: num(r.avg_ms),
+        p50DurationMs: num(r.p50_ms),
+        p95DurationMs: num(r.p95_ms),
+        p99DurationMs: num(r.p99_ms),
+        spanErrors: num(r.span_errors) * samplingRatio,
+        toolErrors: num(r.tool_errors) * samplingRatio,
         filter: {
           attribute: "traceloop.entity.name",
           values: [r.tool],

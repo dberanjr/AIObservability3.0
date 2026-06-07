@@ -209,10 +209,12 @@ ${scopeFilterClause(serviceIds)}
 
 /**
  * Per-MCP-server request counts for the MCP Servers tile donut. MCP
- * workflow spans. MCP server processes are standalone services (span.parent_id
- * is null, separate traces from the agent) and never emit gen_ai.usage.*
- * token data. The popup for this tile shows Avg Duration and P95 Duration
- * instead of Tokens/Cost, which is the meaningful metric for tool execution.
+ * workflow spans. MCP server processes are standalone service traces
+ * (span.parent_id=null, 0 LLM calls; verified via dtctl). Health signals are
+ * duration (p50/p95/p99) and two error categories detectable from span data:
+ * span_errors (span.status_code="error" → transport/OTel-level) and
+ * tool_errors (isError present in mcp.response.value → functional failures).
+ * Filters to traceloop.span.kind="server" for accurate invocation counts.
  */
 export const buildMcpServersBreakdownQuery = (
   serviceIds: string[] | null,
@@ -221,23 +223,29 @@ export const buildMcpServersBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
+| filter traceloop.span.kind == "server"
 | fieldsAdd
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+    is_span_error = if(span.status_code == "error", 1, else: 0),
+    is_tool_error = if(contains(toString(mcp.response.value), "isError"), 1, else: 0)
 | summarize
     requests = count(),
-    avg_duration_ms = avg(duration) / 1000000,
-    p95_duration_ms = percentile(duration, 95) / 1000000,
-    errors = sum(is_error),
+    avg_ms = avg(duration) / 1000000,
+    p50_ms = percentile(duration, 50) / 1000000,
+    p95_ms = percentile(duration, 95) / 1000000,
+    p99_ms = percentile(duration, 99) / 1000000,
+    span_errors = sum(is_span_error),
+    tool_errors = sum(is_tool_error),
     by: { server = traceloop.workflow.name }
 | sort requests desc
 | limit 12
 `.trim();
 
 /**
- * Per-MCP-tool call counts and duration stats for the MCP Tools tile donut.
- * Tool names come from traceloop.entity.name (the task/tool context name set
- * by the traceloop SDK). The "mcp.server" entity (the root workflow span) is
- * excluded so only actual tool invocations appear. Verified via dtctl.
+ * Per-MCP-tool health stats for the MCP Tools tile donut popup. Filters to
+ * traceloop.span.kind="tool" for accurate per-invocation counts. Tool name
+ * comes from traceloop.entity.name (always set on tool spans). Two error
+ * categories: span_errors (span.status_code) + tool_errors (isError in
+ * traceloop.entity.output). Verified via dtctl against ualpre.
  */
 export const buildMcpToolsBreakdownQuery = (
   serviceIds: string[] | null,
@@ -246,16 +254,19 @@ export const buildMcpToolsBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
+| filter traceloop.span.kind == "tool"
 | fieldsAdd
-    tool = coalesce(gen_ai.tool.name, traceloop.entity.name),
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
-| filter isNotNull(tool) and tool != "mcp.server"
+    is_span_error = if(span.status_code == "error", 1, else: 0),
+    is_tool_error = if(contains(toString(traceloop.entity.output), "isError"), 1, else: 0)
 | summarize
     calls = count(),
-    avg_duration_ms = avg(duration) / 1000000,
-    p95_duration_ms = percentile(duration, 95) / 1000000,
-    errors = sum(is_error),
-    by: { tool }
+    avg_ms = avg(duration) / 1000000,
+    p50_ms = percentile(duration, 50) / 1000000,
+    p95_ms = percentile(duration, 95) / 1000000,
+    p99_ms = percentile(duration, 99) / 1000000,
+    span_errors = sum(is_span_error),
+    tool_errors = sum(is_tool_error),
+    by: { tool = traceloop.entity.name }
 | sort calls desc
 | limit 12
 `.trim();
