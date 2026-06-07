@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DEFAULT_SCOPE, type Scope, type Timeframe } from "./types";
+import { usePersistedState } from "../state/usePersistedState";
 
 export interface ScopeContextValue {
   scope: Scope;
@@ -32,13 +33,23 @@ const readUrlTimeframe = (
   return { from: fromParam, to: toParam ?? undefined };
 };
 
+const TIMEFRAME_PERSIST_KEY = "ai-obs.timeframe.v1";
+
 export const ScopeProvider = ({ children }: { children: React.ReactNode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const fromParam = searchParams.get(FROM_PARAM);
   const toParam = searchParams.get(TO_PARAM);
 
+  // Persist the timeframe so it survives page navigations and refreshes.
+  // Mirrors how GlobalFilterContext stores filters (usePersistedState → DT user app state).
+  const [persistedTf, setPersistedTf] = usePersistedState<Timeframe | null>(
+    TIMEFRAME_PERSIST_KEY,
+    null,
+  );
+
   // Seed initial state from URL so a pasted link / refresh restores the
-  // user's timeframe. useState's initializer runs once.
+  // user's timeframe. useState's initializer runs once (persisted state
+  // loads async and is picked up in the effect below).
   const [scope, setScope] = useState<Scope>(() => {
     const fromUrl = readUrlTimeframe(
       new URLSearchParams(window.location.search).get(FROM_PARAM),
@@ -72,34 +83,41 @@ export const ScopeProvider = ({ children }: { children: React.ReactNode }) => {
     (timeframe: Timeframe) => {
       setScope((prev) => ({ ...prev, timeframe }));
       writeUrl(timeframe);
+      setPersistedTf(timeframe);
     },
-    [writeUrl],
+    [writeUrl, setPersistedTf],
   );
 
   const reset = useCallback(() => {
     setScope(DEFAULT_SCOPE);
     writeUrl(null);
-  }, [writeUrl]);
+    setPersistedTf(null);
+  }, [writeUrl, setPersistedTf]);
 
-  // Reflect external URL changes (back/forward button, paste link into a
-  // tab that already has the app mounted) back into scope state. Depends on
-  // the string params, not the URLSearchParams object, which is unstable
-  // across renders.
+  // Sync timeframe from URL or, when URL has no params, from persisted state.
   //
-  // IMPORTANT: when the URL has no timeframe params we KEEP the current scope
-  // instead of snapping back to the default. Tab navigation can momentarily
-  // drop the query string; resetting here is what made the timeframe revert to
-  // "last hour" when switching tabs. The explicit reset() handler still
-  // restores defaults on demand.
+  // Priority: URL params (shareable links / browser nav) > persisted state >
+  // keep current scope.  Writing the persisted timeframe back to the URL
+  // ensures subsequent nav links in the Header carry it forward.
   useEffect(() => {
     const urlTf = readUrlTimeframe(fromParam, toParam);
-    if (!urlTf) return;
-    setScope((prev) =>
-      prev.timeframe.from === urlTf.from && prev.timeframe.to === urlTf.to
-        ? prev
-        : { ...prev, timeframe: urlTf },
-    );
-  }, [fromParam, toParam]);
+    if (urlTf) {
+      setScope((prev) =>
+        prev.timeframe.from === urlTf.from && prev.timeframe.to === urlTf.to
+          ? prev
+          : { ...prev, timeframe: urlTf },
+      );
+    } else if (persistedTf) {
+      setScope((prev) =>
+        prev.timeframe.from === persistedTf.from &&
+        prev.timeframe.to === persistedTf.to
+          ? prev
+          : { ...prev, timeframe: persistedTf },
+      );
+      writeUrl(persistedTf);
+    }
+    // else: no URL params and no persisted value → keep current in-memory scope
+  }, [fromParam, toParam, persistedTf, writeUrl]);
 
   const value = useMemo<ScopeContextValue>(
     () => ({ scope, setTimeframe, reset }),
