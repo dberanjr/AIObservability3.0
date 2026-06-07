@@ -29,14 +29,7 @@ import { useScope } from "../../scope/ScopeContext";
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
 
-type DonutColumnMode = "tokens" | "mcp-tabs";
-type McpTab = "volume" | "latency" | "errors";
-
-const MCP_TAB_LIST: Array<{ id: McpTab; label: string }> = [
-  { id: "volume", label: "Volume" },
-  { id: "latency", label: "Latency" },
-  { id: "errors", label: "Errors" },
-];
+type DonutColumnMode = "tokens" | "mcp";
 
 const SLICE_COLORS = [
   "var(--blue)",
@@ -51,12 +44,18 @@ const SLICE_COLORS = [
   "var(--green-lime)",
 ];
 
+type McpSortKey =
+  | "value" | "p50" | "p95" | "p99"
+  | "spanErrors" | "toolErrors" | "errorRate" | "share";
+
 /**
- * Tabbed breakdown table for MCP Server / MCP Tool popups. Tabs: Volume |
- * Latency | Errors. Manages its own tab state so the donut + footer stats
- * outside remain static while the table columns switch per-tab.
+ * Combined health table for MCP Server / MCP Tool popups. Shows volume,
+ * latency, and error signals in one view. Every column header is a sort
+ * button — click to sort descending, click again to flip to ascending.
+ * Row colors stay pinned to the donut's value-sorted palette regardless
+ * of the active sort column.
  */
-const McpHealthTable = ({
+const McpCombinedTable = ({
   slices,
   fmt,
   rowLabel,
@@ -65,113 +64,180 @@ const McpHealthTable = ({
   fmt: (n: number) => string;
   rowLabel: string;
 }) => {
-  const [tab, setTab] = useState<McpTab>("volume");
-  const sorted = [...slices].sort((a, b) => b.value - a.value);
-  const total = sorted.reduce((a, b) => a + b.value, 0);
+  const [sortKey, setSortKey] = useState<McpSortKey>("value");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const thR: React.CSSProperties = { padding: "6px 8px", fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" };
-  const tdR: React.CSSProperties = { padding: "8px", textAlign: "right" };
+  const total = slices.reduce((a, b) => a + b.value, 0);
 
-  return (
-    <div style={{ width: "100%" }}>
-      {/* Tab bar */}
-      <div
+  // Colors are assigned by value-rank so they always match the donut.
+  const colorByKey = new Map(
+    [...slices]
+      .sort((a, b) => b.value - a.value)
+      .map((s, i) => [s.key, SLICE_COLORS[i % SLICE_COLORS.length]]),
+  );
+
+  const handleSort = (key: McpSortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sorted = [...slices].sort((a, b) => {
+    const aErr = a.spanErrors + a.toolErrors;
+    const bErr = b.spanErrors + b.toolErrors;
+    let av: number, bv: number;
+    switch (sortKey) {
+      case "value":     av = a.value;       bv = b.value;       break;
+      case "p50":       av = a.p50DurationMs; bv = b.p50DurationMs; break;
+      case "p95":       av = a.p95DurationMs; bv = b.p95DurationMs; break;
+      case "p99":       av = a.p99DurationMs; bv = b.p99DurationMs; break;
+      case "spanErrors": av = a.spanErrors;  bv = b.spanErrors;  break;
+      case "toolErrors": av = a.toolErrors;  bv = b.toolErrors;  break;
+      case "errorRate":
+        av = a.value > 0 ? aErr / a.value : 0;
+        bv = b.value > 0 ? bErr / b.value : 0;
+        break;
+      case "share":
+        av = total > 0 ? a.value / total : 0;
+        bv = total > 0 ? b.value / total : 0;
+        break;
+      default: av = a.value; bv = b.value;
+    }
+    return sortDir === "desc" ? bv - av : av - bv;
+  });
+
+  const SortTh = ({
+    col,
+    children,
+    first = false,
+  }: {
+    col: McpSortKey;
+    children: React.ReactNode;
+    first?: boolean;
+  }) => {
+    const active = sortKey === col;
+    return (
+      <th
         style={{
-          display: "inline-flex",
-          gap: 2,
-          marginBottom: 12,
-          background: "var(--surface-2)",
-          borderRadius: 8,
-          padding: 3,
+          padding: "6px 8px",
+          textAlign: first ? "left" : "right",
+          whiteSpace: "nowrap",
+          fontWeight: active ? 700 : 600,
+          color: active ? "var(--text)" : "var(--text-3)",
+          userSelect: "none",
         }}
       >
-        {MCP_TAB_LIST.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            style={{
-              all: "unset",
-              cursor: "pointer",
-              padding: "4px 14px",
-              borderRadius: 6,
-              fontSize: 12.5,
-              fontWeight: tab === t.id ? 600 : 500,
-              color: tab === t.id ? "var(--text)" : "var(--text-2)",
-              background: tab === t.id ? "var(--surface)" : "transparent",
-              boxShadow: tab === t.id ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-              transition: "background 0.12s, color 0.12s",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <button
+          type="button"
+          onClick={() => handleSort(col)}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+          }}
+        >
+          {children}
+          <span style={{ fontSize: 10, opacity: active ? 1 : 0.3 }}>
+            {active ? (sortDir === "desc" ? "↓" : "↑") : "↕"}
+          </span>
+        </button>
+      </th>
+    );
+  };
 
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
-        <thead>
-          <tr style={{ color: "var(--text-3)", textAlign: "left" }}>
-            <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>
-            <th style={{ padding: "6px 8px", fontWeight: 600 }}>{rowLabel}</th>
-            {tab === "volume" && <th style={thR}>Value</th>}
-            {tab === "latency" && <>
-              <th style={thR}>Avg</th>
-              <th style={thR}>P50</th>
-              <th style={thR}>P95</th>
-              <th style={thR}>P99</th>
-            </>}
-            {tab === "errors" && <>
-              <th style={thR}>Span Err</th>
-              <th style={thR}>Tool Err</th>
-              <th style={thR}>Total</th>
-              <th style={thR}>Rate</th>
-            </>}
-            <th style={thR}>Share</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s, idx) => {
-            const pct = total > 0 ? (s.value / total) * 100 : 0;
-            const color = SLICE_COLORS[idx % SLICE_COLORS.length];
-            const totalErrors = s.spanErrors + s.toolErrors;
-            const errorRate = s.value > 0 ? (totalErrors / s.value) * 100 : 0;
-            const errColor = (n: number) =>
-              n > 0 ? "var(--red)" : "var(--text-3)";
-            const toolErrColor = (n: number) =>
-              n > 0 ? "var(--amber)" : "var(--text-3)";
-            return (
-              <tr key={s.key} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={{ padding: "8px" }}>
-                  <span aria-hidden style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: color }} />
-                </td>
-                <td style={{ padding: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260 }} title={s.label}>
-                  {s.filter ? (
-                    <FilterTrigger attribute={s.filter.attribute} value={s.filter.values} label={s.filter.label ?? s.label}>
-                      {s.label}
-                    </FilterTrigger>
-                  ) : s.label}
-                </td>
-                {tab === "volume" && <td style={tdR}>{fmt(s.value)}</td>}
-                {tab === "latency" && <>
-                  <td style={tdR}>{fmtMs(s.avgDurationMs)}</td>
-                  <td style={tdR}>{fmtMs(s.p50DurationMs)}</td>
-                  <td style={tdR}>{fmtMs(s.p95DurationMs)}</td>
-                  <td style={tdR}>{fmtMs(s.p99DurationMs)}</td>
-                </>}
-                {tab === "errors" && <>
-                  <td style={{ ...tdR, color: errColor(s.spanErrors) }}>{fmtCount(s.spanErrors)}</td>
-                  <td style={{ ...tdR, color: toolErrColor(s.toolErrors) }}>{fmtCount(s.toolErrors)}</td>
-                  <td style={{ ...tdR, color: errColor(totalErrors) }}>{fmtCount(totalErrors)}</td>
-                  <td style={{ ...tdR, color: errColor(totalErrors) }}>{errorRate.toFixed(1)}%</td>
-                </>}
-                <td style={{ ...tdR, color: "var(--text-3)" }}>{pct.toFixed(1)}%</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+  const tdR: React.CSSProperties = { padding: "7px 8px", textAlign: "right" };
+
+  return (
+    <table
+      style={{
+        width: "100%",
+        borderCollapse: "collapse",
+        fontSize: 12,
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      <thead>
+        <tr>
+          <th style={{ padding: "6px 8px", width: 26 }} />
+          <th style={{ padding: "6px 8px", fontWeight: 600, color: "var(--text-3)", textAlign: "left" }}>
+            {rowLabel}
+          </th>
+          <SortTh col="value" first>{sortKey === "value" ? rowLabel === "Servers" ? "Req" : "Calls" : rowLabel === "Servers" ? "Req" : "Calls"}</SortTh>
+          <SortTh col="p50">P50</SortTh>
+          <SortTh col="p95">P95</SortTh>
+          <SortTh col="p99">P99</SortTh>
+          <SortTh col="spanErrors">Span Err</SortTh>
+          <SortTh col="toolErrors">Tool Err</SortTh>
+          <SortTh col="errorRate">Err Rate</SortTh>
+          <SortTh col="share">Share</SortTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((s) => {
+          const pct = total > 0 ? (s.value / total) * 100 : 0;
+          const totalErrors = s.spanErrors + s.toolErrors;
+          const errorRate = s.value > 0 ? (totalErrors / s.value) * 100 : 0;
+          const color = colorByKey.get(s.key) ?? "var(--blue)";
+          return (
+            <tr key={s.key} style={{ borderTop: "1px solid var(--border)" }}>
+              <td style={{ padding: "7px 8px" }}>
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-block",
+                    width: 10,
+                    height: 10,
+                    borderRadius: 2,
+                    background: color,
+                  }}
+                />
+              </td>
+              <td
+                style={{
+                  padding: "7px 8px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  maxWidth: 200,
+                }}
+                title={s.label}
+              >
+                {s.filter ? (
+                  <FilterTrigger
+                    attribute={s.filter.attribute}
+                    value={s.filter.values}
+                    label={s.filter.label ?? s.label}
+                  >
+                    {s.label}
+                  </FilterTrigger>
+                ) : (
+                  s.label
+                )}
+              </td>
+              <td style={tdR}>{fmt(s.value)}</td>
+              <td style={tdR}>{fmtMs(s.p50DurationMs)}</td>
+              <td style={tdR}>{fmtMs(s.p95DurationMs)}</td>
+              <td style={tdR}>{fmtMs(s.p99DurationMs)}</td>
+              <td style={{ ...tdR, color: s.spanErrors > 0 ? "var(--red)" : "var(--text-3)" }}>
+                {fmtCount(s.spanErrors)}
+              </td>
+              <td style={{ ...tdR, color: s.toolErrors > 0 ? "var(--amber)" : "var(--text-3)" }}>
+                {fmtCount(s.toolErrors)}
+              </td>
+              <td style={{ ...tdR, color: totalErrors > 0 ? "var(--red)" : "var(--text-3)" }}>
+                {errorRate.toFixed(1)}%
+              </td>
+              <td style={{ ...tdR, color: "var(--text-3)" }}>{pct.toFixed(1)}%</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 };
 
@@ -592,7 +658,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       title,
       subtitle: `${info} · ${timeframeLabel}`,
       body: (
-        <Flex gap={32} alignItems={columnMode === "mcp-tabs" ? "flex-start" : "center"} style={{ minHeight: 360 }}>
+        <Flex gap={32} alignItems={columnMode === "mcp" ? "flex-start" : "center"} style={{ minHeight: 360 }}>
           <MiniDonut
             size={320}
             thickness={42}
@@ -612,8 +678,8 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
               overflowY: "auto",
             }}
           >
-            {columnMode === "mcp-tabs" ? (
-              <McpHealthTable slices={slices} fmt={fmt} rowLabel={pluralCenterLabel} />
+            {columnMode === "mcp" ? (
+              <McpCombinedTable slices={slices} fmt={fmt} rowLabel={pluralCenterLabel} />
             ) : (
               <table
                 style={{
@@ -665,7 +731,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         </Flex>
       ),
       stats:
-        columnMode === "mcp-tabs"
+        columnMode === "mcp"
           ? [
               { label: "Distinct", value: centerCount != null ? String(Math.round(centerCount)) : "—" },
               { label: "Total events", value: fmt(total) },
@@ -815,7 +881,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Server",
             breakdowns.mcpServers,
             (n) => `${fmtCount(n)} req`,
-            "mcp-tabs",
+            "mcp",
           )
         }
       />
@@ -845,7 +911,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Tool",
             breakdowns.mcpTools,
             (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
-            "mcp-tabs",
+            "mcp",
           )
         }
       />
