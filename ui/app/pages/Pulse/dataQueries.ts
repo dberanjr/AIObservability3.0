@@ -237,7 +237,7 @@ ${scopeFilterClause(serviceIds)}
     tool_errors = sum(is_tool_error),
     by: { server = traceloop.workflow.name }
 | sort requests desc
-| limit 12
+| limit 100
 `.trim();
 
 /**
@@ -268,7 +268,7 @@ ${scopeFilterClause(serviceIds)}
     tool_errors = sum(is_tool_error),
     by: { tool = traceloop.entity.name }
 | sort calls desc
-| limit 12
+| limit 100
 `.trim();
 
 /**
