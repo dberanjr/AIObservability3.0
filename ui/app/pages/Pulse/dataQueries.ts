@@ -208,13 +208,11 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Per-MCP-server LLM-call counts and token sums for the MCP Servers tile
- * donut. Filters to GenAI provider spans first (the only spans that carry
- * gen_ai.usage.* token counts), then narrows to those within an MCP
- * workflow via traceloop.workflow.name. This mirrors the approach in
- * buildSummaryQuery where mcp_server is derived from LLM spans — if we
- * filter on the workflow root spans instead, they don't carry token data
- * and every row shows 0 tokens / $0.00 cost.
+ * Per-MCP-server request counts for the MCP Servers tile donut. MCP
+ * workflow spans carry traceloop.workflow.name but NOT gen_ai.usage.* token
+ * data (token data lives on sibling LLM spans in the same trace). Request
+ * counts come from this query; token sums come from buildMcpServersTokensQuery
+ * which does a trace-level join.
  */
 export const buildMcpServersBreakdownQuery = (
   serviceIds: string[] | null,
@@ -222,9 +220,7 @@ export const buildMcpServersBreakdownQuery = (
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
-| filter isNotNull(gen_ai.provider.name)
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
-| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
@@ -238,12 +234,41 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Per-MCP-tool LLM-call counts and token sums for the MCP Tools tile
- * donut. Same reasoning as buildMcpServersBreakdownQuery: token data lives
- * on GenAI provider spans, not on tool-wrapper spans. We filter to LLM
- * spans within MCP workflows that have a tool attribution via
- * gen_ai.tool.name (the tool call the LLM was making) or
- * traceloop.entity.name (the task/tool context propagated by the SDK).
+ * Trace-level LLM token sums per MCP server. Joins LLM spans (which carry
+ * gen_ai.usage.* token data) with MCP workflow spans (which identify the
+ * server name) on trace.id. This associates the LLM work that happened in a
+ * trace with the MCP server that was also called in that trace.
+ *
+ * Results are merged client-side with buildMcpServersBreakdownQuery: request
+ * counts from the workflow-span query, token+cost from this join query.
+ */
+export const buildMcpServersTokensQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
+| fieldsAdd
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
+| join [
+    fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 100
+    | filter matchesValue(traceloop.workflow.name, "*.mcp")
+    | dedup {trace.id}
+    | fields trace.id, server = traceloop.workflow.name
+  ], on: {trace.id}
+| filter isNotNull(server)
+| summarize
+    input_tokens = sum(in_tok),
+    output_tokens = sum(out_tok),
+    by: { server }
+`.trim();
+
+/**
+ * Per-MCP-tool call counts for the MCP Tools tile donut. Token sums come
+ * from buildMcpToolsTokensQuery (trace-level join). Merged client-side.
  */
 export const buildMcpToolsBreakdownQuery = (
   serviceIds: string[] | null,
@@ -252,8 +277,6 @@ export const buildMcpToolsBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
-| filter isNotNull(gen_ai.provider.name)
-| dedup {span.id}
 | fieldsAdd
     tool = coalesce(gen_ai.tool.name, traceloop.entity.name),
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
@@ -266,6 +289,40 @@ ${scopeFilterClause(serviceIds)}
     by: { tool }
 | sort calls desc
 | limit 12
+`.trim();
+
+/**
+ * Trace-level LLM token sums per MCP tool. Same join strategy as
+ * buildMcpServersTokensQuery but the inner lookup returns tool names
+ * (gen_ai.tool.name / traceloop.entity.name) so tokens can be attributed
+ * per-tool. Where a trace has multiple tools, tokens are shared across all
+ * of them (each tool in the trace gets the full LLM token sum for that trace)
+ * — this is an approximation, but far better than showing 0 for every row.
+ */
+export const buildMcpToolsTokensQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
+| fieldsAdd
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
+| join [
+    fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 100
+    | filter matchesValue(traceloop.workflow.name, "*.mcp")
+    | fieldsAdd tool = coalesce(gen_ai.tool.name, traceloop.entity.name)
+    | filter isNotNull(tool)
+    | dedup {trace.id}
+    | fields trace.id, tool
+  ], on: {trace.id}
+| filter isNotNull(tool)
+| summarize
+    input_tokens = sum(in_tok),
+    output_tokens = sum(out_tok),
+    by: { tool }
 `.trim();
 
 /**
