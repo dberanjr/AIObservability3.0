@@ -208,10 +208,13 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Per-MCP-server request counts for the MCP Servers tile donut. MCP
- * workflows are identified via traceloop.workflow.name matching `*.mcp`
- * — that's what the v2 app proved works on this tenant; canonical
- * `mcp.server.name` isn't emitted by the SDKs in use.
+ * Per-MCP-server LLM-call counts and token sums for the MCP Servers tile
+ * donut. Filters to GenAI provider spans first (the only spans that carry
+ * gen_ai.usage.* token counts), then narrows to those within an MCP
+ * workflow via traceloop.workflow.name. This mirrors the approach in
+ * buildSummaryQuery where mcp_server is derived from LLM spans — if we
+ * filter on the workflow root spans instead, they don't carry token data
+ * and every row shows 0 tokens / $0.00 cost.
  */
 export const buildMcpServersBreakdownQuery = (
   serviceIds: string[] | null,
@@ -219,7 +222,9 @@ export const buildMcpServersBreakdownQuery = (
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.provider.name)
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
+| dedup {span.id}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
@@ -233,9 +238,12 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Per-MCP-tool call counts for the MCP Tools tile donut. Uses the same
- * `*.mcp` workflow guard plus a coalesce to `traceloop.entity.name` for
- * tools that don't carry an explicit `gen_ai.tool.name`.
+ * Per-MCP-tool LLM-call counts and token sums for the MCP Tools tile
+ * donut. Same reasoning as buildMcpServersBreakdownQuery: token data lives
+ * on GenAI provider spans, not on tool-wrapper spans. We filter to LLM
+ * spans within MCP workflows that have a tool attribution via
+ * gen_ai.tool.name (the tool call the LLM was making) or
+ * traceloop.entity.name (the task/tool context propagated by the SDK).
  */
 export const buildMcpToolsBreakdownQuery = (
   serviceIds: string[] | null,
@@ -244,6 +252,8 @@ export const buildMcpToolsBreakdownQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
+| filter isNotNull(gen_ai.provider.name)
+| dedup {span.id}
 | fieldsAdd
     tool = coalesce(gen_ai.tool.name, traceloop.entity.name),
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
