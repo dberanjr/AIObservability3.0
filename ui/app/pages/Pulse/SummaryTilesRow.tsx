@@ -24,6 +24,8 @@ import {
   fmtUSD,
   fmtUSDCompact,
 } from "../../data/format";
+
+type DonutColumnMode = "tokens" | "duration";
 import { useScope } from "../../scope/ScopeContext";
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
@@ -421,10 +423,16 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     centerLabel: string,
     slices: BreakdownSlice[],
     fmt: (n: number) => string,
+    columnMode: DonutColumnMode = "tokens",
   ) => {
     const total = slices.reduce((a, b) => a + b.value, 0);
     const totalTokens = slices.reduce((a, b) => a + b.tokens, 0);
     const totalCost = slices.reduce((a, b) => a + b.cost, 0);
+    const avgDurationMs =
+      slices.length > 0
+        ? slices.reduce((a, b) => a + b.avgDurationMs, 0) / slices.length
+        : 0;
+    const maxP95Ms = slices.length > 0 ? Math.max(...slices.map((s) => s.p95DurationMs)) : 0;
     const sorted = [...slices].sort((a, b) => b.value - a.value);
     // Pluralize the center label when the count is anything other than 1
     // (Model/Models, Server/Servers, Tool/Tools). The column header in
@@ -486,7 +494,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                       textAlign: "right",
                     }}
                   >
-                    Tokens
+                    {columnMode === "duration" ? "Avg Dur" : "Tokens"}
                   </th>
                   <th
                     style={{
@@ -495,7 +503,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                       textAlign: "right",
                     }}
                   >
-                    Cost
+                    {columnMode === "duration" ? "P95 Dur" : "Cost"}
                   </th>
                   <th
                     style={{
@@ -566,10 +574,14 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
                         {fmt(s.value)}
                       </td>
                       <td style={{ padding: "8px", textAlign: "right" }}>
-                        {fmtTokens(s.tokens)}
+                        {columnMode === "duration"
+                          ? fmtMs(s.avgDurationMs)
+                          : fmtTokens(s.tokens)}
                       </td>
                       <td style={{ padding: "8px", textAlign: "right" }}>
-                        {fmtUSD(s.cost)}
+                        {columnMode === "duration"
+                          ? fmtMs(s.p95DurationMs)
+                          : fmtUSD(s.cost)}
                       </td>
                       <td
                         style={{
@@ -595,8 +607,15 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             centerCount != null ? String(Math.round(centerCount)) : "—",
         },
         { label: "Total events", value: fmt(total) },
-        { label: "Total tokens", value: fmtTokens(totalTokens) },
-        { label: "Total cost", value: fmtUSDCompact(totalCost) },
+        ...(columnMode === "duration"
+          ? [
+              { label: "Avg duration", value: fmtMs(avgDurationMs) },
+              { label: "P95 duration", value: fmtMs(maxP95Ms) },
+            ]
+          : [
+              { label: "Total tokens", value: fmtTokens(totalTokens) },
+              { label: "Total cost", value: fmtUSDCompact(totalCost) },
+            ]),
         {
           label: "Top",
           value: sorted[0]?.label ?? "—",
@@ -736,6 +755,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Server",
             breakdowns.mcpServers,
             (n) => `${fmtCount(n)} req`,
+            "duration",
           )
         }
       />
@@ -765,6 +785,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Tool",
             breakdowns.mcpTools,
             (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
+            "duration",
           )
         }
       />

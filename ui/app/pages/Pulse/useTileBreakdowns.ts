@@ -8,9 +8,7 @@ import { estimateCost, getPricing } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import {
   buildMcpServersBreakdownQuery,
-  buildMcpServersTokensQuery,
   buildMcpToolsBreakdownQuery,
-  buildMcpToolsTokensQuery,
   buildModelsBreakdownQuery,
 } from "./dataQueries";
 
@@ -20,11 +18,18 @@ export interface BreakdownSlice {
   /** Primary metric used for donut sizing (requests for models/servers,
    * call count for tools). */
   value: number;
-  /** Total input + output tokens summed across the slice's spans. */
+  /** Total input + output tokens summed across the slice's spans.
+   * Always 0 for MCP slices (MCP servers are separate service traces
+   * without LLM calls). */
   tokens: number;
-  /** Blended USD estimate derived from the tokens via pricing.ts. For
-   * model slices we use the model-specific pricing when known. */
+  /** Blended USD estimate derived from the tokens via pricing.ts. */
   cost: number;
+  /** Average span duration in ms. Populated for MCP slices; 0 for models. */
+  avgDurationMs: number;
+  /** P95 span duration in ms. Populated for MCP slices; 0 for models. */
+  p95DurationMs: number;
+  /** Error count across spans in this slice. */
+  errors: number;
   /** Click-to-filter target for this slice's label. */
   filter?: { attribute: string; values: string[]; label?: string };
 }
@@ -46,24 +51,16 @@ interface ModelRec {
 interface ServerRec {
   server?: string;
   requests?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-}
-interface ServerTokenRec {
-  server?: string;
-  input_tokens?: number;
-  output_tokens?: number;
+  avg_duration_ms?: number;
+  p95_duration_ms?: number;
+  errors?: number;
 }
 interface ToolRec {
   tool?: string;
   calls?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-}
-interface ToolTokenRec {
-  tool?: string;
-  input_tokens?: number;
-  output_tokens?: number;
+  avg_duration_ms?: number;
+  p95_duration_ms?: number;
+  errors?: number;
 }
 
 const num = (v: unknown): number => {
@@ -72,17 +69,18 @@ const num = (v: unknown): number => {
 };
 
 /**
- * Blended pricing used for non-model rows (MCP servers/tools, mixed
- * traffic). Matches the headline Spend tile so per-row cost on the
- * donut tables stays consistent with the rest of the page.
+ * Blended pricing used for model slices. Matches the headline Spend tile.
  */
 const BLENDED_PRICING = getPricing("claude-sonnet-4-6");
 
 /**
  * Donut data for the Models / MCP Servers / MCP Tools summary tiles.
- * Each breakdown is a sorted list of {label, value, tokens, cost} slices,
- * already extrapolated by the active samplingRatio so the donut
- * proportions and the per-row tokens/cost match the unsampled population.
+ *
+ * Models slices carry tokens + cost (from gen_ai.usage.* on LLM spans).
+ * MCP slices carry avgDurationMs + p95DurationMs instead — MCP server
+ * processes are standalone services that don't emit token data (verified via
+ * dtctl: 0 LLM calls in 820 MCP spans; span.parent_id=null confirms they are
+ * separate traces from the agent).
  */
 export const useTileBreakdowns = (): UseTileBreakdownsResult => {
   const { scope } = useScope();
@@ -99,34 +97,18 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     canQuery ? buildMcpServersBreakdownQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
-  // Token data for MCP servers comes from a separate trace-level join query
-  // because MCP workflow spans don't carry gen_ai.usage.* attributes.
-  const serverTokensRes = useScopedDql<ServerTokenRec>(
-    canQuery ? buildMcpServersTokensQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
-  );
   const toolsRes = useScopedDql<ToolRec>(
     canQuery ? buildMcpToolsBreakdownQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
-  const toolTokensRes = useScopedDql<ToolTokenRec>(
-    canQuery ? buildMcpToolsTokensQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
-  );
 
   return useMemo<UseTileBreakdownsResult>(() => {
-    // Group model variants (date suffixes etc.) under their canonical name
-    // so the donut doesn't fragment one model across N suffixed slices.
-    // Accumulate the per-variant tokens into the canonical bucket too so
-    // the table row totals are accurate.
     interface ModelAgg {
       label: string;
       rawModels: Set<string>;
       requests: number;
       inputTokens: number;
       outputTokens: number;
-      // Track the dominant raw model id (by requests) so per-model pricing
-      // lookup uses a real id, not a blended fallback.
       pricingKey: string;
       domRequests: number;
     }
@@ -164,6 +146,9 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           value: agg.requests,
           tokens: agg.inputTokens + agg.outputTokens,
           cost: estimateCost(agg.inputTokens, agg.outputTokens, pricing),
+          avgDurationMs: 0,
+          p95DurationMs: 0,
+          errors: 0,
           filter: {
             attribute: "gen_ai.request.model",
             values: Array.from(agg.rawModels),
@@ -173,88 +158,56 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
       })
       .sort((a, b) => b.value - a.value);
 
-    // Build token lookup maps from the trace-level join queries. These
-    // supplement the workflow-span request counts with LLM token attribution.
-    const serverTokenMap = new Map<string, { inTok: number; outTok: number }>();
-    for (const r of serverTokensRes.data?.records ?? []) {
-      if (typeof r.server === "string" && r.server.length > 0) {
-        serverTokenMap.set(r.server, {
-          inTok: num(r.input_tokens) * samplingRatio,
-          outTok: num(r.output_tokens) * samplingRatio,
-        });
-      }
-    }
-    const toolTokenMap = new Map<string, { inTok: number; outTok: number }>();
-    for (const r of toolTokensRes.data?.records ?? []) {
-      if (typeof r.tool === "string" && r.tool.length > 0) {
-        toolTokenMap.set(r.tool, {
-          inTok: num(r.input_tokens) * samplingRatio,
-          outTok: num(r.output_tokens) * samplingRatio,
-        });
-      }
-    }
-
     const mcpServers: BreakdownSlice[] = (serversRes.data?.records ?? [])
       .filter(
         (r): r is Required<Pick<ServerRec, "server">> & ServerRec =>
           typeof r.server === "string" && r.server.length > 0,
       )
-      .map((r) => {
-        const tok = serverTokenMap.get(r.server);
-        const inTok = tok?.inTok ?? num(r.input_tokens) * samplingRatio;
-        const outTok = tok?.outTok ?? num(r.output_tokens) * samplingRatio;
-        return {
-          key: r.server,
-          label: r.server,
-          value: num(r.requests) * samplingRatio,
-          tokens: inTok + outTok,
-          cost: estimateCost(inTok, outTok, BLENDED_PRICING),
-          filter: {
-            attribute: "traceloop.workflow.name",
-            values: [r.server],
-            label: "MCP server",
-          },
-        };
-      });
+      .map((r) => ({
+        key: r.server,
+        label: r.server,
+        value: num(r.requests) * samplingRatio,
+        tokens: 0,
+        cost: 0,
+        avgDurationMs: num(r.avg_duration_ms),
+        p95DurationMs: num(r.p95_duration_ms),
+        errors: num(r.errors) * samplingRatio,
+        filter: {
+          attribute: "traceloop.workflow.name",
+          values: [r.server],
+          label: "MCP server",
+        },
+      }));
 
     const mcpTools: BreakdownSlice[] = (toolsRes.data?.records ?? [])
       .filter(
         (r): r is Required<Pick<ToolRec, "tool">> & ToolRec =>
           typeof r.tool === "string" && r.tool.length > 0,
       )
-      .map((r) => {
-        const tok = toolTokenMap.get(r.tool);
-        const inTok = tok?.inTok ?? num(r.input_tokens) * samplingRatio;
-        const outTok = tok?.outTok ?? num(r.output_tokens) * samplingRatio;
-        return {
-          key: r.tool,
-          label: r.tool,
-          value: num(r.calls) * samplingRatio,
-          tokens: inTok + outTok,
-          cost: estimateCost(inTok, outTok, BLENDED_PRICING),
-          filter: {
-            attribute: "traceloop.entity.name",
-            values: [r.tool],
-            label: "MCP tool",
-          },
-        };
-      });
+      .map((r) => ({
+        key: r.tool,
+        label: r.tool,
+        value: num(r.calls) * samplingRatio,
+        tokens: 0,
+        cost: 0,
+        avgDurationMs: num(r.avg_duration_ms),
+        p95DurationMs: num(r.p95_duration_ms),
+        errors: num(r.errors) * samplingRatio,
+        filter: {
+          attribute: "traceloop.entity.name",
+          values: [r.tool],
+          label: "MCP tool",
+        },
+      }));
 
     return {
       models,
       mcpServers,
       mcpTools,
       isLoading:
-        modelsRes.isLoading ||
-        serversRes.isLoading ||
-        serverTokensRes.isLoading ||
-        toolsRes.isLoading ||
-        toolTokensRes.isLoading,
+        modelsRes.isLoading || serversRes.isLoading || toolsRes.isLoading,
       error:
-        modelsRes.error ??
-        serversRes.error ??
-        toolsRes.error ??
-        undefined,
+        modelsRes.error ?? serversRes.error ?? toolsRes.error ?? undefined,
     };
   }, [
     modelsRes.data,
@@ -263,13 +216,9 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     serversRes.data,
     serversRes.isLoading,
     serversRes.error,
-    serverTokensRes.data,
-    serverTokensRes.isLoading,
     toolsRes.data,
     toolsRes.isLoading,
     toolsRes.error,
-    toolTokensRes.data,
-    toolTokensRes.isLoading,
     samplingRatio,
   ]);
 };
