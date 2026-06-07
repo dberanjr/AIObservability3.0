@@ -98,14 +98,23 @@ const SAFE_ATTR_RE = /^[A-Za-z][A-Za-z0-9_.]*$/;
 
 /**
  * Emit a DQL filter pipe for each global filter condition. Values are matched
- * with `in(toString(<attr>), array(...))` so the comparison works regardless
- * of the attribute's underlying type (string / long / boolean). Conditions
- * AND together; values within a condition OR together.
+ * with `isNull(attr) OR in(toString(attr), array(...))` — the soft-filter
+ * pattern — so the comparison works regardless of the attribute's underlying
+ * type (string / long / boolean). Conditions AND together; values within a
+ * condition OR together.
  *
- * Note: this is a span-LEVEL filter. Filtering on an attribute that only
- * exists on one span type (e.g. gen_ai.agent.name) will naturally exclude
- * spans of other types on panels that read those — that's inherent to span
- * filtering in a multi-span-type trace model.
+ * Soft-filter semantics: a span that does NOT carry the filtered attribute
+ * (isNull) is included rather than excluded. This makes cross-page navigation
+ * useful: filtering on `traceloop.entity.name = GetEmailsFromFolder` (an MCP
+ * attribute) and navigating to the Prompts page shows all LLM prompts instead
+ * of 0, because LLM spans don't have that attribute. Pages whose spans DO
+ * carry the attribute still filter exactly as expected — the isNull guard is
+ * only true when the attribute is absent.
+ *
+ * For universal attributes (trace.id, span.id, service.name) that exist on
+ * every span, isNull is always false and the behavior is identical to a hard
+ * filter. Callers that need a hard filter regardless should use
+ * ignoreGlobalFilter and apply their own filtering.
  */
 const emitConditionPipes = (f?: GlobalFilters): string =>
   (f?.conditions ?? [])
@@ -118,7 +127,7 @@ const emitConditionPipes = (f?: GlobalFilters): string =>
     )
     .map(
       (c) =>
-        `| filter in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`,
+        `| filter isNull(${c.attribute}) or in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`,
     )
     .join("\n");
 
