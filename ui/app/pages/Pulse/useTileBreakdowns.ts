@@ -8,7 +8,9 @@ import { estimateCost, getPricing } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import {
   buildMcpServersBreakdownQuery,
+  buildMcpServersTokensQuery,
   buildMcpToolsBreakdownQuery,
+  buildMcpToolsTokensQuery,
   buildModelsBreakdownQuery,
 } from "./dataQueries";
 
@@ -47,9 +49,19 @@ interface ServerRec {
   input_tokens?: number;
   output_tokens?: number;
 }
+interface ServerTokenRec {
+  server?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+}
 interface ToolRec {
   tool?: string;
   calls?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+}
+interface ToolTokenRec {
+  tool?: string;
   input_tokens?: number;
   output_tokens?: number;
 }
@@ -87,8 +99,18 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     canQuery ? buildMcpServersBreakdownQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
+  // Token data for MCP servers comes from a separate trace-level join query
+  // because MCP workflow spans don't carry gen_ai.usage.* attributes.
+  const serverTokensRes = useScopedDql<ServerTokenRec>(
+    canQuery ? buildMcpServersTokensQuery(serviceIds, scope.timeframe) : "",
+    { enabled: canQuery, staleTime: 60_000 },
+  );
   const toolsRes = useScopedDql<ToolRec>(
     canQuery ? buildMcpToolsBreakdownQuery(serviceIds, scope.timeframe) : "",
+    { enabled: canQuery, staleTime: 60_000 },
+  );
+  const toolTokensRes = useScopedDql<ToolTokenRec>(
+    canQuery ? buildMcpToolsTokensQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -151,14 +173,36 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
       })
       .sort((a, b) => b.value - a.value);
 
+    // Build token lookup maps from the trace-level join queries. These
+    // supplement the workflow-span request counts with LLM token attribution.
+    const serverTokenMap = new Map<string, { inTok: number; outTok: number }>();
+    for (const r of serverTokensRes.data?.records ?? []) {
+      if (typeof r.server === "string" && r.server.length > 0) {
+        serverTokenMap.set(r.server, {
+          inTok: num(r.input_tokens) * samplingRatio,
+          outTok: num(r.output_tokens) * samplingRatio,
+        });
+      }
+    }
+    const toolTokenMap = new Map<string, { inTok: number; outTok: number }>();
+    for (const r of toolTokensRes.data?.records ?? []) {
+      if (typeof r.tool === "string" && r.tool.length > 0) {
+        toolTokenMap.set(r.tool, {
+          inTok: num(r.input_tokens) * samplingRatio,
+          outTok: num(r.output_tokens) * samplingRatio,
+        });
+      }
+    }
+
     const mcpServers: BreakdownSlice[] = (serversRes.data?.records ?? [])
       .filter(
         (r): r is Required<Pick<ServerRec, "server">> & ServerRec =>
           typeof r.server === "string" && r.server.length > 0,
       )
       .map((r) => {
-        const inTok = num(r.input_tokens) * samplingRatio;
-        const outTok = num(r.output_tokens) * samplingRatio;
+        const tok = serverTokenMap.get(r.server);
+        const inTok = tok?.inTok ?? num(r.input_tokens) * samplingRatio;
+        const outTok = tok?.outTok ?? num(r.output_tokens) * samplingRatio;
         return {
           key: r.server,
           label: r.server,
@@ -179,8 +223,9 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
           typeof r.tool === "string" && r.tool.length > 0,
       )
       .map((r) => {
-        const inTok = num(r.input_tokens) * samplingRatio;
-        const outTok = num(r.output_tokens) * samplingRatio;
+        const tok = toolTokenMap.get(r.tool);
+        const inTok = tok?.inTok ?? num(r.input_tokens) * samplingRatio;
+        const outTok = tok?.outTok ?? num(r.output_tokens) * samplingRatio;
         return {
           key: r.tool,
           label: r.tool,
@@ -200,9 +245,16 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
       mcpServers,
       mcpTools,
       isLoading:
-        modelsRes.isLoading || serversRes.isLoading || toolsRes.isLoading,
+        modelsRes.isLoading ||
+        serversRes.isLoading ||
+        serverTokensRes.isLoading ||
+        toolsRes.isLoading ||
+        toolTokensRes.isLoading,
       error:
-        modelsRes.error ?? serversRes.error ?? toolsRes.error ?? undefined,
+        modelsRes.error ??
+        serversRes.error ??
+        toolsRes.error ??
+        undefined,
     };
   }, [
     modelsRes.data,
@@ -211,9 +263,13 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     serversRes.data,
     serversRes.isLoading,
     serversRes.error,
+    serverTokensRes.data,
+    serverTokensRes.isLoading,
     toolsRes.data,
     toolsRes.isLoading,
     toolsRes.error,
+    toolTokensRes.data,
+    toolTokensRes.isLoading,
     samplingRatio,
   ]);
 };
