@@ -25,10 +25,155 @@ import {
   fmtUSDCompact,
 } from "../../data/format";
 
-type DonutColumnMode = "tokens" | "duration";
 import { useScope } from "../../scope/ScopeContext";
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
+
+type DonutColumnMode = "tokens" | "mcp-tabs";
+type McpTab = "volume" | "latency" | "errors";
+
+const MCP_TAB_LIST: Array<{ id: McpTab; label: string }> = [
+  { id: "volume", label: "Volume" },
+  { id: "latency", label: "Latency" },
+  { id: "errors", label: "Errors" },
+];
+
+const SLICE_COLORS = [
+  "var(--blue)",
+  "var(--purple-2)",
+  "var(--cyan)",
+  "var(--green-2)",
+  "var(--pink)",
+  "var(--amber)",
+  "var(--blue-purple)",
+  "var(--purple-dark)",
+  "var(--red)",
+  "var(--green-lime)",
+];
+
+/**
+ * Tabbed breakdown table for MCP Server / MCP Tool popups. Tabs: Volume |
+ * Latency | Errors. Manages its own tab state so the donut + footer stats
+ * outside remain static while the table columns switch per-tab.
+ */
+const McpHealthTable = ({
+  slices,
+  fmt,
+  rowLabel,
+}: {
+  slices: BreakdownSlice[];
+  fmt: (n: number) => string;
+  rowLabel: string;
+}) => {
+  const [tab, setTab] = useState<McpTab>("volume");
+  const sorted = [...slices].sort((a, b) => b.value - a.value);
+  const total = sorted.reduce((a, b) => a + b.value, 0);
+
+  const thR: React.CSSProperties = { padding: "6px 8px", fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" };
+  const tdR: React.CSSProperties = { padding: "8px", textAlign: "right" };
+
+  return (
+    <div style={{ width: "100%" }}>
+      {/* Tab bar */}
+      <div
+        style={{
+          display: "inline-flex",
+          gap: 2,
+          marginBottom: 12,
+          background: "var(--surface-2)",
+          borderRadius: 8,
+          padding: 3,
+        }}
+      >
+        {MCP_TAB_LIST.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              padding: "4px 14px",
+              borderRadius: 6,
+              fontSize: 12.5,
+              fontWeight: tab === t.id ? 600 : 500,
+              color: tab === t.id ? "var(--text)" : "var(--text-2)",
+              background: tab === t.id ? "var(--surface)" : "transparent",
+              boxShadow: tab === t.id ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+              transition: "background 0.12s, color 0.12s",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
+        <thead>
+          <tr style={{ color: "var(--text-3)", textAlign: "left" }}>
+            <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>
+            <th style={{ padding: "6px 8px", fontWeight: 600 }}>{rowLabel}</th>
+            {tab === "volume" && <th style={thR}>Value</th>}
+            {tab === "latency" && <>
+              <th style={thR}>Avg</th>
+              <th style={thR}>P50</th>
+              <th style={thR}>P95</th>
+              <th style={thR}>P99</th>
+            </>}
+            {tab === "errors" && <>
+              <th style={thR}>Span Err</th>
+              <th style={thR}>Tool Err</th>
+              <th style={thR}>Total</th>
+              <th style={thR}>Rate</th>
+            </>}
+            <th style={thR}>Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((s, idx) => {
+            const pct = total > 0 ? (s.value / total) * 100 : 0;
+            const color = SLICE_COLORS[idx % SLICE_COLORS.length];
+            const totalErrors = s.spanErrors + s.toolErrors;
+            const errorRate = s.value > 0 ? (totalErrors / s.value) * 100 : 0;
+            const errColor = (n: number) =>
+              n > 0 ? "var(--red)" : "var(--text-3)";
+            const toolErrColor = (n: number) =>
+              n > 0 ? "var(--amber)" : "var(--text-3)";
+            return (
+              <tr key={s.key} style={{ borderTop: "1px solid var(--border)" }}>
+                <td style={{ padding: "8px" }}>
+                  <span aria-hidden style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: color }} />
+                </td>
+                <td style={{ padding: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260 }} title={s.label}>
+                  {s.filter ? (
+                    <FilterTrigger attribute={s.filter.attribute} value={s.filter.values} label={s.filter.label ?? s.label}>
+                      {s.label}
+                    </FilterTrigger>
+                  ) : s.label}
+                </td>
+                {tab === "volume" && <td style={tdR}>{fmt(s.value)}</td>}
+                {tab === "latency" && <>
+                  <td style={tdR}>{fmtMs(s.avgDurationMs)}</td>
+                  <td style={tdR}>{fmtMs(s.p50DurationMs)}</td>
+                  <td style={tdR}>{fmtMs(s.p95DurationMs)}</td>
+                  <td style={tdR}>{fmtMs(s.p99DurationMs)}</td>
+                </>}
+                {tab === "errors" && <>
+                  <td style={{ ...tdR, color: errColor(s.spanErrors) }}>{fmtCount(s.spanErrors)}</td>
+                  <td style={{ ...tdR, color: toolErrColor(s.toolErrors) }}>{fmtCount(s.toolErrors)}</td>
+                  <td style={{ ...tdR, color: errColor(totalErrors) }}>{fmtCount(totalErrors)}</td>
+                  <td style={{ ...tdR, color: errColor(totalErrors) }}>{errorRate.toFixed(1)}%</td>
+                </>}
+                <td style={{ ...tdR, color: "var(--text-3)" }}>{pct.toFixed(1)}%</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 /**
  * Friendly label for the active timeframe. Relative expressions like
@@ -428,12 +573,15 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
     const total = slices.reduce((a, b) => a + b.value, 0);
     const totalTokens = slices.reduce((a, b) => a + b.tokens, 0);
     const totalCost = slices.reduce((a, b) => a + b.cost, 0);
+    const sorted = [...slices].sort((a, b) => b.value - a.value);
+    // MCP-specific aggregates for the stats footer
     const avgDurationMs =
       slices.length > 0
         ? slices.reduce((a, b) => a + b.avgDurationMs, 0) / slices.length
         : 0;
-    const maxP95Ms = slices.length > 0 ? Math.max(...slices.map((s) => s.p95DurationMs)) : 0;
-    const sorted = [...slices].sort((a, b) => b.value - a.value);
+    const maxP99Ms = slices.length > 0 ? Math.max(...slices.map((s) => s.p99DurationMs)) : 0;
+    const totalSpanErrors = slices.reduce((a, b) => a + b.spanErrors, 0);
+    const totalToolErrors = slices.reduce((a, b) => a + b.toolErrors, 0);
     // Pluralize the center label when the count is anything other than 1
     // (Model/Models, Server/Servers, Tool/Tools). The column header in
     // the table follows the same form so it stays in sync with the
@@ -444,7 +592,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       title,
       subtitle: `${info} · ${timeframeLabel}`,
       body: (
-        <Flex gap={32} alignItems="center" style={{ minHeight: 360 }}>
+        <Flex gap={32} alignItems={columnMode === "mcp-tabs" ? "flex-start" : "center"} style={{ minHeight: 360 }}>
           <MiniDonut
             size={320}
             thickness={42}
@@ -460,169 +608,81 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             style={{
               flexGrow: 1,
               minWidth: 0,
-              maxHeight: 360,
+              maxHeight: 400,
               overflowY: "auto",
             }}
           >
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 12.5,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              <thead>
-                <tr style={{ color: "var(--text-3)", textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>
-                  <th style={{ padding: "6px 8px", fontWeight: 600 }}>
-                    {pluralCenterLabel}
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                      textAlign: "right",
-                    }}
-                  >
-                    Value
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                      textAlign: "right",
-                    }}
-                  >
-                    {columnMode === "duration" ? "Avg Dur" : "Tokens"}
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                      textAlign: "right",
-                    }}
-                  >
-                    {columnMode === "duration" ? "P95 Dur" : "Cost"}
-                  </th>
-                  <th
-                    style={{
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                      textAlign: "right",
-                    }}
-                  >
-                    Share
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((s, idx) => {
-                  const pct = total > 0 ? (s.value / total) * 100 : 0;
-                  const color = [
-                    "var(--blue)",
-                    "var(--purple-2)",
-                    "var(--cyan)",
-                    "var(--green-2)",
-                    "var(--pink)",
-                    "var(--amber)",
-                    "var(--blue-purple)",
-                    "var(--purple-dark)",
-                    "var(--red)",
-                    "var(--green-lime)",
-                  ][idx % 10];
-                  return (
-                    <tr
-                      key={s.label}
-                      style={{ borderTop: "1px solid var(--border)" }}
-                    >
-                      <td style={{ padding: "8px" }}>
-                        <span
-                          aria-hidden
-                          style={{
-                            display: "inline-block",
-                            width: 10,
-                            height: 10,
-                            borderRadius: 2,
-                            background: color,
-                          }}
-                        />
-                      </td>
-                      <td
-                        style={{
-                          padding: "8px",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          maxWidth: 320,
-                        }}
-                        title={s.label}
-                      >
-                        {s.filter ? (
-                          <FilterTrigger
-                            attribute={s.filter.attribute}
-                            value={s.filter.values}
-                            label={s.filter.label ?? s.label}
-                          >
-                            {s.label}
-                          </FilterTrigger>
-                        ) : (
-                          s.label
-                        )}
-                      </td>
-                      <td style={{ padding: "8px", textAlign: "right" }}>
-                        {fmt(s.value)}
-                      </td>
-                      <td style={{ padding: "8px", textAlign: "right" }}>
-                        {columnMode === "duration"
-                          ? fmtMs(s.avgDurationMs)
-                          : fmtTokens(s.tokens)}
-                      </td>
-                      <td style={{ padding: "8px", textAlign: "right" }}>
-                        {columnMode === "duration"
-                          ? fmtMs(s.p95DurationMs)
-                          : fmtUSD(s.cost)}
-                      </td>
-                      <td
-                        style={{
-                          padding: "8px",
-                          textAlign: "right",
-                          color: "var(--text-3)",
-                        }}
-                      >
-                        {pct.toFixed(1)}%
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {columnMode === "mcp-tabs" ? (
+              <McpHealthTable slices={slices} fmt={fmt} rowLabel={pluralCenterLabel} />
+            ) : (
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 12.5,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                <thead>
+                  <tr style={{ color: "var(--text-3)", textAlign: "left" }}>
+                    <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>
+                    <th style={{ padding: "6px 8px", fontWeight: 600 }}>
+                      {pluralCenterLabel}
+                    </th>
+                    <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>Value</th>
+                    <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>Tokens</th>
+                    <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>Cost</th>
+                    <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((s, idx) => {
+                    const pct = total > 0 ? (s.value / total) * 100 : 0;
+                    const color = SLICE_COLORS[idx % SLICE_COLORS.length];
+                    return (
+                      <tr key={s.key} style={{ borderTop: "1px solid var(--border)" }}>
+                        <td style={{ padding: "8px" }}>
+                          <span aria-hidden style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: color }} />
+                        </td>
+                        <td style={{ padding: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 }} title={s.label}>
+                          {s.filter ? (
+                            <FilterTrigger attribute={s.filter.attribute} value={s.filter.values} label={s.filter.label ?? s.label}>
+                              {s.label}
+                            </FilterTrigger>
+                          ) : s.label}
+                        </td>
+                        <td style={{ padding: "8px", textAlign: "right" }}>{fmt(s.value)}</td>
+                        <td style={{ padding: "8px", textAlign: "right" }}>{fmtTokens(s.tokens)}</td>
+                        <td style={{ padding: "8px", textAlign: "right" }}>{fmtUSD(s.cost)}</td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "var(--text-3)" }}>{pct.toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </Flex>
       ),
-      stats: [
-        {
-          label: "Distinct",
-          value:
-            centerCount != null ? String(Math.round(centerCount)) : "—",
-        },
-        { label: "Total events", value: fmt(total) },
-        ...(columnMode === "duration"
+      stats:
+        columnMode === "mcp-tabs"
           ? [
-              { label: "Avg duration", value: fmtMs(avgDurationMs) },
-              { label: "P95 duration", value: fmtMs(maxP95Ms) },
+              { label: "Distinct", value: centerCount != null ? String(Math.round(centerCount)) : "—" },
+              { label: "Total events", value: fmt(total) },
+              { label: "Avg latency", value: fmtMs(avgDurationMs) },
+              { label: "P99 latency", value: fmtMs(maxP99Ms) },
+              { label: "Span errors", value: fmtCount(totalSpanErrors) },
+              { label: "Tool errors", value: fmtCount(totalToolErrors) },
+              { label: "Timeframe", value: timeframeLabel },
             ]
           : [
+              { label: "Distinct", value: centerCount != null ? String(Math.round(centerCount)) : "—" },
+              { label: "Total events", value: fmt(total) },
               { label: "Total tokens", value: fmtTokens(totalTokens) },
               { label: "Total cost", value: fmtUSDCompact(totalCost) },
-            ]),
-        {
-          label: "Top",
-          value: sorted[0]?.label ?? "—",
-          sub: sorted[0] ? fmt(sorted[0].value) : undefined,
-        },
-        { label: "Timeframe", value: timeframeLabel },
-      ],
+              { label: "Top", value: sorted[0]?.label ?? "—", sub: sorted[0] ? fmt(sorted[0].value) : undefined },
+              { label: "Timeframe", value: timeframeLabel },
+            ],
     };
   };
 
@@ -755,7 +815,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Server",
             breakdowns.mcpServers,
             (n) => `${fmtCount(n)} req`,
-            "duration",
+            "mcp-tabs",
           )
         }
       />
@@ -785,7 +845,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
             "Tool",
             breakdowns.mcpTools,
             (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
-            "duration",
+            "mcp-tabs",
           )
         }
       />
