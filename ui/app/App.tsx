@@ -13,6 +13,7 @@ import { PromptsPage } from "./pages/Prompts/PromptsPage";
 import { PulsePage } from "./pages/Pulse/PulsePage";
 import { ToolsPage } from "./pages/Tools/ToolsPage";
 import { TopologyPage } from "./pages/Topology/TopologyPage";
+import { McpHealthPage } from "./pages/McpHealth/McpHealthPage";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
 import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
@@ -57,6 +58,7 @@ export const App = () => {
                 <Route path="/tools" element={<ToolsPage />} />
                 <Route path="/prompts" element={<PromptsPage />} />
                 <Route path="/topology" element={<TopologyPage />} />
+                <Route path="/mcp-health" element={<McpHealthPage />} />
                 <Route path="/models" element={<ModelsPage />} />
                 <Route path="/finops" element={<FinOpsPage />} />
                 <Route path="/home" element={<Home />} />
