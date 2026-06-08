@@ -54,12 +54,18 @@ ${scopeFilterClause(serviceIds)}
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
+    is_retrieval = if(contains(lower(coalesce(gen_ai.request.model, "")), "embed") or contains(lower(coalesce(gen_ai.request.model, "")), "rerank"), 1, else: 0),
     mcp_server = if(matchesValue(traceloop.workflow.name, "*.mcp"), traceloop.workflow.name),
     mcp_tool   = if(matchesValue(traceloop.workflow.name, "*.mcp"), coalesce(gen_ai.tool.name, traceloop.entity.name))
+| fieldsAdd
+    gen_in_tok = if(is_retrieval == 1, 0, else: in_tok),
+    gen_out_tok = if(is_retrieval == 1, 0, else: out_tok)
 | summarize
     requests = count(),
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
+    gen_input_tokens = sum(gen_in_tok),
+    gen_output_tokens = sum(gen_out_tok),
     p95_ns = percentile(duration, 95),
     errors = sum(is_error),
     models = countDistinct(gen_ai.request.model),
@@ -69,8 +75,10 @@ ${scopeFilterClause(serviceIds)}
     total_tokens = input_tokens + output_tokens,
     p95_ms = p95_ns / 1000000,
     error_rate_pct = if(requests > 0, toDouble(errors) / toDouble(requests) * 100, else: 0),
-    token_efficiency_pct = if((input_tokens + output_tokens) > 0,
-      toDouble(output_tokens) / toDouble(input_tokens + output_tokens) * 100,
+    // Token efficiency reflects generation only — embedding/rerank calls have
+    // zero output and would drag the ratio toward zero.
+    token_efficiency_pct = if((gen_input_tokens + gen_output_tokens) > 0,
+      toDouble(gen_output_tokens) / toDouble(gen_input_tokens + gen_output_tokens) * 100,
       else: 0)
 `.trim();
 

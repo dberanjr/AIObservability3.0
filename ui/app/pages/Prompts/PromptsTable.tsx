@@ -160,6 +160,12 @@ const TypeChip = ({ label }: { label: string }) => (
 const ERROR_ROW_BG =
   "linear-gradient(90deg, color-mix(in oklab, var(--red) 22%, transparent), color-mix(in oklab, var(--red) 5%, transparent))";
 
+// Truncated rows (response cut off at the max-tokens limit) get a softer amber
+// gradient + amber left border, using the same visual language as errors but a
+// lower-severity tone. Errors take precedence when both apply.
+const TRUNC_ROW_BG =
+  "linear-gradient(90deg, color-mix(in oklab, var(--amber) 18%, transparent), color-mix(in oklab, var(--amber) 4%, transparent))";
+
 // Temperature color band: cold (deterministic) → hot (creative).
 const tempColor = (t: number): string => {
   if (t <= 0.3) return "var(--blue)";
@@ -615,13 +621,17 @@ const StreamRow = ({
           ? "3px solid var(--blue)"
           : prompt.hasError
             ? "3px solid var(--red)"
-            : "3px solid transparent",
+            : prompt.truncated
+              ? "3px solid var(--amber)"
+              : "3px solid transparent",
         cursor: "pointer",
         background: isSelected
           ? "color-mix(in oklab, var(--blue) 8%, transparent)"
           : prompt.hasError
             ? ERROR_ROW_BG
-            : undefined,
+            : prompt.truncated
+              ? TRUNC_ROW_BG
+              : undefined,
       }}
     >
       <Cell width={132}>
@@ -794,13 +804,17 @@ const MetadataRow = ({
           ? "3px solid var(--blue)"
           : prompt.hasError
             ? "3px solid var(--red)"
-            : "3px solid transparent",
+            : prompt.truncated
+              ? "3px solid var(--amber)"
+              : "3px solid transparent",
         cursor: "pointer",
         background: isSelected
           ? "color-mix(in oklab, var(--blue) 8%, transparent)"
           : prompt.hasError
             ? ERROR_ROW_BG
-            : undefined,
+            : prompt.truncated
+              ? TRUNC_ROW_BG
+              : undefined,
       }}
     >
       <Cell width={132}>

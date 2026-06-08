@@ -279,6 +279,21 @@ export const getEffectivePricing = (): Record<string, ModelPricing> => {
   return merged;
 };
 
+/**
+ * True for embedding / rerank (retrieval) models rather than generation models.
+ * Retrieval calls produce zero output tokens, so including them in
+ * generation-quality ratios (token efficiency, completion rate, output-per-
+ * dollar) silently drags those metrics toward zero. Callers that compute such
+ * ratios should exclude these. Detected by name because this tenant labels
+ * embeddings with gen_ai.operation.name "text_completion" (not "embeddings"),
+ * making the model name the only reliable discriminator.
+ */
+export const isRetrievalModel = (model: string | null | undefined): boolean => {
+  if (!model) return false;
+  const s = model.toLowerCase();
+  return s.includes("embed") || s.includes("rerank");
+};
+
 /** Estimated USD cost given token counts and a pricing record. */
 export const estimateCost = (
   inputTok: number,

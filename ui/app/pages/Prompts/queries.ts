@@ -23,6 +23,8 @@ export interface PromptsSidebarFilter {
   onlyErrors?: boolean;
   onlyPii?: boolean;
   onlyWarnings?: boolean;
+  /** Only responses cut off by the max-tokens limit (finish_reasons max_tokens). */
+  onlyTruncated?: boolean;
   latency?: LatencyFilter;
   temperature?: LatencyFilter;
 }
@@ -53,6 +55,11 @@ const sidebarClauses = (sidebar?: PromptsSidebarFilter): string => {
   }
   if (sidebar?.onlyWarnings) {
     lines.push(`| filter toBoolean(gen_ai.response.warning) == true`);
+  }
+  if (sidebar?.onlyTruncated) {
+    lines.push(
+      `| filter contains(toString(gen_ai.response.finish_reasons), "max_tokens")`,
+    );
   }
   const lat = sidebar?.latency;
   if (lat) {
@@ -160,6 +167,7 @@ ${extraClauses}
     pii_detected = coalesce(toBoolean(gen_ai.privacy.pii_detected), false),
     has_warning = coalesce(toBoolean(gen_ai.response.warning), false),
     has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
+    truncated = if(contains(toString(gen_ai.response.finish_reasons), "max_tokens"), true, else: false),
     type_label = coalesce(llm.request.type, gen_ai.operation.name, "chat"),
     model_name = coalesce(gen_ai.response.model, gen_ai.request.model, gen_ai.model, ""),
     eval_hallucination = toDouble(gen_ai.evaluation.hallucination),
@@ -190,6 +198,7 @@ ${searchClause}
     pii_detected,
     has_warning,
     has_error,
+    truncated,
     eval_hallucination,
     eval_correctness,
     eval_faithfulness,
@@ -257,7 +266,8 @@ ${globalFilterClauses(filters)}
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     pii = if(coalesce(toBoolean(gen_ai.privacy.pii_detected), false), 1, else: 0),
     warn = if(coalesce(toBoolean(gen_ai.response.warning), false), 1, else: 0),
-    err = if(isNotNull(exception.type) or span.status_code == "error", 1, else: 0)
+    err = if(isNotNull(exception.type) or span.status_code == "error", 1, else: 0),
+    trunc = if(contains(toString(gen_ai.response.finish_reasons), "max_tokens"), 1, else: 0)
 | summarize
     total = count(),
     avg_duration_ms = avg(duration) / 1000000,
@@ -265,7 +275,8 @@ ${globalFilterClauses(filters)}
     avg_output_tokens = avg(out_tok),
     pii_detected = sum(pii),
     warnings = sum(warn),
-    errors = sum(err)
+    errors = sum(err),
+    truncated = sum(trunc)
 `.trim();
 
 /**

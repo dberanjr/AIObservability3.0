@@ -22,6 +22,7 @@ interface SummaryRecord {
   pii_detected?: number;
   warnings?: number;
   errors?: number;
+  truncated?: number;
 }
 
 export interface PromptSummary {
@@ -34,6 +35,7 @@ export interface PromptSummary {
   piiDetected: number;
   warnings: number;
   errors: number;
+  truncated: number;
   isLoading: boolean;
   error?: Error;
 }
@@ -63,6 +65,7 @@ export const usePromptSummary = (): PromptSummary => {
       piiDetected: num(row?.pii_detected),
       warnings: num(row?.warnings),
       errors: num(row?.errors),
+      truncated: num(row?.truncated),
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
