@@ -71,6 +71,8 @@ export interface PromptRow {
   piiDetected: boolean;
   hasWarning: boolean;
   hasError: boolean;
+  /** Response was cut off by the max-tokens limit. */
+  truncated: boolean;
   evalHallucination: number | null;
   evalCorrectness: number | null;
   evalFaithfulness: number | null;
@@ -98,6 +100,7 @@ interface PromptRecord {
   pii_detected?: boolean | string;
   has_warning?: boolean | string;
   has_error?: boolean | string;
+  truncated?: boolean | string;
   eval_hallucination?: number | null;
   eval_correctness?: number | null;
   eval_faithfulness?: number | null;
@@ -128,6 +131,7 @@ export interface PromptsFilter {
   onlyErrors?: boolean;
   onlyPii?: boolean;
   onlyWarnings?: boolean;
+  onlyTruncated?: boolean;
   latency?: LatencyFilter;
   temperature?: LatencyFilter;
   /** Cost range filters, in dollars (applied client-side over loaded rows). */
@@ -202,6 +206,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     onlyErrors: filter.onlyErrors,
     onlyPii: filter.onlyPii,
     onlyWarnings: filter.onlyWarnings,
+    onlyTruncated: filter.onlyTruncated,
     latency: filter.latency,
     temperature: filter.temperature,
   };
@@ -228,6 +233,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       filter.onlyErrors,
       filter.onlyPii,
       filter.onlyWarnings,
+      filter.onlyTruncated,
       filter.latency?.op,
       filter.latency?.min,
       filter.latency?.max,
@@ -320,6 +326,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
         piiDetected: bool(r.pii_detected),
         hasWarning: bool(r.has_warning),
         hasError: bool(r.has_error),
+        truncated: bool(r.truncated),
         evalHallucination,
         evalCorrectness,
         evalFaithfulness,

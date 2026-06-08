@@ -96,11 +96,11 @@ export const PromptsTilesRow = ({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
           gap: 10,
         }}
       >
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 7 }).map((_, i) => (
           <Surface key={i} elevation="raised" padding={12}>
             <Flex flexDirection="column" gap={6}>
               <Skeleton style={{ height: 12, width: "60%" }} />
@@ -116,7 +116,7 @@ export const PromptsTilesRow = ({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+        gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
         gap: 10,
       }}
     >
@@ -192,6 +192,22 @@ export const PromptsTilesRow = ({
             : undefined
         }
         active={!!filter?.onlyErrors}
+      />
+      <Tile
+        label="Truncated"
+        value={fmtCount(summary.truncated)}
+        emphasis={summary.truncated > 0 ? "amber" : "default"}
+        sub="finish_reasons: max_tokens"
+        onClick={
+          onFilterChange && filter
+            ? () =>
+                onFilterChange({
+                  ...filter,
+                  onlyTruncated: filter.onlyTruncated ? undefined : true,
+                })
+            : undefined
+        }
+        active={!!filter?.onlyTruncated}
       />
     </div>
   );

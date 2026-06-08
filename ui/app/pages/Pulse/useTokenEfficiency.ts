@@ -6,7 +6,7 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildTokenEfficiencyQuery } from "./dataQueries";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { estimateCost, getPricing, isRetrievalModel } from "../../data/pricing";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -71,6 +71,10 @@ export const useTokenEfficiency = (): TokenEfficiency => {
     let durS = 0;
     let cost = 0;
     for (const r of data?.records ?? []) {
+      // Token efficiency is a generation-quality metric. Embedding/rerank
+      // models produce zero output tokens and would drag every ratio toward
+      // zero, so exclude them entirely from this calculation.
+      if (isRetrievalModel(r.model)) continue;
       const inTok = num(r.input_tokens);
       const outTok = num(r.output_tokens);
       input += inTok;

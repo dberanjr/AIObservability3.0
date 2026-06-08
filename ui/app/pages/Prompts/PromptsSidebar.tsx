@@ -31,6 +31,7 @@ const StatusToggles = ({
     { key: "onlyErrors", label: "Errored requests" },
     { key: "onlyPii", label: "PII detected" },
     { key: "onlyWarnings", label: "Warnings" },
+    { key: "onlyTruncated", label: "Truncated (max tokens)" },
   ];
   return (
     <Flex flexDirection="column" gap={6}>
