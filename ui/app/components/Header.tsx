@@ -34,6 +34,9 @@ export const Header = () => {
         <AppHeader.NavigationItem as={Link} to={{ pathname: "/topology", search }}>
           Topology
         </AppHeader.NavigationItem>
+        <AppHeader.NavigationItem as={Link} to={{ pathname: "/mcp-health", search }}>
+          MCP Health
+        </AppHeader.NavigationItem>
         <AppHeader.NavigationItem as={Link} to={{ pathname: "/models", search }}>
           Models
         </AppHeader.NavigationItem>
