@@ -4,39 +4,6 @@ import type { Timeframe } from "../../scope/types";
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
 /**
- * Pick a makeTimeseries bucket interval (seconds) scaled to the active window.
- * Coarser than the Pulse sparklines so the MCP activity chart reads as an
- * hourly-ish overview rather than a dense series.
- *
- *   <= 2h   → 5m
- *   <= 6h   → 15m
- *   <= 24h  → 1h
- *   <= 7d   → 6h
- *   else    → 1d
- */
-export const pickMcpIntervalSec = (from: string): number => {
-  const m = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
-  const minute = 60;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  let totalSec = 24 * hour;
-  if (m) {
-    const n = Number(m[1]);
-    totalSec =
-      m[2].toLowerCase() === "m"
-        ? n * minute
-        : m[2].toLowerCase() === "h"
-          ? n * hour
-          : n * day;
-  }
-  if (totalSec <= 2 * hour) return 5 * minute;
-  if (totalSec <= 6 * hour) return 15 * minute;
-  if (totalSec <= 24 * hour) return hour;
-  if (totalSec <= 7 * day) return 6 * hour;
-  return day;
-};
-
-/**
  * Q1 — per-tool and MCP-server health. Powers the KPI strip, alert band, and
  * tool table. One row per tool (span.name) plus an aggregate row for the
  * mcp.server span. Tools are identified via traceloop.span.kind == "tool"

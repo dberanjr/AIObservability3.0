@@ -230,21 +230,21 @@ ${toBlock(darkSurfaces)}
 
 /* ---- Active top-nav tab highlight ----
  * The Header tags the current tab with .aiobs-nav-active (plus isSelected /
- * aria-current). Strato's own selected styling is subtle under our brand
- * theme, so we add an unmistakable highlight: brand-tinted pill, bold accent
- * text, and an underline bar. !important wins over Strato's Button classes. */
+ * aria-current). We render a solid brand-color pill with inverted (white) text
+ * so the active tab stands out cleanly — no underline. !important wins over
+ * Strato's Button classes (which also otherwise add a selected underline). */
 .aiobs-nav-active,
 .aiobs-nav-active:hover,
 .aiobs-nav-active:focus {
-  color: var(--blue) !important;
+  color: #ffffff !important;
   font-weight: 700 !important;
-  background: color-mix(in oklab, var(--blue) 14%, transparent) !important;
+  background: var(--blue) !important;
   border-radius: 8px !important;
-  box-shadow: inset 0 -2px 0 0 var(--blue) !important;
+  box-shadow: none !important;
 }
-/* Keep any icon/text descendants in the accent color too. */
+/* Keep any icon/text descendants white too. */
 .aiobs-nav-active * {
-  color: var(--blue) !important;
+  color: #ffffff !important;
 }
 
 /* AAA attribute tiles: lift slightly on hover to signal they're clickable. */

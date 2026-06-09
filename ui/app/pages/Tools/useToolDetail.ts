@@ -3,7 +3,7 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useSampling, extrapolate } from "../../scope/SamplingContext";
 import { toNum } from "../../data/format";
-import { pickMcpIntervalSec } from "../McpHealth/queries";
+import { pickChartIntervalSec } from "../../scope/chartInterval";
 import { buildToolTimeseriesQuery, buildToolTracesQuery } from "./queries";
 
 interface SeriesRecord {
@@ -85,7 +85,7 @@ const buildLabels = (count: number, row: SeriesRecord | undefined, intervalSec: 
 export const useToolDetail = (tool: string | null): UseToolDetailResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
-  const intervalSec = pickMcpIntervalSec(scope.timeframe.from);
+  const intervalSec = pickChartIntervalSec(scope.timeframe.from);
 
   const seriesRes = useScopedDql<SeriesRecord>(
     tool ? buildToolTimeseriesQuery(tool, scope.timeframe, intervalSec) : "",
