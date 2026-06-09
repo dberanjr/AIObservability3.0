@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause } from "../../scope/queries";
+import { dqlTimeArg, scopeFilterClause, logicalErrorField } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 import { dqlNormalizedProvider, dqlViaBedrock } from "../../detection/dql";
 
@@ -53,7 +53,7 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
+    ${logicalErrorField()},
     is_retrieval = if(contains(lower(coalesce(gen_ai.request.model, "")), "embed") or contains(lower(coalesce(gen_ai.request.model, "")), "rerank"), 1, else: 0),
     mcp_server = if(matchesValue(traceloop.workflow.name, "*.mcp"), traceloop.workflow.name),
     mcp_tool   = if(matchesValue(traceloop.workflow.name, "*.mcp"), coalesce(gen_ai.tool.name, traceloop.entity.name))
@@ -166,7 +166,7 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+    ${logicalErrorField()}
 | makeTimeseries
     tokens = sum(in_tok + out_tok),
     p95_ns = percentile(duration, 95),

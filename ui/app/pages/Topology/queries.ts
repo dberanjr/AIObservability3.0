@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
+import { dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -23,7 +23,7 @@ ${globalFilterClauses(filters)}
     or isNotNull(gen_ai.agent.name)
     or isNotNull(gen_ai.tool.name)
 | fieldsAdd
-    has_err = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+    ${logicalErrorField("has_err")}
 | summarize
     calls = count(),
     errors = sum(has_err),

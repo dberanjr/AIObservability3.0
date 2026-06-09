@@ -6,43 +6,52 @@ import { HeaderTimeframe } from "./HeaderTimeframe";
 import { useTweaks } from "../tweaks/TweaksContext";
 import { ModelPricingButton } from "../pricing/ModelPricingButton";
 
+/** Top-nav tabs, in display order. Pulse is also the index ("/") route. */
+const NAV_ITEMS: { to: string; label: string }[] = [
+  { to: "/pulse", label: "Pulse" },
+  { to: "/explorer", label: "Explorer" },
+  { to: "/agents", label: "Agents" },
+  { to: "/tools", label: "Tools" },
+  { to: "/prompts", label: "Prompts" },
+  { to: "/topology", label: "Topology" },
+  { to: "/mcp-health", label: "MCP Health" },
+  { to: "/attribute-audit", label: "AI Attribute Audit" },
+  { to: "/models", label: "Models" },
+  { to: "/finops", label: "FinOps" },
+];
+
 export const Header = () => {
   const { isPanelOpen, togglePanel } = useTweaks();
   // Carry the current query string (timeframe ?from/?to, etc.) across tab
   // navigation so the selected scope doesn't reset when switching pages.
-  const { search } = useLocation();
+  const { search, pathname } = useLocation();
+
+  // Mark the active tab so it gets a clear highlight. Pulse owns both "/" and
+  // "/pulse"; every other tab matches its own path (and nested sub-paths).
+  const isActive = (to: string): boolean => {
+    if (to === "/pulse") return pathname === "/" || pathname === "/pulse";
+    return pathname === to || pathname.startsWith(`${to}/`);
+  };
 
   return (
     <AppHeader>
       <AppHeader.Navigation>
         <AppHeader.Logo as={Link} to={{ pathname: "/", search }} />
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/pulse", search }}>
-          Pulse
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/explorer", search }}>
-          Explorer
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/agents", search }}>
-          Agents
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/tools", search }}>
-          Tools
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/prompts", search }}>
-          Prompts
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/topology", search }}>
-          Topology
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/mcp-health", search }}>
-          MCP Health
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/models", search }}>
-          Models
-        </AppHeader.NavigationItem>
-        <AppHeader.NavigationItem as={Link} to={{ pathname: "/finops", search }}>
-          FinOps
-        </AppHeader.NavigationItem>
+        {NAV_ITEMS.map((item) => {
+          const active = isActive(item.to);
+          return (
+            <AppHeader.NavigationItem
+              key={item.to}
+              as={Link}
+              to={{ pathname: item.to, search }}
+              isSelected={active}
+              aria-current={active ? "page" : undefined}
+              className={active ? "aiobs-nav-active" : undefined}
+            >
+              {item.label}
+            </AppHeader.NavigationItem>
+          );
+        })}
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         <HeaderTimeframe />

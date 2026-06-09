@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
+import { dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -25,7 +25,7 @@ ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
 | fieldsAdd
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
+    ${logicalErrorField()},
     has_gen_ai_error = if(isNotNull(gen_ai.error.type), 1, else: 0),
     has_guardrail = if(isNotNull(gen_ai.guardrail.action) or isNotNull(gen_ai.moderation.action), 1, else: 0),
     has_refusal = if(isNotNull(gen_ai.response.refusal_reason) or contains(toString(gen_ai.response.finish_reasons), "refusal"), 1, else: 0),

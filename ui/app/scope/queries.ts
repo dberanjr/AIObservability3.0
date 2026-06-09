@@ -44,6 +44,37 @@ export const scopeFilterClause = (serviceIds: string[] | null): string =>
     : `| filter in(dt.entity.service, array(${dqlIdArray(serviceIds)}))`;
 
 /**
+ * Logical-error predicate for AI spans (DQL boolean, unquoted field style to
+ * match the page query builders). Goes beyond transport failures to count
+ * *logical* failures the LLM layer signals on otherwise-HTTP-200 responses:
+ *   - span.status_code == error (OTel span status)
+ *   - http.response.status_code >= 400 (transport error)
+ *   - exception.type present (thrown error)
+ *   - gen_ai.error.code present (provider-reported error)
+ *   - finish_reasons contains "refusal" / "content_filter" (model declined or
+ *     was guardrail-blocked — a logical failure on a 200 response)
+ *
+ * Validated on united nonprod: catches ~3x more failures than the prior
+ * exception-or-http>=400 rule (logical failures are otherwise invisible
+ * because nearly all spans are HTTP 200 with an unset span.status_code).
+ */
+export const LOGICAL_ERROR_EXPR = `(
+    lower(coalesce(span.status_code, "")) == "error"
+    or toLong(coalesce(http.response.status_code, 0)) >= 400
+    or isNotNull(exception.type)
+    or isNotNull(gen_ai.error.code)
+    or contains(lower(toString(coalesce(gen_ai.response.finish_reasons, ""))), "refusal")
+    or contains(lower(toString(coalesce(gen_ai.response.finish_reasons, ""))), "content_filter")
+  )`;
+
+/**
+ * Emit a `<field> = if(<logical error>, 1, else: 0)` assignment for use inside
+ * a `| fieldsAdd` so a downstream `sum(<field>)` counts logical errors.
+ */
+export const logicalErrorField = (field = "is_error"): string =>
+  `${field} = if(${LOGICAL_ERROR_EXPR}, 1, else: 0)`;
+
+/**
  * Cheap distinct-agent count for the fleet-wide status line. `serviceIds`
  * is accepted for signature compatibility but always passes through as null.
  */

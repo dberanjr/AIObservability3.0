@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause } from "../../scope/queries";
+import { dqlTimeArg, scopeFilterClause, logicalErrorField } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const tfTo = (tf: Timeframe): string => tf.to ?? "now()";
@@ -16,7 +16,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | dedup {span.id}
-| fieldsAdd is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+| fieldsAdd ${logicalErrorField()}
 | summarize
     p95_ms = percentile(duration, 95) / 1000000,
     calls = count(),
@@ -58,7 +58,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
 | dedup {span.id}
-| fieldsAdd is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+| fieldsAdd ${logicalErrorField()}
 | summarize
     total = count(),
     errors = sum(is_error),

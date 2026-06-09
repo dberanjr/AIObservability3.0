@@ -7,24 +7,12 @@ import { ErrorBanner } from "../../components/ErrorState";
 import { EmptyState } from "../../components/EmptyState";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
+import { tenantLabel, tenantUrl } from "../../lib/tenant";
 import { useScope } from "../../scope/ScopeContext";
 import { MCP_THRESHOLDS } from "./status";
 import { useMcpHealth, type McpKpis, type McpAlert } from "./useMcpHealth";
 import { McpActivityChart } from "./McpActivityChart";
 import { McpToolTable } from "./McpToolTable";
-
-/** Friendly tenant name derived from the deployed origin. Configurable: prod
- * (ual) and nonprod (ualpre) resolve automatically from window.location. */
-const tenantLabel = (): string => {
-  if (typeof window === "undefined") return "Dynatrace";
-  const host = window.location.hostname;
-  if (host.startsWith("ualpre")) return "United nonprod";
-  if (host.startsWith("ual.")) return "United production";
-  return host;
-};
-
-const tenantUrl = (): string =>
-  typeof window !== "undefined" ? window.location.origin : "#";
 
 /** Compact active-timeframe label for the subtitle. */
 const timeframeLabel = (from: string, to?: string): string => {

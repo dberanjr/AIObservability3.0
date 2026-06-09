@@ -7,6 +7,7 @@ import {
   FilterIcon,
 } from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
+import { DataGapNote } from "../../components/DataGapNote";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
 import { PromptsTable, type PromptView } from "./PromptsTable";
@@ -199,6 +200,14 @@ export const PromptsPage = () => {
           summary={summary}
           filter={filter}
           onFilterChange={setFilter}
+        />
+        <DataGapNote
+          tone="warn"
+          message="Multi-turn conversation grouping is unavailable and prompts often resolve to a single app/agent: no conversation id is emitted, and prompt content is captured on only a small share of spans. Prompts also can't be attributed to an agent because gen_ai.agent.name isn't set on LLM spans."
+          attributes={["gen_ai.conversation.id", "gen_ai.prompt.0.content (sparse)", "gen_ai.agent.name (on LLM spans)"]}
+          bestPractice="Emit a stable gen_ai.conversation.id per dialogue, raise prompt/response content capture coverage (behind privacy controls), and propagate trace context / agent name to LLM spans. See INSTRUMENTATION-REQUIREMENTS.md P1.1 and P2.6."
+          href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
+          hrefLabel="OTel GenAI spans"
         />
         <PromptQualityAnalytics quality={quality} />
 
