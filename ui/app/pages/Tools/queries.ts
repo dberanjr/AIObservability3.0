@@ -78,12 +78,15 @@ ${globalFilterClauses(filters)}
     p90_ns = percentile(duration, 90),
     p99_ns = percentile(duration, 99),
     errors = sum(is_error),
+    // Real MCP server only (null in this tenant). Previously this was set to
+    // the agent name, which made inferToolCategory bucket EVERY discovered
+    // tool as "MCP" — categories are now derived from the tool name instead.
+    mcp_server = takeFirst(coalesce(mcp.server.name, gen_ai.tool.mcp.server)),
     by: {
       tool = span.name,
       service = gen_ai.agent.name
     }
 | fieldsAdd
-    mcp_server = service,
     calling_agents = array(service),
     retry_total = 0,
     avg_ms = avg_ns / 1000000,

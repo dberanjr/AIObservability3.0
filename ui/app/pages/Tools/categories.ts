@@ -28,14 +28,22 @@ export const CATEGORY_COLOR: Record<ToolCategory, string> = {
 };
 
 const PATTERNS: Array<[RegExp, ToolCategory]> = [
-  [/search|retriev|vector|embed|rag|index/i, "Search"],
-  [/db|sql|query|postgres|mysql|mongo|redis|cassandra/i, "Database"],
-  [/http|fetch|api|rest|graphql|webhook/i, "HTTP"],
-  [/file|read_file|write_file|fs_|filesystem/i, "File"],
-  [/exec|compute|run|code|interpreter|shell|bash/i, "Compute"],
+// First match wins, so list more specific families first. Tuned against real
+// tenant span names (predict_load_factor, search_aims_issues,
+// execute_athena_query_endpoint, agent_graph_execution, websocket_endpoint, …).
+  [/search|retriev|vector|embed|\brag\b|\bindex\b|lookup|knowledge|\bkb[_.]|semantic|research|similar/i, "Search"],
+  [/\bsql\b|\bdb\b|database|query|postgres|mysql|mongo|redis|cassandra|athena|databricks|dynamo|snowflake|select/i, "Database"],
+  [/http|fetch|\bapi\b|\brest\b|graphql|webhook|endpoint|websocket|\bgrpc\b|passthrough|request|\burl\b/i, "HTTP"],
+  [/\bfile\b|read_file|write_file|fs_|filesystem|\bs3\b|upload|download|blob|storage/i, "File"],
+  [/exec|compute|\brun\b|\bcode\b|interpreter|shell|bash|predict|infer|generate|graph|process|classif|enhance|calculat|\bnode\b|validat|supervisor|hook/i, "Compute"],
   [/mcp/i, "MCP"],
 ];
 
+/**
+ * Classify a tool. A REAL MCP server (mcpServer) means MCP. Otherwise the tool
+ * name decides the family — a synthesized server is intentionally NOT treated
+ * as MCP (see buildDiscoveredToolsQuery).
+ */
 export const inferToolCategory = (
   toolName?: string | null,
   mcpServer?: string | null,
