@@ -17,7 +17,6 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
 } from "@dynatrace/strato-icons";
-import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
 import type { SectionIconKey } from "./catalog";
 import type { AttrResult, SectionResult } from "./useAttributeAudit";
@@ -257,24 +256,36 @@ export const SectionCard = ({ result, collapsed, onToggle, onAttrClick }: Sectio
                 <Icon size={18} />
               </div>
               <Flex flexDirection="column" gap={2} style={{ minWidth: 0 }}>
-                <Flex alignItems="center" gap={6}>
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      color: "var(--text-4)",
-                    }}
-                  >
-                    {`SECTION ${section.number}`}
-                  </Text>
-                  <InfoTooltip text={section.blurb} />
-                </Flex>
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    color: "var(--text-4)",
+                  }}
+                >
+                  {`SECTION ${section.number}`}
+                </Text>
                 <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
                   {section.short}
                 </Heading>
               </Flex>
             </Flex>
+
+            {/* Section description inline in the header's empty space (replaces
+                the old hover popup that covered the tiles below). */}
+            <Text
+              style={{
+                flex: 1,
+                minWidth: 220,
+                fontSize: 11,
+                color: "var(--text-3)",
+                lineHeight: 1.4,
+                alignSelf: "center",
+              }}
+            >
+              {section.blurb}
+            </Text>
 
             <Flex flexDirection="column" alignItems="flex-end" gap={4}>
               <Flex alignItems="center" gap={8}>
