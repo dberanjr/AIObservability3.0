@@ -87,6 +87,7 @@ export const SidePanels = ({ tools, isLoading }: SidePanelsProps) => {
       value: t.retryRatePct,
       displayValue: fmtPercent(t.retryRatePct, 2),
       secondary: `${t.service} · ${t.retryTotal} retries`,
+      filter: { attribute: "span.name", values: [t.tool], label: `tool ${t.tool}` },
     }));
 
   const slowestP99 = [...tools]
@@ -98,6 +99,7 @@ export const SidePanels = ({ tools, isLoading }: SidePanelsProps) => {
       value: t.p99Ms,
       displayValue: fmtMs(t.p99Ms),
       secondary: `${t.service} · ${t.category}`,
+      filter: { attribute: "span.name", values: [t.tool], label: `tool ${t.tool}` },
     }));
 
   return (

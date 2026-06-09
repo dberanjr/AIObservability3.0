@@ -2,10 +2,13 @@ import React, { useMemo } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import {
+  ZONE_CALL_THRESHOLD,
   ZONE_COLOR,
   ZONE_DESCRIPTION,
   ZONE_LABEL,
+  ZONE_LATENCY_THRESHOLD_MS,
   type Tool,
   type ToolZone,
 } from "./useTools";
@@ -107,9 +110,14 @@ export const ToolHealthByZone = ({
       <Flex flexDirection="column" gap={12}>
         <Flex alignItems="baseline" justifyContent="space-between">
           <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Tool health by zone
-            </Heading>
+            <Flex alignItems="center" gap={6}>
+              <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+                Tool health by zone
+              </Heading>
+              <InfoTooltip
+                text={`Zones split tools by volume and p90 tail latency. High volume = more than ${ZONE_CALL_THRESHOLD.toLocaleString()} calls in the window; slow = p90 latency over ${ZONE_LATENCY_THRESHOLD_MS / 1000}s. Hot spot = high volume AND slow (the biggest latency wins); Bottleneck = slow but low volume; Healthy = fast and high volume; Quiet = fast and low volume.`}
+              />
+            </Flex>
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
               Click a zone to filter the scatter chart and table below
             </Text>
