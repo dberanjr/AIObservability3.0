@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
+import { dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -22,7 +22,7 @@ ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name)
 | dedup {span.id}
 | fieldsAdd
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
+    ${logicalErrorField()},
     retries = coalesce(toLong(gen_ai.tool.retry_count), 0),
     mcp_server = coalesce(gen_ai.tool.mcp.server, mcp.server.name)
 | summarize
@@ -71,7 +71,7 @@ ${globalFilterClauses(filters)}
 | filter span.name != gen_ai.agent.name
 | dedup {span.id}
 | fieldsAdd
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0)
+    ${logicalErrorField()}
 | summarize
     calls = count(),
     avg_ns = avg(duration),

@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
+import { DataGapNote } from "../../components/DataGapNote";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
 import { useModels } from "../Models/useModels";
+import { LatencyTierPanel } from "../Agents/LatencyTierPanel";
 import { ActivityHistogramPanel } from "./ActivityHistogramPanel";
 import { AgentCostBarList } from "./AgentCostBarList";
 import { PlatformHealthCard } from "./PlatformHealthCard";
@@ -61,7 +63,15 @@ export const PulsePage = () => {
       >
         {firstError && <ErrorBanner error={firstError} />}
         <SummaryTilesRow summary={summary} />
+        <DataGapNote
+          message="Error rate now includes logical failures (refusals / content-filter), not just HTTP/exception errors. Quality scoring and TTFT are still unavailable — no evaluation scores or time-to-first-token attributes are emitted — and spend per session/user can't be computed without identity + proxy trace propagation."
+          attributes={["gen_ai.evaluation.score", "gen_ai.usage.time_to_first_token", "session.id", "gen_ai.user"]}
+          bestPractice="Emit evaluation scores (P1.2), a TTFT attribute (P1.5), session/user identity (P1.1), and propagate trace context across the LLM proxy (P0.1). See INSTRUMENTATION-REQUIREMENTS.md."
+          href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/"
+          hrefLabel="OTel GenAI"
+        />
         <TokenEfficiencyTiles />
+        <LatencyTierPanel />
         <TopFindingsStrip
           findings={anomalies}
           isLoading={anomaliesLoading}

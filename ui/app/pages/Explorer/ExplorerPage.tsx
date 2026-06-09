@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { useSearchParams } from "react-router-dom";
 import { ErrorBanner } from "../../components/ErrorState";
+import { DataGapNote } from "../../components/DataGapNote";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import {
   DEFAULT_FINDING_INTENTS,
@@ -110,6 +111,13 @@ export const ExplorerPage = () => {
           <ExplorerTiles
             summary={summary}
             isLoading={aiServices.isLoading}
+          />
+          <DataGapNote
+            message="An “AI Service” here is any monitored service emitting gen_ai.* spans (resolved from service.name / dt.entity.service). Framework attribution (LangGraph, AgentExecutor, RunnableSequence…) is inferred from span names/kinds because no explicit framework tag is emitted, so it can be approximate."
+            attributes={["gen_ai.framework"]}
+            bestPractice="Emit a stable gen_ai.framework tag on agent spans so framework attribution and the framework filter are exact rather than heuristic. See INSTRUMENTATION-REQUIREMENTS.md P2.4."
+            href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/"
+            hrefLabel="OTel GenAI"
           />
           <ExplorerFindings
             findings={findings}

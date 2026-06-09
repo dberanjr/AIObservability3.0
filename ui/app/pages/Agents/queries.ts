@@ -1,4 +1,4 @@
-import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
+import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -29,7 +29,7 @@ ${globalFilterClauses(filters)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
-    is_error = if(isNotNull(exception.type) or toLong(coalesce(http.response.status_code, 0)) >= 400, 1, else: 0),
+    ${logicalErrorField()},
     lname = lower(span.name),
     ttft_ms = if(isNotNull(gen_ai.usage.time_to_first_token), toDouble(gen_ai.usage.time_to_first_token), else: null)
 | fieldsAdd
@@ -195,6 +195,49 @@ ${globalFilterClauses(filters)}
     p95_ms = percentile(duration, 95) / 1000000,
     by: { tier }
 | sort total_ms desc
+`.trim();
+
+/**
+ * Agent loop detection (best-effort, from LangGraph execution attributes).
+ *
+ * A "run" is one graph execution (trace.id + agent). Within a run we count how
+ * many node executions happened vs how many distinct nodes — a high ratio
+ * means nodes are being revisited (a loop) — and the max step index reached
+ * (deep iteration / potential non-termination). A run is flagged "looping"
+ * when it revisits nodes heavily OR reaches a high step count.
+ *
+ * Heuristic: sharper with gen_ai.agent.iteration / max_iterations and a stable
+ * thread_id (currently absent on this tenant) — see the data-gap note.
+ */
+export const LOOP_REPEAT_RATIO = 3;
+export const LOOP_MAX_STEP = 25;
+
+export const buildAgentLoopsQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  filters?: GlobalFilters,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
+| filter isNotNull(traceloop.association.properties.langgraph_node)
+| dedup {span.id}
+| summarize
+    node_execs = count(),
+    max_step = max(toLong(coalesce(traceloop.association.properties.langgraph_step, 0))),
+    distinct_nodes = countDistinct(traceloop.association.properties.langgraph_node),
+    by: { trace.id, agent = gen_ai.agent.name }
+| fieldsAdd repeat_ratio = if(distinct_nodes > 0, toDouble(node_execs) / toDouble(distinct_nodes), else: 0.0)
+| summarize
+    runs = count(),
+    looping_runs = countIf(repeat_ratio >= ${LOOP_REPEAT_RATIO}.0 or max_step >= ${LOOP_MAX_STEP}),
+    max_repeat = round(max(repeat_ratio), decimals: 1),
+    max_steps = max(max_step),
+    avg_nodes_per_run = round(avg(toDouble(node_execs)), decimals: 1),
+    by: { agent = coalesce(agent, "unattributed") }
+| fieldsAdd loop_rate_pct = round(if(runs > 0, toDouble(looping_runs) / toDouble(runs) * 100, else: 0.0), decimals: 1)
+| sort looping_runs desc, max_repeat desc
+| limit 20
 `.trim();
 
 /** Quality eval coverage and aggregate scores. */

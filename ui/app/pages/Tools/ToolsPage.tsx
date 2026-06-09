@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { ErrorBanner } from "../../components/ErrorState";
+import { DataGapNote } from "../../components/DataGapNote";
 import { CallsByCategoryPanel } from "./CallsByCategoryPanel";
 import { SidePanels } from "./SidePanels";
 import { ToolHealthByZone } from "./ToolHealthByZone";
@@ -57,6 +58,17 @@ export const ToolsPage = () => {
             : " — change in Settings → Page configuration."}
         </Text>
       </Flex>
+
+      <DataGapNote
+        tone="warn"
+        variant="banner"
+        message="Per-tool token & cost and native MCP analytics (method, session, server, error flag) are unavailable in this scope — these spans don't carry MCP semantic-convention attributes, and token usage lives on separate LLM proxy spans."
+        attributes={["mcp.method.name", "mcp.server.name", "mcp.is_error", "gen_ai.tool.name", "gen_ai.tool.call.id"]}
+        bestPractice="Emit OpenTelemetry MCP attributes (mcp.*) on MCP client/server spans and gen_ai.tool.* on tool-call spans, and propagate trace context so a tool span shares its trace with the LLM spans it triggers. Then per-tool cost, error rate, and session stability become directly queryable."
+        href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/mcp/"
+        hrefLabel="OTel MCP spec"
+      />
+
       <ToolsTilesRow tools={tools} isLoading={isLoading} />
 
       <div

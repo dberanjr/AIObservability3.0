@@ -228,6 +228,43 @@ ${toBlock(darkSurfaces)}
 :root[data-aiobs-accent="gray75"]     { --blue: ${brand.gray75};     --blue-pale: ${brand.black}; }
 :root[data-aiobs-accent="black"]      { --blue: ${brand.black};      --blue-pale: ${brand.gray75}; }
 
+/* ---- Active top-nav tab highlight ----
+ * The Header tags the current tab with .aiobs-nav-active (plus isSelected /
+ * aria-current). Strato's own selected styling is subtle under our brand
+ * theme, so we add an unmistakable highlight: brand-tinted pill, bold accent
+ * text, and an underline bar. !important wins over Strato's Button classes. */
+.aiobs-nav-active,
+.aiobs-nav-active:hover,
+.aiobs-nav-active:focus {
+  color: var(--blue) !important;
+  font-weight: 700 !important;
+  background: color-mix(in oklab, var(--blue) 14%, transparent) !important;
+  border-radius: 8px !important;
+  box-shadow: inset 0 -2px 0 0 var(--blue) !important;
+}
+/* Keep any icon/text descendants in the accent color too. */
+.aiobs-nav-active * {
+  color: var(--blue) !important;
+}
+
+/* AAA attribute tiles: lift slightly on hover to signal they're clickable. */
+.aaa-attr-cell:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.aaa-attr-cell:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+/* AAA table-of-contents rows in the hero: highlight on hover. */
+.aaa-toc-row:hover {
+  background: color-mix(in oklab, var(--blue) 10%, transparent);
+}
+.aaa-toc-row:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
 /* Click-to-filter affordance: subtle highlight + boxed underline on hover. */
 .aiobs-filter-trigger:hover {
   background: color-mix(in oklab, var(--blue) 14%, transparent);
