@@ -63,8 +63,8 @@ export const LOGICAL_ERROR_EXPR = `(
     or toLong(coalesce(http.response.status_code, 0)) >= 400
     or isNotNull(exception.type)
     or isNotNull(gen_ai.error.code)
-    or contains(lower(toString(coalesce(gen_ai.response.finish_reasons, ""))), "refusal")
-    or contains(lower(toString(coalesce(gen_ai.response.finish_reasons, ""))), "content_filter")
+    or contains(lower(toString(gen_ai.response.finish_reasons)),"refusal")
+    or contains(lower(toString(gen_ai.response.finish_reasons)),"content_filter")
   )`;
 
 /**

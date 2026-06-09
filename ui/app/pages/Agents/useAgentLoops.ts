@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
-import { useSampling, extrapolate } from "../../scope/SamplingContext";
 import { toNum } from "../../data/format";
 import { buildAgentLoopsQuery, LOOP_REPEAT_RATIO, LOOP_MAX_STEP } from "./queries";
 
@@ -46,19 +45,19 @@ export { LOOP_REPEAT_RATIO, LOOP_MAX_STEP };
 
 export const useAgentLoops = (): UseAgentLoopsResult => {
   const { scope } = useScope();
-  const { samplingRatio } = useSampling();
   const res = useScopedDql<LoopRecord>(buildAgentLoopsQuery(null, scope.timeframe), {
     staleTime: 60_000,
   });
 
   return useMemo<UseAgentLoopsResult>(() => {
-    const ex = (v: unknown): number =>
-      Math.round(extrapolate(num(v), samplingRatio) ?? 0);
-
+    // `runs` / `looping_runs` are distinct-trace group counts, NOT span counts,
+    // so they are NOT multiplied by the span sampling ratio (group count
+    // doesn't scale linearly with span sampling). Shown as observed; the
+    // loop-rate percentage is sampling-invariant.
     const rows: AgentLoopRow[] = (res.data?.records ?? []).map((r) => ({
       agent: r.agent ?? "unattributed",
-      runs: ex(r.runs),
-      loopingRuns: ex(r.looping_runs),
+      runs: num(r.runs),
+      loopingRuns: num(r.looping_runs),
       loopRatePct: num(r.loop_rate_pct),
       maxRepeat: num(r.max_repeat),
       maxSteps: num(r.max_steps),
@@ -73,5 +72,5 @@ export const useAgentLoops = (): UseAgentLoopsResult => {
       isEmpty: !res.isLoading && rows.length === 0,
       error: res.error ?? undefined,
     };
-  }, [res.data, res.isLoading, res.error, samplingRatio]);
+  }, [res.data, res.isLoading, res.error]);
 };

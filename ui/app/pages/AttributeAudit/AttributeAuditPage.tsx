@@ -264,27 +264,30 @@ export const AttributeAuditPage = () => {
                   <CoverageRing pct={overview.coveragePct} />
                 )}
 
+                {(() => {
+                  // While the first section queries are still loading, the
+                  // coverage counts are all-zero and would misleadingly read
+                  // "0 complete / 10 gaps". Show an em-dash until data lands.
+                  const loadingCounts = audit.isLoading && overview.presentTotal === 0;
+                  const gaps = overview.sectionCount - overview.sectionsFullyCovered;
+                  return (
                 <Flex flexDirection="column" gap={12} style={{ flex: "0 0 auto" }}>
                   <Flex gap={24} style={{ flexWrap: "wrap" }}>
                     <HeroStat
                       label="Attributes present"
-                      value={`${overview.presentTotal} / ${overview.total}`}
+                      value={loadingCounts ? "—" : `${overview.presentTotal} / ${overview.total}`}
                       color={coverageTone(overview.coveragePct)}
                       info="Distinct attributes emitted on at least one span, across all 10 categories, in the active window."
                     />
                     <HeroStat
                       label="Categories complete"
-                      value={`${overview.sectionsFullyCovered} / ${overview.sectionCount}`}
+                      value={loadingCounts ? "—" : `${overview.sectionsFullyCovered} / ${overview.sectionCount}`}
                       info="Categories where every audited attribute is present."
                     />
                     <HeroStat
                       label="Categories with gaps"
-                      value={`${overview.sectionCount - overview.sectionsFullyCovered}`}
-                      color={
-                        overview.sectionCount - overview.sectionsFullyCovered > 0
-                          ? "var(--amber)"
-                          : "var(--green-2)"
-                      }
+                      value={loadingCounts ? "—" : `${gaps}`}
+                      color={gaps > 0 ? "var(--amber)" : "var(--green-2)"}
                       info="Categories missing at least one attribute."
                     />
                     <HeroStat
@@ -294,6 +297,8 @@ export const AttributeAuditPage = () => {
                     />
                   </Flex>
                 </Flex>
+                  );
+                })()}
 
                 <SectionOverview sections={audit.sections} onJump={jumpToSection} />
               </Flex>
