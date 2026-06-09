@@ -99,8 +99,8 @@ interface IdRecord {
 }
 interface EdgeRecord {
   upstream?: string;
-  target?: string;
-  source?: string;
+  target_id?: string;
+  source_id?: string;
   downstream?: string;
   n?: number;
 }
@@ -206,17 +206,20 @@ export const useAggregateTopology = (): AggTopologyResult => {
       addEdge(model, provider, calls);
     }
 
-    // Upstream callers → AI service.
+    // Upstream callers → AI service (service resolved by entity id so it maps
+    // onto the co-occurrence service node and the graph stays connected).
     for (const r of upstreamRes.data?.records ?? []) {
-      if (!r.upstream || !r.target) continue;
+      const svcName = r.target_id ? idToName.get(r.target_id) : undefined;
+      if (!r.upstream || !svcName) continue;
       const up = addNode("upstream", r.upstream, 0, 0);
-      const svc = addNode("service", r.target, 0, 0);
+      const svc = addNode("service", svcName, 0, 0);
       addEdge(up, svc, num(r.n));
     }
     // AI service → downstream dependency.
     for (const r of downstreamRes.data?.records ?? []) {
-      if (!r.source || !r.downstream) continue;
-      const svc = addNode("service", r.source, 0, 0);
+      const svcName = r.source_id ? idToName.get(r.source_id) : undefined;
+      if (!svcName || !r.downstream) continue;
+      const svc = addNode("service", svcName, 0, 0);
       const dn = addNode("downstream", r.downstream, 0, 0);
       addEdge(svc, dn, num(r.n));
     }

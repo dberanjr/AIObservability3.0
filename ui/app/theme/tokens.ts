@@ -247,6 +247,18 @@ ${toBlock(darkSurfaces)}
   color: #ffffff !important;
 }
 
+/* Topology graph canvas: user-resizable height. Height lives on the class (not
+   inline) so React re-renders don't reset the user's drag; the browser writes
+   an inline height when resized, which wins. */
+.aiobs-topology-resize {
+  height: 680px;
+  min-height: 360px;
+  max-height: 1400px;
+  resize: vertical;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
 /* AAA attribute tiles: lift slightly on hover to signal they're clickable. */
 .aaa-attr-cell:hover {
   box-shadow: var(--shadow);

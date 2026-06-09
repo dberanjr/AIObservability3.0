@@ -40,6 +40,9 @@ export interface NodeSeries {
   calls: number[];
   p90Ms: number[];
   intervalLabel: string;
+  /** First-bucket epoch-ms and bucket size, for chart brush-zoom. */
+  startMs: number;
+  intervalMs: number;
 }
 export interface UseNodeDetailResult {
   red: NodeRed;
@@ -95,11 +98,23 @@ export const useTopologyNodeDetail = (node: AggNode | null): UseNodeDetailResult
     const srow = seriesRes.data?.records?.[0];
     const callsArr = toNumArr(srow?.calls).map((v) => Math.round(extrapolate(v, samplingRatio) ?? 0));
     const p90Ms = toNumArr(srow?.p90).map((ns) => ns / 1_000_000);
-    const labels = buildLabels(Math.max(callsArr.length, p90Ms.length), srow, intervalSec);
+    const len = Math.max(callsArr.length, p90Ms.length);
+    const labels = buildLabels(len, srow, intervalSec);
+    const intervalMs = intervalSec * 1000;
+    const startMs = srow?.timeframe?.start
+      ? Date.parse(srow.timeframe.start)
+      : Date.now() - len * intervalMs;
 
     return {
       red,
-      series: { labels, calls: callsArr, p90Ms, intervalLabel: intervalLabel(intervalSec) },
+      series: {
+        labels,
+        calls: callsArr,
+        p90Ms,
+        intervalLabel: intervalLabel(intervalSec),
+        startMs: Number.isFinite(startMs) ? startMs : Date.now() - len * intervalMs,
+        intervalMs,
+      },
       isLoading: redRes.isLoading || seriesRes.isLoading,
     };
   }, [redRes.data, redRes.isLoading, seriesRes.data, seriesRes.isLoading, samplingRatio, intervalSec]);
