@@ -4,10 +4,11 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { ExternalLinkIcon, FilterIcon, XmarkIcon } from "@dynatrace/strato-icons";
-import { AreaChart, type AxisTick } from "../../components/charts/AreaChart";
+import { AreaChart, type AxisTick, type ChartTimeDomain } from "../../components/charts/AreaChart";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
 import { openInTraces, openInServices } from "../../lib/intents";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+import { useScope } from "../../scope/ScopeContext";
 import { TIER_COLOR, TIER_LABEL, type AggNode, type AggTier } from "./useAggregateTopology";
 import { useTopologyNodeDetail } from "./useTopologyNodeDetail";
 
@@ -50,6 +51,16 @@ export interface TopologyNodePanelProps {
 export const TopologyNodePanel = ({ node, onClose, onIsolate, isolated }: TopologyNodePanelProps) => {
   const detail = useTopologyNodeDetail(node);
   const { upsertCondition } = useGlobalFilters();
+  const { setTimeframe } = useScope();
+
+  const xDomain = useMemo<ChartTimeDomain | undefined>(() => {
+    const len = detail.series.calls.length;
+    if (len <= 1) return undefined;
+    return {
+      startMs: detail.series.startMs,
+      endMs: detail.series.startMs + len * detail.series.intervalMs,
+    };
+  }, [detail.series.calls.length, detail.series.startMs, detail.series.intervalMs]);
 
   const axisTicks = useMemo<AxisTick[]>(() => {
     const len = detail.series.labels.length;
@@ -106,7 +117,7 @@ export const TopologyNodePanel = ({ node, onClose, onIsolate, isolated }: Topolo
         ) : (
           <Flex flexDirection="column" gap={4}>
             <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-              Call volume (area) &amp; p90 latency (line) · {detail.series.intervalLabel} buckets
+              Call volume (area) &amp; p90 latency (line) · {detail.series.intervalLabel} buckets · drag to zoom the timeframe
             </Text>
             <AreaChart
               height={200}
@@ -114,6 +125,8 @@ export const TopologyNodePanel = ({ node, onClose, onIsolate, isolated }: Topolo
               formatRight={(n) => fmtMs(n)}
               xLabels={detail.series.labels}
               axisTicks={axisTicks}
+              xDomain={xDomain}
+              onBrushSelect={(range) => setTimeframe(range)}
               series={[
                 { label: "Calls", color: "var(--blue)", values: detail.series.calls, axis: "left" },
                 { label: "p90 latency", color: "var(--purple-2)", values: detail.series.p90Ms, axis: "right" },

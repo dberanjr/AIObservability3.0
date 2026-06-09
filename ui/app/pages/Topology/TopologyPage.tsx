@@ -145,18 +145,20 @@ export const TopologyPage = () => {
             {topo.isLoading && topo.nodes.length === 0 ? (
               <Skeleton style={{ height: 680, borderRadius: 10 }} />
             ) : (
-              <AggregateTopologyGraph
-                nodes={topo.nodes}
-                edges={topo.edges}
-                maxCalls={topo.maxCalls}
-                layout={layout}
-                search={search}
-                hiddenTiers={hiddenTiers}
-                onSelectNode={setSelected}
-                selectedId={selected?.id ?? null}
-                isolateId={isolateId}
-                affectedNodeIds={topo.affectedNodeIds}
-              />
+              <div className="aiobs-topology-resize" title="Drag the bottom edge to resize">
+                <AggregateTopologyGraph
+                  nodes={topo.nodes}
+                  edges={topo.edges}
+                  maxCalls={topo.maxCalls}
+                  layout={layout}
+                  search={search}
+                  hiddenTiers={hiddenTiers}
+                  onSelectNode={setSelected}
+                  selectedId={selected?.id ?? null}
+                  isolateId={isolateId}
+                  affectedNodeIds={topo.affectedNodeIds}
+                />
+              </div>
             )}
 
             {/* Selected-node detail panel: RED metrics, volume/latency chart, actions. */}

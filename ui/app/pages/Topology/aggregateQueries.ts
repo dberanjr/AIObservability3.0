@@ -118,13 +118,15 @@ ${scopeFilterClause(serviceIds)}
  */
 export const buildUpstreamEdgesQuery = (aiServiceIds: string[]): string => {
   if (aiServiceIds.length === 0) return "";
+  // Return the AI-service entity ID (target_id), not its Smartscape name, so
+  // the caller can map it to the SAME node label the co-occurrence query uses
+  // (entityName) — otherwise upstream edges point at an orphan service node.
   return `
 smartscapeEdges type:"calls"
 | filter in(target_id, array(${dqlIdArray(aiServiceIds)}))
 | join [ smartscapeNodes type:"SERVICE" | fields source_id = id, upstream = name ], kind: inner, on: { source_id }, prefix: "s."
-| join [ smartscapeNodes type:"SERVICE" | fields target_id = id, target_name = name ], kind: inner, on: { target_id }, prefix: "t."
-| filter isNotNull(\`s.upstream\`) and isNotNull(\`t.target_name\`)
-| summarize n = count(), by: { upstream = \`s.upstream\`, target = \`t.target_name\` }
+| filter isNotNull(\`s.upstream\`)
+| summarize n = count(), by: { upstream = \`s.upstream\`, target_id }
 | sort n desc
 | limit 60
 `.trim();
@@ -136,13 +138,14 @@ smartscapeEdges type:"calls"
  */
 export const buildDownstreamEdgesQuery = (aiServiceIds: string[]): string => {
   if (aiServiceIds.length === 0) return "";
+  // Return the AI-service entity ID (source_id) so the caller maps it to the
+  // co-occurrence service node label (entityName), keeping the graph connected.
   return `
 smartscapeEdges type:"calls"
 | filter in(source_id, array(${dqlIdArray(aiServiceIds)}))
-| join [ smartscapeNodes type:"SERVICE" | fields source_id = id, source_name = name ], kind: inner, on: { source_id }, prefix: "s."
 | join [ smartscapeNodes type:"SERVICE" | fields target_id = id, downstream = name ], kind: inner, on: { target_id }, prefix: "t."
-| filter isNotNull(\`s.source_name\`) and isNotNull(\`t.downstream\`)
-| summarize n = count(), by: { source = \`s.source_name\`, downstream = \`t.downstream\` }
+| filter isNotNull(\`t.downstream\`)
+| summarize n = count(), by: { downstream = \`t.downstream\`, source_id }
 | sort n desc
 | limit 60
 `.trim();

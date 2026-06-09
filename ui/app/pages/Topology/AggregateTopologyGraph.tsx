@@ -143,7 +143,6 @@ export interface AggregateTopologyGraphProps {
   isolateId?: string | null;
   /** Node IDs with an active Davis problem (red dashed ring). */
   affectedNodeIds?: Set<string>;
-  height?: number;
 }
 
 export const AggregateTopologyGraph = ({
@@ -157,7 +156,6 @@ export const AggregateTopologyGraph = ({
   selectedId,
   isolateId,
   affectedNodeIds,
-  height = 680,
 }: AggregateTopologyGraphProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
@@ -213,7 +211,8 @@ export const AggregateTopologyGraph = ({
 
   const onWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    // Gentle per-event zoom so a single wheel/trackpad flick doesn't jump.
+    const factor = e.deltaY < 0 ? 1.05 : 1 / 1.05;
     setView((v) => ({ ...v, k: Math.max(0.3, Math.min(4, v.k * factor)) }));
   };
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -282,7 +281,7 @@ export const AggregateTopologyGraph = ({
   const hovered = hover ? placedById.get(hover) : null;
 
   return (
-    <div style={{ position: "relative", width: "100%", height, overflow: "hidden", borderRadius: 10, background: "var(--surface)" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", borderRadius: 10, background: "var(--surface)" }}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -347,8 +346,8 @@ export const AggregateTopologyGraph = ({
         </g>
       </svg>
 
-      {/* zoom controls */}
-      <Flex gap={4} style={{ position: "absolute", bottom: 10, right: 10 }}>
+      {/* zoom controls — bottom-left so they don't collide with the resize grip */}
+      <Flex gap={4} style={{ position: "absolute", bottom: 10, left: 10 }}>
         {[["+", () => setView((v) => ({ ...v, k: Math.min(4, v.k * 1.2) }))],
           ["−", () => setView((v) => ({ ...v, k: Math.max(0.3, v.k / 1.2) }))],
           ["⤢", resetView],
