@@ -99,12 +99,19 @@ export const buildToolCountQuery = (
   filters?: GlobalFilters,
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
+  // Count both real tool spans (gen_ai.tool.name) and "discovered" tools
+  // (internal/client function spans under an agent that aren't LLM calls or the
+  // agent root) — the same population the Tools page lists. On tenants that
+  // don't emit gen_ai.tool.name this is what keeps the status line from
+  // reading "0 tools". Approximate under the scan cap (high-volume compute
+  // tools dominate the scan); the Tools page is the authoritative view.
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 500
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
-| filter isNotNull(gen_ai.tool.name)
-| summarize tools = countDistinct(gen_ai.tool.name)
+| filter isNotNull(gen_ai.tool.name) or (isNotNull(gen_ai.agent.name) and (span.kind == "internal" or span.kind == "client") and isNull(gen_ai.provider.name) and isNull(gen_ai.request.model) and span.name != gen_ai.agent.name)
+| fieldsAdd tname = coalesce(gen_ai.tool.name, span.name)
+| summarize tools = countDistinct(tname)
 `.trim();
 };
 

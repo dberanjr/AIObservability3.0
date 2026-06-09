@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
+import { FilterTrigger } from "../../components/FilterTrigger";
 import {
   ZONE_LATENCY_THRESHOLD_MS,
   type Tool,
@@ -13,6 +14,8 @@ interface TileProps {
   value: string;
   sub?: string;
   emphasis?: "default" | "amber" | "red";
+  /** When set, the tile value becomes click-to-filter on span.name. */
+  filterTool?: string;
 }
 
 const COLOR: Record<NonNullable<TileProps["emphasis"]>, string> = {
@@ -21,38 +24,49 @@ const COLOR: Record<NonNullable<TileProps["emphasis"]>, string> = {
   red: "var(--red)",
 };
 
-const Tile = ({ label, value, sub, emphasis = "default" }: TileProps) => (
-  <Surface elevation="raised" padding={12}>
-    <Flex flexDirection="column" gap={4}>
-      <Text
-        style={{
-          fontSize: 10.5,
-          fontWeight: 600,
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          color: "var(--text-3)",
-          minHeight: 28,
-          whiteSpace: "normal",
-          lineHeight: 1.2,
-        }}
-      >
-        {label}
-      </Text>
-      <Text
-        style={{
-          fontSize: 22,
-          fontWeight: 600,
-          color: COLOR[emphasis],
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </Text>
-      {sub && <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>}
-    </Flex>
-  </Surface>
-);
+const Tile = ({ label, value, sub, emphasis = "default", filterTool }: TileProps) => {
+  const valueEl = (
+    <Text
+      style={{
+        fontSize: 22,
+        fontWeight: 600,
+        color: COLOR[emphasis],
+        fontVariantNumeric: "tabular-nums",
+        lineHeight: 1,
+      }}
+    >
+      {value}
+    </Text>
+  );
+  return (
+    <Surface elevation="raised" padding={12}>
+      <Flex flexDirection="column" gap={4}>
+        <Text
+          style={{
+            fontSize: 10.5,
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            color: "var(--text-3)",
+            minHeight: 28,
+            whiteSpace: "normal",
+            lineHeight: 1.2,
+          }}
+        >
+          {label}
+        </Text>
+        {filterTool ? (
+          <FilterTrigger attribute="span.name" value={filterTool} label={`tool ${filterTool}`}>
+            {valueEl}
+          </FilterTrigger>
+        ) : (
+          valueEl
+        )}
+        {sub && <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>}
+      </Flex>
+    </Surface>
+  );
+};
 
 export interface ToolsTilesRowProps {
   tools: Tool[];
@@ -87,11 +101,15 @@ export const ToolsTilesRow = ({ tools, isLoading }: ToolsTilesRowProps) => {
   ).size;
   const totalCalls = tools.reduce((acc, t) => acc + t.calls, 0);
   const slowTools = tools.filter(
-    (t) => t.avgMs > ZONE_LATENCY_THRESHOLD_MS,
+    (t) => t.p90Ms > ZONE_LATENCY_THRESHOLD_MS,
   ).length;
   const totalRetries = tools.reduce((acc, t) => acc + t.retryTotal, 0);
   const avgRetryPct = totalCalls > 0 ? (totalRetries / totalCalls) * 100 : 0;
-  const slowestP99 = tools.reduce((acc, t) => Math.max(acc, t.p99Ms), 0);
+  const slowestTool = tools.reduce<Tool | null>(
+    (acc, t) => (t.p99Ms > (acc?.p99Ms ?? -1) ? t : acc),
+    null,
+  );
+  const slowestP99 = slowestTool?.p99Ms ?? 0;
 
   return (
     <div
@@ -107,7 +125,7 @@ export const ToolsTilesRow = ({ tools, isLoading }: ToolsTilesRowProps) => {
       <Tile
         label="Slow tools"
         value={fmtCount(slowTools)}
-        sub={`avg > ${ZONE_LATENCY_THRESHOLD_MS / 1000}s`}
+        sub={`p90 > ${ZONE_LATENCY_THRESHOLD_MS / 1000}s`}
         emphasis={slowTools > 0 ? "amber" : "default"}
       />
       <Tile
@@ -118,7 +136,9 @@ export const ToolsTilesRow = ({ tools, isLoading }: ToolsTilesRowProps) => {
       <Tile
         label="Slowest P99"
         value={fmtMs(slowestP99)}
+        sub={slowestTool ? slowestTool.tool : undefined}
         emphasis={slowestP99 > ZONE_LATENCY_THRESHOLD_MS ? "amber" : "default"}
+        filterTool={slowestTool?.tool}
       />
     </div>
   );

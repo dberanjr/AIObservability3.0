@@ -58,6 +58,13 @@ export const ZONE_COLOR: Record<ToolZone, string> = {
   healthy: "var(--green-2)",
 };
 
+/**
+ * Zone thresholds. A tool is "high volume" above ZONE_CALL_THRESHOLD calls in
+ * the window, and "slow" when its p90 latency exceeds ZONE_LATENCY_THRESHOLD_MS.
+ * Slow is classified on the p90 TAIL (not the mean): the dominant high-volume
+ * tools are fast on average, so a mean-based rule produced zero Hot spots even
+ * when those tools had very slow tail calls.
+ */
 export const ZONE_CALL_THRESHOLD = 2000;
 export const ZONE_LATENCY_THRESHOLD_MS = 5000;
 
@@ -79,9 +86,9 @@ export interface Tool {
   zone: ToolZone;
 }
 
-export const zoneFor = (calls: number, avgMs: number): ToolZone => {
+export const zoneFor = (calls: number, p90Ms: number): ToolZone => {
   const high = calls > ZONE_CALL_THRESHOLD;
-  const slow = avgMs > ZONE_LATENCY_THRESHOLD_MS;
+  const slow = p90Ms > ZONE_LATENCY_THRESHOLD_MS;
   if (high && slow) return "hot-spot";
   if (!high && slow) return "bottleneck";
   if (!high && !slow) return "quiet";
@@ -136,7 +143,7 @@ export const useTools = (): UseToolsResult => {
         retryTotal: num(r.retry_total),
         retryRatePct: num(r.retry_rate_pct),
         callingAgents: Array.isArray(r.calling_agents) ? r.calling_agents : [],
-        zone: zoneFor(calls, avgMs),
+        zone: zoneFor(calls, num(r.p90_ms)),
       });
     }
     return {

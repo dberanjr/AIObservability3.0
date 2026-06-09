@@ -44,7 +44,9 @@ export const Header = () => {
               key={item.to}
               as={Link}
               to={{ pathname: item.to, search }}
-              isSelected={active}
+              // Deliberately NOT using isSelected: Strato's selected state draws
+              // an ::after underline we don't want. Our .aiobs-nav-active pill
+              // (solid fill + white text) is the highlight instead.
               aria-current={active ? "page" : undefined}
               className={active ? "aiobs-nav-active" : undefined}
             >

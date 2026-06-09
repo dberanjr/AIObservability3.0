@@ -9,17 +9,36 @@ import { ToolHealthByZone } from "./ToolHealthByZone";
 import { ToolScatterChart } from "./ToolScatterChart";
 import { ToolsTable } from "./ToolsTable";
 import { ToolsTilesRow } from "./ToolsTilesRow";
-import { useTools, type ToolZone } from "./useTools";
+import { ToolDetailModal } from "./ToolDetailModal";
+import { useTools, type Tool, type ToolZone } from "./useTools";
 import { useTweaks } from "../../tweaks/TweaksContext";
+import { usePersistedState } from "../../state/usePersistedState";
 
 export const ToolsPage = () => {
   const { tools, isLoading, error } = useTools();
   const { pageConfig } = useTweaks();
   const [zone, setZone] = useState<ToolZone | null>(null);
+  const [detailTool, setDetailTool] = useState<Tool | null>(null);
+  // Compute-family tools (predict/generate/graph/…) usually dwarf every other
+  // category and flatten the visualization, so they're hidden by default.
+  const [includeCompute, setIncludeCompute] = usePersistedState<boolean>(
+    "ai-obs.tools.include-compute",
+    false,
+  );
 
+  const computeCount = useMemo(
+    () => tools.filter((t) => t.category === "Compute").length,
+    [tools],
+  );
+
+  // Compute filter first (category), then the zone drill filter.
+  const baseTools = useMemo(
+    () => (includeCompute ? tools : tools.filter((t) => t.category !== "Compute")),
+    [tools, includeCompute],
+  );
   const filtered = useMemo(
-    () => (zone ? tools.filter((t) => t.zone === zone) : tools),
-    [tools, zone],
+    () => (zone ? baseTools.filter((t) => t.zone === zone) : baseTools),
+    [baseTools, zone],
   );
 
   const strictEmpty =
@@ -69,28 +88,41 @@ export const ToolsPage = () => {
         hrefLabel="OTel MCP spec"
       />
 
-      <ToolsTilesRow tools={tools} isLoading={isLoading} />
+      {computeCount > 0 && (
+        <Flex alignItems="center" gap={8} justifyContent="flex-end">
+          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+            Compute calls ({computeCount}) skew volume —
+          </Text>
+          <button
+            type="button"
+            onClick={() => setIncludeCompute(!includeCompute)}
+            aria-pressed={includeCompute}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "3px 10px",
+              borderRadius: 999,
+              color: includeCompute ? "var(--blue)" : "var(--text-2)",
+              background: includeCompute
+                ? "color-mix(in oklab, var(--blue) 14%, transparent)"
+                : "var(--surface-3)",
+              border: `1px solid ${includeCompute ? "color-mix(in oklab, var(--blue) 40%, transparent)" : "var(--border)"}`,
+            }}
+          >
+            {includeCompute ? "Included" : "Excluded"}
+          </button>
+        </Flex>
+      )}
 
+      <ToolsTilesRow tools={baseTools} isLoading={isLoading} />
+
+      {/* Bubble chart sits directly left of the Tool-health-by-zone quadrant. */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)",
-          gap: 16,
-        }}
-      >
-        <CallsByCategoryPanel tools={tools} isLoading={isLoading} />
-        <ToolHealthByZone
-          tools={tools}
-          isLoading={isLoading}
-          selectedZone={zone}
-          onSelect={setZone}
-        />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
+          gridTemplateColumns: "minmax(0, 1.45fr) minmax(0, 1fr)",
           gap: 16,
           alignItems: "start",
         }}
@@ -99,7 +131,26 @@ export const ToolsPage = () => {
           tools={filtered}
           isLoading={isLoading}
           highlightZone={zone}
+          onSelectTool={setDetailTool}
         />
+        <ToolHealthByZone
+          tools={baseTools}
+          isLoading={isLoading}
+          selectedZone={zone}
+          onSelect={setZone}
+        />
+      </div>
+
+      {/* Calls-by-category takes the bubble chart's former location. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.45fr) minmax(0, 1fr)",
+          gap: 16,
+          alignItems: "start",
+        }}
+      >
+        <CallsByCategoryPanel tools={baseTools} isLoading={isLoading} />
         <SidePanels tools={filtered} isLoading={isLoading} />
       </div>
 
@@ -107,6 +158,13 @@ export const ToolsPage = () => {
         tools={filtered}
         isLoading={isLoading}
         highlightZone={zone}
+        onSelectTool={setDetailTool}
+      />
+
+      <ToolDetailModal
+        tool={detailTool}
+        show={detailTool !== null}
+        onClose={() => setDetailTool(null)}
       />
     </Flex>
   );

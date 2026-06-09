@@ -3,6 +3,7 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
+import { parseScopeMs, pickChartBucket } from "../../scope/chartInterval";
 import { buildTokenSeriesQuery } from "./dataQueries";
 import { estimateCost, getPricing } from "../../data/pricing";
 import { toNum } from "../../data/format";
@@ -30,49 +31,6 @@ export interface UseTokenConsumptionResult {
   error?: Error;
 }
 
-/**
- * Snapped bucket sizes, in seconds. The hook picks the smallest snapped
- * value that's >= the ideal interval derived from the active timeframe
- * (totalMs / TARGET_BUCKETS). Means a 24h window snaps to 5m, 7d to 1h,
- * etc. — friendlier than the raw `floor(totalMs / 240 / 1000)` math.
- */
-const SNAPPED_BUCKETS_SEC: ReadonlyArray<{ sec: number; label: string }> = [
-  { sec: 60, label: "1m" },
-  { sec: 300, label: "5m" },
-  { sec: 900, label: "15m" },
-  { sec: 1800, label: "30m" },
-  { sec: 3600, label: "1h" },
-  { sec: 21600, label: "6h" },
-  { sec: 86400, label: "1d" },
-];
-const TARGET_BUCKETS = 240;
-
-const pickSnappedBucket = (
-  totalMs: number,
-): { sec: number; label: string } => {
-  const ideal = Math.max(60, Math.floor(totalMs / TARGET_BUCKETS / 1000));
-  for (const b of SNAPPED_BUCKETS_SEC) {
-    if (b.sec >= ideal) return b;
-  }
-  return SNAPPED_BUCKETS_SEC[SNAPPED_BUCKETS_SEC.length - 1];
-};
-
-const parseScopeMs = (from: string): number => {
-  const m = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
-  if (!m) return 24 * 60 * 60 * 1000;
-  const n = Number(m[1]);
-  switch (m[2].toLowerCase()) {
-    case "m":
-      return n * 60 * 1000;
-    case "h":
-      return n * 60 * 60 * 1000;
-    case "d":
-      return n * 24 * 60 * 60 * 1000;
-    default:
-      return 24 * 60 * 60 * 1000;
-  }
-};
-
 export const useTokenConsumption = (): UseTokenConsumptionResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
@@ -81,7 +39,7 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
   const canQuery = canQueryScope(_resolution);
 
   const totalMs = parseScopeMs(scope.timeframe.from);
-  const bucket = pickSnappedBucket(totalMs);
+  const bucket = pickChartBucket(totalMs);
   const intervalSec = bucket.sec;
 
   const { data, isLoading, error } = useScopedDql<SeriesRecord>(

@@ -44,7 +44,7 @@ const buildScales = (tools: Tool[]): Scales => {
   );
   const msMax = Math.max(
     ZONE_LATENCY_THRESHOLD_MS * 2,
-    ...tools.map((t) => t.avgMs),
+    ...tools.map((t) => t.p90Ms),
   );
   const logCallsMax = Math.log10(callsMax + 1);
   const logMsMax = Math.log10(msMax + 1);
@@ -101,12 +101,15 @@ export interface ToolScatterChartProps {
   tools: Tool[];
   isLoading: boolean;
   highlightZone: ToolZone | null;
+  /** Click a bubble to open the tool detail modal. */
+  onSelectTool?: (tool: Tool) => void;
 }
 
 export const ToolScatterChart = ({
   tools,
   isLoading,
   highlightZone,
+  onSelectTool,
 }: ToolScatterChartProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -116,8 +119,8 @@ export const ToolScatterChart = ({
     const points: Plotted[] = tools.map((tool) => ({
       tool,
       cx: scales.xToPx(tool.calls),
-      cy: scales.yToPx(tool.avgMs),
-      r: radiusFor(tool.avgMs),
+      cy: scales.yToPx(tool.p90Ms),
+      r: radiusFor(tool.p90Ms),
     }));
     return { scales, points };
   }, [tools]);
@@ -170,7 +173,7 @@ export const ToolScatterChart = ({
               Tool latency vs call volume
             </Heading>
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Log-log axes · bubble size = avg latency · color = category{" "}
+              Log-log axes · y &amp; bubble size = p90 latency · color = category{" "}
               {highlightZone && `· filtered to ${highlightZone}`}
             </Text>
           </Flex>
@@ -190,12 +193,18 @@ export const ToolScatterChart = ({
               viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
               onMouseMove={onMouseMove}
               onMouseLeave={() => setHoverIndex(null)}
+              onClick={() => {
+                if (hoverIndex != null && onSelectTool) {
+                  onSelectTool(points[hoverIndex].tool);
+                }
+              }}
               role="img"
               aria-label="Tool scatter chart"
               style={{
                 display: "block",
                 width: "100%",
                 height: "auto",
+                cursor: hoverIndex != null && onSelectTool ? "pointer" : "default",
                 // Lock the rendered aspect ratio so circles stay round when
                 // the container is wider than the viewBox.
                 aspectRatio: `${VIEW_W} / ${VIEW_H}`,
@@ -335,7 +344,7 @@ export const ToolScatterChart = ({
                 fill="var(--text-2)"
                 pointerEvents="none"
               >
-                ↑ avg latency
+                ↑ p90 latency
               </text>
 
               {/* Bubbles. pointer-events:none so the SVG-level handler owns hover. */}
@@ -391,8 +400,8 @@ export const ToolScatterChart = ({
                     {hovered.tool.category} · {hovered.tool.service}
                   </Text>
                   <Text style={{ fontSize: 11.5 }}>
-                    {fmtCount(hovered.tool.calls)} calls · avg{" "}
-                    {fmtMs(hovered.tool.avgMs)} · P99 {fmtMs(hovered.tool.p99Ms)}
+                    {fmtCount(hovered.tool.calls)} calls · p90{" "}
+                    {fmtMs(hovered.tool.p90Ms)} · P99 {fmtMs(hovered.tool.p99Ms)}
                   </Text>
                 </Flex>
               </div>

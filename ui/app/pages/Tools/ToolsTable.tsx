@@ -110,12 +110,16 @@ export interface ToolsTableProps {
   tools: Tool[];
   isLoading: boolean;
   highlightZone: ToolZone | null;
+  /** Open the tool detail modal. Row click; the inline name/service chips keep
+   *  their click-to-filter behaviour (they stop propagation). */
+  onSelectTool?: (tool: Tool) => void;
 }
 
 export const ToolsTable = ({
   tools,
   isLoading,
   highlightZone,
+  onSelectTool,
 }: ToolsTableProps) => {
   const { pageConfig } = useTweaks();
   // In discovered mode a tool is a span.name; in strict mode it's
@@ -229,12 +233,22 @@ export const ToolsTable = ({
           sorted.map((t) => (
             <div
               key={`${t.service}-${t.tool}`}
-              role="row"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelectTool?.(t)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectTool?.(t);
+                }
+              }}
+              className="aaa-attr-cell"
               style={{
                 display: "flex",
                 alignItems: "center",
                 padding: "0 10px",
                 borderTop: "1px solid var(--border)",
+                cursor: onSelectTool ? "pointer" : "default",
               }}
             >
               <Cell width={12}>

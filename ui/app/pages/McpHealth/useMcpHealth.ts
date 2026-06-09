@@ -3,7 +3,8 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useSampling, extrapolate } from "../../scope/SamplingContext";
 import { toNum } from "../../data/format";
-import { buildMcpActivityQuery, buildMcpHealthQuery, pickMcpIntervalSec } from "./queries";
+import { pickChartIntervalSec } from "../../scope/chartInterval";
+import { buildMcpActivityQuery, buildMcpHealthQuery } from "./queries";
 import {
   computeMcpStatus,
   MCP_STATUS_META,
@@ -111,7 +112,7 @@ export const useMcpHealth = (): UseMcpHealthResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
 
-  const intervalSec = pickMcpIntervalSec(scope.timeframe.from);
+  const intervalSec = pickChartIntervalSec(scope.timeframe.from);
 
   const healthRes = useScopedDql<HealthRecord>(
     buildMcpHealthQuery(scope.timeframe),
@@ -200,10 +201,10 @@ export const useMcpHealth = (): UseMcpHealthResult => {
     // Activity series — extrapolate per-bucket counts, treat nulls as 0.
     const activityRow = activityRes.data?.records?.[0];
     const serverSeries = toNumArr(activityRow?.mcp_server_calls).map((v) =>
-      Math.round((extrapolate(v, samplingRatio) ?? 0) as number),
+      Math.round(extrapolate(v, samplingRatio) ?? 0),
     );
     const errorSeries = toNumArr(activityRow?.errors).map((v) =>
-      Math.round((extrapolate(v, samplingRatio) ?? 0) as number),
+      Math.round(extrapolate(v, samplingRatio) ?? 0),
     );
     const labels = buildBucketLabels(
       Math.max(serverSeries.length, errorSeries.length),
