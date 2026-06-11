@@ -14,31 +14,107 @@ That's what this app provides: ten purpose-built tabs that read the same `gen_ai
 
 ## Features
 
-### Ten purpose-built tabs
+Ten purpose-built tabs, each reading the same `gen_ai.*` spans and sharing one global scope (timeframe + segments + filters). Every chart can be expanded to a modal, most values are click-to-filter, and each tab degrades gracefully with a data-gap note when an attribute your telemetry doesn't emit yet would otherwise power a panel.
 
-- **Pulse** — One-screen health view: platform reliability score, summary tiles, anomaly strip, top issues, token-consumption trend with forecast, activity histogram, per-agent cost bar list, top models, and provider mix.
-- **Explorer** — Faceted browser over all AI service activity: filter by provider, model, framework, agent, and tool; drill into any record.
-- **Agents** — Per-agent table with substantive vs. orchestration partitioning, model fan-out, p50/p90/p99 latency, error rate, TTFT, blended cost, and a stage breakdown (LLM / tool / orchestration / wait).
-- **Tools** — Tool-call analytics with a bubble-chart view (call volume × latency × error rate) and a side panel of slowest/most-failing tools.
-- **Prompts** — Prompt-pattern surface for inspecting the actual messages flowing through the system (respects per-user privacy mode).
-- **Topology** — Interactive service-to-service / agent-to-tool graph derived from span parent/child relationships, with connected upstream/downstream highlighting, a resizable canvas, and brush-zoom on the timeline.
-- **MCP Health** — Health view for Model Context Protocol servers and tools: request volume, error rate, and latency KPIs, an activity chart, a per-tool table, and threshold-driven alerts (reads `traceloop.span.kind = tool` spans and OTel MCP semantic conventions).
-- **AI Attribute Audit** — Coverage report for the GenAI/OpenLLMetry semantic conventions: an overall coverage ring plus per-section breakdowns showing which attributes your telemetry actually emits, with per-attribute detail and links to the canonical specs.
-- **Models** — Bubble chart comparing models by request volume, latency, and error rate; side panels for cost leaders and reliability leaders.
-- **FinOps** — Cost attribution and forecasting with a configurable scoring model.
+### Pulse — fleet health & efficiency
 
-### Cross-cutting capabilities
+One-screen health and efficiency dashboard for the whole AI footprint.
 
-- **Fleet-wide by default** — Opens against your entire AI footprint. Use Segments to filter down to any logical subset (teams, services, environments, deployments).
-- **Server-side provider normalization** — Bedrock invocations are unwrapped to their underlying vendor (Anthropic, Meta, etc.) directly in DQL, so charts reflect the real model, not the gateway.
-- **Built-in pricing for 20+ models** (Anthropic, OpenAI, Google, Bedrock-hosted vendors) with overrideable per-model rates via the toolbar model-pricing panel.
-- **Global timeframe selector** in the header, carried across tab navigation so the selected window doesn't reset when switching pages.
-- **Scan-limit toggle** — Switch between 500 GB / 1 TB / 2 TB / 5 TB query budgets for the whole app from a single control. Every hook routes through `useScopedDql`, which rewrites `scanLimitGBytes` in the active query.
-- **Sampling control** — Optional query-time sampling ratio (1, 1-in-10, …) for cheaper exploration over very large datasets.
-- **Per-user persisted settings** via `state:user-app-states` — scan limit, SLA thresholds, privacy mode survive reloads.
-- **SLA configuration** module with overrideable defaults, a degraded-trend panel, and an Intelligence detector drawer.
-- **Finding drawer** with `sendIntent` wiring to launch Traces, Services, Notebooks, and Problems against the relevant context.
-- **Defensive number formatting** — every formatter accepts `unknown` and coerces, so a DQL value arriving as a string never blows up the UI.
+- **Summary tiles** — Tokens, Spend (blended estimate), P95 latency, Error rate, Models, MCP servers, MCP tools, Cost / request, and Token efficiency. Each tile carries a sparkline or donut glyph and expands to a modal with a full-size chart, a stats grid (total / avg / min / max / resolution), and sortable breakdown tables (model / server / tool, with latency percentiles, error and cost columns).
+- **Token-efficiency panel** — A composite **Token efficiency score** (output leverage 50% · completion/truncation 30% · throughput 20%) and an **Output-per-dollar** tile, each with the drivers behind the number.
+- **Platform health card** — Three scored pillars (Operational, Quality, Cost) with status, reasons, and an expandable "what's contributing" view (slowest agents, slowest models, highest-error agents).
+- **Latency-tier breakdown** — Stacked share of wall-clock time across LLM / Retrieval-DB / Tool / Orchestration, with per-tier span counts and avg/P95.
+- **Token-consumption chart** — Tokens vs. estimated cost over time with a **Dynatrace Intelligence forecast** overlay (confidence bands) and timeline brush-zoom that emits ISO timestamps for a reproducible window.
+- **Top Findings strip** — Up to five threshold-detected findings ("Dynatrace Intelligence"), each opening a finding drawer with drill-out intents.
+- **Activity histogram** (24h request distribution with peak/quiet/avg), **Top models** bar list, **per-agent cost** bar list, and a **provider-mix** donut (Bedrock-proxied vendors unwrapped).
+
+### Explorer — AI-service discovery
+
+Service-centric browser over all AI activity.
+
+- **Summary tiles** — AI services, LLM requests, Tokens, Active models, Concentration (top-service share), Errors, and **Logical errors** (HTTP-200 responses that are really failures — refusals, content filtering, max-token truncation).
+- **Faceted sidebar** — Search plus provider / framework / model facets (each with counts), wired to URL params for shareable views.
+- **AI services table** — Status dot (by error rate), service, framework badge, model chips (provider-colored), LLM requests, tokens, tokens/request, agent count, errors, and logical errors; rows open a finding drawer with drill-outs.
+- **Service × Model heatmap** — Token volume per service/model cell (log-scaled), hoverable and click-to-filter.
+
+### Agents — per-agent performance, cost & quality
+
+- **View / operation slicers** — All / Slow (P90 > 2s) / Expensive / Most-used, crossed with Chat / Completion / Embeddings.
+- **Substantive vs. orchestration partitioning** — Framework internals (LangGraph/Runnable nodes, output parsers, prompt templates, and zero-LLM/zero-tool sub-200ms steps) are split out of the headline agent counts into a collapsible **Orchestration** section.
+- **Agents table** — Invocations, P90, P99, optional TTFT, error %, cost/invocation, and a mini **stage-breakdown bar** (LLM / Tool / Retrieval / Orchestration). Rows expand to stage mix, latency percentiles (P50/P90/P99/avg), and a cost breakdown; an SLA-health column appears when custom thresholds are configured.
+- **Evaluation banner** — Tool-call correctness, hallucination rate, task-success rate, and avg context tokens from `gen_ai.evaluation.*` (with a preview mode and setup guide when absent).
+- **Degradation-trend panel** — Top slow agents vs. their rolling 7-day Intelligence baseline.
+- **Agent-loop detection** — Flags LangGraph runs that revisit nodes (≥2× avg) or run deep (≥20 steps), with loop-rate, max-revisits, and max-steps per agent.
+- **Upstream services** (from Smartscape topology), plus **SLA-config** and **Intelligence-detector** setup drawers.
+
+### Tools — tool-call analytics
+
+- **Latency × volume bubble chart** — X = call volume (log), Y = P90 latency (log), bubble size = P90, color = category (Search / Database / HTTP / File / Compute / MCP / Other). Four clickable quadrants: Bottleneck, Hot-spot, Quiet, Healthy.
+- **Side panels** — Top retry-rate tools and slowest-by-P99, both click-to-filter.
+- **Calls-by-category** bar chart and an **all-tools table** (calls, avg/P90/P99, error %, retry %, calling agents) with sortable columns and click-to-filter on tool/service.
+- **Compute toggle** — Include/exclude high-volume compute spans (predict/generate/graph) that would otherwise flatten the chart.
+- **Detail modal** — Overview (stats + call-volume vs. latency chart), Traces (sample waterfalls, open in Distributed Tracing), Topology (owning service + calling agents), and Info tabs.
+- **Tool-definition mode** — Switch between *Strict* (`gen_ai.tool.name` only) and *Discovered* (also internal function / MCP spans by `span.name`) in the Tweaks panel.
+
+### Prompts — message-level inspection
+
+The richest tab: a searchable record of every LLM/agent interaction.
+
+- **Stream / Metadata / Evaluations views** with a wide, column-selectable table — time, AI app, model, type, temperature (color-banded), duration, in/out tokens, in/out cost, prompt/response text, system prompt, trace ID. Rows are tinted for errors and for max-token **truncation**.
+- **Percentile anomaly highlighting** — Duration, tokens, and cost cells flag amber at P90 and red at P98 (computed when ≥5 samples exist).
+- **Sticky filter sidebar** — Search, type/service/model/agent/provider/operation facets, status toggles (errored / PII detected / warnings / truncated), and range controls for response time, temperature, and in/out cost.
+- **Privacy mode** — Per-user "Mask PII / Show raw" toggle that suppresses prompt and response content in both the table and the detail panel.
+- **Detail panel** with sub-tabs: **Prompts** (full content bubbles, copy / copy-all / maximize, PII banner), **Trace** (in-app span waterfall with type indicators, search, and a span-attributes panel; open span/trace/user-session in the platform apps), **Logs** (trace logs by severity), **Topology** (per-trace dependency graph), **Eval** (score cards), and **Info** (IDs, tokens, cost, log counts).
+
+### Topology — aggregate dependency graph
+
+- **Full-screen force/vertical/horizontal graph** of the AI dependency mesh — nodes are LLM / model / provider / tool / vector-DB (size = call volume, color = tier), edges are call flows (width/opacity = volume).
+- **Connected highlighting & isolation** — Select a node to highlight its upstream/downstream path or isolate it to direct neighbors only.
+- **Error & problem rings** — Amber/red rings by error rate; a red dashed ring marks nodes with active Davis problems.
+- **Controls** — Node search, per-tier show/hide toggles, zoom/pan, reset view, **export-to-PNG**, and a **resizable canvas**.
+
+### MCP Health — Model Context Protocol servers & tools
+
+- **KPI cards** — MCP requests, Tool calls, Error rate, Tool types, and server **p95 / p99** latency (color-thresholded).
+- **Threshold-driven alert band** — Per-tool statuses (Error / Latency / Slow / Tail / Healthy), sorted by severity, or a single green "all healthy" row.
+- **Activity chart** — Dual-axis MCP requests vs. errors per bucket (sampling-extrapolated).
+- **Tool-health table** — Calls, error %, P50, P95, and a status pill, sortable and click-to-filter. Reads `traceloop.span.kind = tool` spans plus OTel MCP conventions, with an instrumentation note for what richer `mcp.*` attributes would add.
+
+### AI Attribute Audit — telemetry coverage
+
+- **Overall coverage ring** plus hero stats: attributes present (X/Y), categories complete (X/10), categories with gaps, and (sampling-extrapolated) span activity.
+- **Live table-of-contents** that jumps to and expands any section.
+- **Ten sections across six groups** — Core (LLM/inference `gen_ai.*`), Orchestration (Agent, Traceloop workflow, LangGraph), Tools (`gen_ai.tool.*`, MCP `mcp.*`), Retrieval (vector DB), Quality (evaluation & quality, session & user), and Platform (infrastructure/platform context).
+- **Per-attribute detail** — Present/Missing verdict, "what it buys you" one-liner, coverage bar with span count, and a detail modal; each section links to the canonical OTel / OpenLLMetry specs. A caveat explains that heavy sampling can produce false "missing" readings.
+
+### Models — model comparison
+
+- **Type filter** — All / Generative / Embedding / Reranking.
+- **Bubble chart** — X = total tokens (log), Y = avg latency (log), size = request volume, color = provider.
+- **Side panels** — Top spenders (cost leaders) and provider mix; plus a sortable table with request volume, in/out tokens, context utilization, throughput (tok/s), avg/P95/P99 latency, error and timeout rates, cost, and $/1M tokens.
+
+### FinOps — cost attribution & forecasting
+
+- **Spend tiles** — 24h, 7d, projected 30d, concentration (top-service share), blended $/1M tokens, and possible savings from $/MTok outliers.
+- **Daily cost** stacked bar (top models + "Other") and a **cost-concentration treemap** by service.
+- **Model A/B comparison** — Pick a use-case profile (RAG Q&A, interactive chat, classification, batch, internal tool, critical policy) and two models; a five-dimension weighted score (latency, cost/request, quality, throughput, reliability) yields a verdict and an estimated monthly saving.
+- **Cost efficiency by service** — $/1M-token ranking that surfaces the first FinOps wins.
+
+## Cross-cutting capabilities
+
+- **Fleet-wide by default** — Opens against your entire AI footprint; **Dynatrace Segments** (with variables) slice it down to any logical subset (teams, services, environments, deployments).
+- **Global timeframe** — Header selector (30m / 1h / 6h / 24h / 7d / 14d / 30d, default 1h) that persists per user and travels across tab navigation and shareable URLs.
+- **Global attribute filter & click-to-filter** — Click almost any value (model, agent, provider, service, tool, trace/span ID, k8s attribute…) to add it as an app-wide filter; high-cardinality keys (IDs) use debounced, on-demand server-side value discovery instead of pre-fetching.
+- **Scan-limit toggle** — 500 GB / 1 TB / 2 TB / 5 TB query budget for the whole app; every hook routes through `useScopedDql`, which rewrites `scanLimitGBytes` (and injects segments + global filters) into the active query.
+- **Sampling control** — Optional query-time sampling ratio (None / 10 / 100 / 1k / 10k); count and sum aggregates are transparently extrapolated, while sampling-invariant metrics (percentiles, averages, error rates, distinct counts) are left untouched.
+- **Server-side provider & model normalization** — Bedrock invocations are unwrapped to their underlying vendor (Anthropic, Meta, Cohere, Mistral…) directly in DQL, and model identifiers are canonicalized (region/vendor prefixes, dates, and revisions stripped) so charts reflect the real model, not the gateway.
+- **Built-in pricing for 22 models** (Anthropic, OpenAI, Google, plus Bedrock-hosted Amazon Titan and Cohere) with **org-wide overrideable rates** via the toolbar Model-Pricing panel; retrieval models (embeddings/rerank) are detected and excluded from generation-quality ratios.
+- **Logical-error detection** — Catches HTTP-200 responses that are really failures (refusals, content filtering, max-token truncation, `gen_ai.error.*`) across Explorer, Pulse, and the SLA detectors.
+- **Tweaks panel** — Per-user appearance and display controls: theme, density (comfortable / compact / minimal), tile style, 16 accent colors (incl. custom hex), chart style/curve/value-labels, color-blindness filters (protanopia / deuteranopia / tritanopia / achromatopsia), and page-config switches (Tools definition mode, Agents TTFT column).
+- **SLA configuration** — Per-user thresholds (P90, P99, error rate, cost/invocation, TTFT) that override the Intelligence baseline for agent health scoring, a degraded-trend panel against the rolling 7-day baseline, and an Intelligence-detector drawer with ready-to-copy DQL for runaway-latency, token-spike, and logical-error-surge detectors.
+- **Cross-app navigation** — `sendIntent` wiring launches Distributed Tracing (single-trace waterfall or filtered Explorer), Services, Problems, and Notebooks against the exact entity / trace / span / timeframe in context, with Notebook DQL fallbacks.
+- **Per-user persisted settings** via `state:user-app-states` — scan limit, sampling ratio, timeframe, global filters, SLA thresholds, privacy mode, and Tweaks all survive reloads; model-pricing overrides persist org-wide via app-state.
+- **Defensive number formatting** — Every formatter coerces `unknown` (DQL hands numeric fields back as strings) and falls back to an em-dash, so a stray value never blows up the UI.
 
 ## Architecture
 
@@ -47,13 +123,17 @@ ui/app/
 ├── pages/               Ten feature tabs (Pulse, Explorer, Agents, Tools,
 │                        Prompts, Topology, McpHealth, AttributeAudit, Models,
 │                        FinOps). Each page owns its queries.ts + hooks + panels.
-├── scope/               Segments filter resolution, scan-limit injection,
-│                        useScopedDql wrapper.
+├── scope/               Timeframe, segments, scan-limit, sampling, global
+│                        filter contexts + the useScopedDql wrapper that
+│                        injects them all into every query.
+├── layout/              GlobalFilterStrip / click-to-filter UI.
 ├── state/               usePersistedState — useState-shaped hook backed by
 │                        @dynatrace-sdk/react-hooks user-app-state.
 ├── detection/           Provider/model normalization, framework detection,
 │                        orchestration-node classifier, DQL helpers.
-├── data/                Pricing lookup, cost estimator, format helpers.
+├── pricing/             Model-pricing override panel + context (org-wide).
+├── tweaks/              Appearance/display tweaks panel + colorblind filters.
+├── data/                Pricing table, cost estimator, format helpers.
 ├── components/          Shared UI: charts, FindingCard, FacetGroup,
 │                        EmptyState/ErrorState, SLAConfig module, drawers.
 ├── lib/intents.ts       sendIntent wrappers for cross-app navigation.
