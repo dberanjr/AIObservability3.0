@@ -10,18 +10,20 @@ AI Observability 3.0 turns OpenTelemetry GenAI spans collected in Dynatrace Grai
 
 Modern AI applications fan out across orchestrators, agents, tools, RAG pipelines, and a half-dozen model providers. The data is in Grail thanks to the OpenTelemetry GenAI semantic conventions, but the questions teams actually need to answer — *which agent is regressing? which model is the most expensive per useful answer? where is latency coming from?* — require a UI that understands the shape of agentic systems.
 
-That's what this app provides: eight purpose-built tabs that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request, and surface findings you can pivot from directly into Traces, Services, and Problems.
+That's what this app provides: ten purpose-built tabs that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request, and surface findings you can pivot from directly into Traces, Services, and Problems.
 
 ## Features
 
-### Eight purpose-built tabs
+### Ten purpose-built tabs
 
 - **Pulse** — One-screen health view: platform reliability score, summary tiles, anomaly strip, top issues, token-consumption trend with forecast, activity histogram, per-agent cost bar list, top models, and provider mix.
 - **Explorer** — Faceted browser over all AI service activity: filter by provider, model, framework, agent, and tool; drill into any record.
 - **Agents** — Per-agent table with substantive vs. orchestration partitioning, model fan-out, p50/p90/p99 latency, error rate, TTFT, blended cost, and a stage breakdown (LLM / tool / orchestration / wait).
 - **Tools** — Tool-call analytics with a bubble-chart view (call volume × latency × error rate) and a side panel of slowest/most-failing tools.
 - **Prompts** — Prompt-pattern surface for inspecting the actual messages flowing through the system (respects per-user privacy mode).
-- **Topology** — Service-to-service / agent-to-tool graph derived from span parent/child relationships.
+- **Topology** — Interactive service-to-service / agent-to-tool graph derived from span parent/child relationships, with connected upstream/downstream highlighting, a resizable canvas, and brush-zoom on the timeline.
+- **MCP Health** — Health view for Model Context Protocol servers and tools: request volume, error rate, and latency KPIs, an activity chart, a per-tool table, and threshold-driven alerts (reads `traceloop.span.kind = tool` spans and OTel MCP semantic conventions).
+- **AI Attribute Audit** — Coverage report for the GenAI/OpenLLMetry semantic conventions: an overall coverage ring plus per-section breakdowns showing which attributes your telemetry actually emits, with per-attribute detail and links to the canonical specs.
 - **Models** — Bubble chart comparing models by request volume, latency, and error rate; side panels for cost leaders and reliability leaders.
 - **FinOps** — Cost attribution and forecasting with a configurable scoring model.
 
@@ -29,8 +31,10 @@ That's what this app provides: eight purpose-built tabs that read the same `gen_
 
 - **Fleet-wide by default** — Opens against your entire AI footprint. Use Segments to filter down to any logical subset (teams, services, environments, deployments).
 - **Server-side provider normalization** — Bedrock invocations are unwrapped to their underlying vendor (Anthropic, Meta, etc.) directly in DQL, so charts reflect the real model, not the gateway.
-- **Built-in pricing for 11 models** with overrideable per-model rates.
+- **Built-in pricing for 20+ models** (Anthropic, OpenAI, Google, Bedrock-hosted vendors) with overrideable per-model rates via the toolbar model-pricing panel.
+- **Global timeframe selector** in the header, carried across tab navigation so the selected window doesn't reset when switching pages.
 - **Scan-limit toggle** — Switch between 500 GB / 1 TB / 2 TB / 5 TB query budgets for the whole app from a single control. Every hook routes through `useScopedDql`, which rewrites `scanLimitGBytes` in the active query.
+- **Sampling control** — Optional query-time sampling ratio (1, 1-in-10, …) for cheaper exploration over very large datasets.
 - **Per-user persisted settings** via `state:user-app-states` — scan limit, SLA thresholds, privacy mode survive reloads.
 - **SLA configuration** module with overrideable defaults, a degraded-trend panel, and an Intelligence detector drawer.
 - **Finding drawer** with `sendIntent` wiring to launch Traces, Services, Notebooks, and Problems against the relevant context.
@@ -40,9 +44,9 @@ That's what this app provides: eight purpose-built tabs that read the same `gen_
 
 ```
 ui/app/
-├── pages/               Eight feature tabs (Pulse, Explorer, Agents, Tools,
-│                        Prompts, Topology, Models, FinOps). Each page owns
-│                        its queries.ts + hooks + panel components.
+├── pages/               Ten feature tabs (Pulse, Explorer, Agents, Tools,
+│                        Prompts, Topology, McpHealth, AttributeAudit, Models,
+│                        FinOps). Each page owns its queries.ts + hooks + panels.
 ├── scope/               Segments filter resolution, scan-limit injection,
 │                        useScopedDql wrapper.
 ├── state/               usePersistedState — useState-shaped hook backed by
@@ -192,7 +196,10 @@ Point the app at your tenant by editing `environmentUrl` in `app.config.json`:
 
 User-configurable settings live in the app UI itself — there is nothing to set up in environment files:
 
+- **Timeframe** — Header selector that sets the analysis window for every tab; preserved across navigation.
 - **Scan limit** — Toolbar toggle (500 GB / 1 TB / 2 TB / 5 TB) injected into every DQL via `useScopedDql`.
+- **Sampling** — Optional query-time sampling ratio for cheaper exploration over large datasets.
+- **Model pricing** — Override built-in per-model rates from the toolbar pricing panel.
 - **Segments** — Optional. Use tenant-defined filter segments to slice activity by teams, deployments, environments, services, or custom dimensions. Empty selection queries the whole fleet.
 - **SLA thresholds** — Editable through the SLA config drawer; persisted per user.
 - **Privacy mode** — Suppresses prompt/response content rendering on the Prompts tab.
@@ -203,7 +210,7 @@ All persisted via `@dynatrace-sdk/react-hooks` `useUserAppState` / `useSetUserAp
 
 Pure functions — pricing, classification, attribute normalization, agent health scoring, FinOps scoring — are covered by Vitest. Run `npm test` for a single pass or `npm run test:watch` while developing.
 
-Current coverage: 82 tests across detection, pricing, SLA scoring, and FinOps scoring modules.
+Current coverage: 91 tests across 6 files spanning detection, pricing, SLA scoring, and FinOps scoring modules.
 
 ## Tech stack
 
