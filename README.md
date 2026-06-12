@@ -254,13 +254,15 @@ cd AIObservability3.0
 npm install
 ```
 
-Point the app at your tenant by editing `environmentUrl` in `app.config.json`:
+The repo ships with a **placeholder** tenant (`https://your-tenant.apps.dynatrace.com/`) — you must point the app at your own tenant before deploying by editing `environmentUrl` in `app.config.json`:
 
 ```json
 {
   "environmentUrl": "https://<your-tenant>.apps.dynatrace.com/"
 }
 ```
+
+`dt-app deploy` will fail against the placeholder, so a real tenant is required. Keep your tenant URL local — don't commit it back, so the repo's `environmentUrl` stays a placeholder.
 
 ## Available scripts
 
