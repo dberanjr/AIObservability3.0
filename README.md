@@ -27,6 +27,8 @@ One-screen health and efficiency dashboard for the whole AI footprint.
 - **Token-consumption chart** — Tokens vs. estimated cost over time with a **Dynatrace Intelligence forecast** overlay (confidence bands) and timeline brush-zoom that emits ISO timestamps for a reproducible window.
 - **Top Findings strip** — Up to five threshold-detected findings ("Dynatrace Intelligence"), each opening a finding drawer with drill-out intents.
 - **Activity histogram** (24h request distribution with peak/quiet/avg), **Top models** bar list, **per-agent cost** bar list, and a **provider-mix** donut (Bedrock-proxied vendors unwrapped).
+- **Safety & guardrails** *(auto-appears)* — guardrail-checked and PII-flagged span counts plus a breakdown of guardrail outcomes, shown when `gen_ai.*.guardrail_*` / `gen_ai.privacy.*` are emitted.
+- **Feedback & prompt versions** *(auto-appears)* — feedback volume, average rating, label breakdown, and distinct prompt versions, shown when `gen_ai.feedback.*` / `gen_ai.prompt_hub.*` are emitted.
 
 ### Explorer — AI-service discovery
 
@@ -36,6 +38,7 @@ Service-centric browser over all AI activity.
 - **Faceted sidebar** — Search plus provider / framework / model facets (each with counts), wired to URL params for shareable views.
 - **AI services table** — Status dot (by error rate), service, framework badge, model chips (provider-colored), LLM requests, tokens, tokens/request, agent count, errors, and logical errors; rows open a finding drawer with drill-outs.
 - **Service × Model heatmap** — Token volume per service/model cell (log-scaled), hoverable and click-to-filter.
+- **Retrieval (RAG)** *(auto-appears)* — retrieval volume, distinct vector stores, average top-k, and a per-store breakdown, shown when `db.system` / `vector_db.*` are emitted.
 
 ### Agents — per-agent performance, cost & quality
 
@@ -99,6 +102,7 @@ The richest tab: a searchable record of every LLM/agent interaction.
 - **Daily cost** stacked bar (top models + "Other") and a **cost-concentration treemap** by service.
 - **Model A/B comparison** — Pick a use-case profile (RAG Q&A, interactive chat, classification, batch, internal tool, critical policy) and two models; a five-dimension weighted score (latency, cost/request, quality, throughput, reliability) yields a verdict and an estimated monthly saving.
 - **Cost efficiency by service** — $/1M-token ranking that surfaces the first FinOps wins.
+- **Prompt cache & reported cost** *(auto-appears)* — cache-read/-write tokens, cache hit rate, and SDK-reported cost, shown when your telemetry emits `gen_ai.usage.cached_tokens` / `cache_creation_input_tokens` / `cost`.
 
 ## Cross-cutting capabilities
 
@@ -110,6 +114,7 @@ The richest tab: a searchable record of every LLM/agent interaction.
 - **Server-side provider & model normalization** — Bedrock invocations are unwrapped to their underlying vendor (Anthropic, Meta, Cohere, Mistral…) directly in DQL, and model identifiers are canonicalized (region/vendor prefixes, dates, and revisions stripped) so charts reflect the real model, not the gateway.
 - **Built-in pricing for 22 models** (Anthropic, OpenAI, Google, plus Bedrock-hosted Amazon Titan and Cohere) with **org-wide overrideable rates** via the toolbar Model-Pricing panel; retrieval models (embeddings/rerank) are detected and excluded from generation-quality ratios.
 - **Logical-error detection** — Catches HTTP-200 responses that are really failures (refusals, content filtering, max-token truncation, `gen_ai.error.*`) across Explorer, Pulse, and the SLA detectors.
+- **Self-activating capability panels** — The app catalogs far more attributes than it consumes (see the AI Attribute Audit tab). A single app-wide capability probe detects which of those attributes your telemetry actually emits, and a set of panels render *automatically* once their attribute appears — no code change, no redeploy. Today these cover: **prompt cache & reported cost** (`gen_ai.usage.cached_tokens` / `cache_creation_input_tokens` / `cost`, FinOps), **safety & guardrails** (`gen_ai.*.guardrail_*` / `gen_ai.privacy.*`, Pulse), **retrieval / RAG** (`db.system` / `vector_db.*`, Explorer), and **feedback & prompt versioning** (`gen_ai.feedback.*` / `gen_ai.prompt_hub.*`, Pulse). A panel is free until its data exists, then lights up. The wired set is kept in sync with the Audit catalog by a unit drift-guard test.
 - **Tweaks panel** — Per-user appearance and display controls: theme, density (comfortable / compact / minimal), tile style, 16 accent colors (incl. custom hex), chart style/curve/value-labels, color-blindness filters (protanopia / deuteranopia / tritanopia / achromatopsia), and page-config switches (Tools definition mode, Agents TTFT column).
 - **SLA configuration** — Per-user thresholds (P90, P99, error rate, cost/invocation, TTFT) that override the Intelligence baseline for agent health scoring, a degraded-trend panel against the rolling 7-day baseline, and an Intelligence-detector drawer with ready-to-copy DQL for runaway-latency, token-spike, and logical-error-surge detectors.
 - **Cross-app navigation** — `sendIntent` wiring launches Distributed Tracing (single-trace waterfall or filtered Explorer), Services, Problems, and Notebooks against the exact entity / trace / span / timeframe in context, with Notebook DQL fallbacks.
@@ -124,13 +129,14 @@ ui/app/
 │                        Prompts, Topology, McpHealth, AttributeAudit, Models,
 │                        FinOps). Each page owns its queries.ts + hooks + panels.
 ├── scope/               Timeframe, segments, scan-limit, sampling, global
-│                        filter contexts + the useScopedDql wrapper that
-│                        injects them all into every query.
+│                        filter + capability contexts + the useScopedDql
+│                        wrapper that injects them all into every query.
 ├── layout/              GlobalFilterStrip / click-to-filter UI.
 ├── state/               usePersistedState — useState-shaped hook backed by
 │                        @dynatrace-sdk/react-hooks user-app-state.
 ├── detection/           Provider/model normalization, framework detection,
-│                        orchestration-node classifier, DQL helpers.
+│                        orchestration-node classifier, attribute-capability
+│                        registry, DQL helpers.
 ├── pricing/             Model-pricing override panel + context (org-wide).
 ├── tweaks/              Appearance/display tweaks panel + colorblind filters.
 ├── data/                Pricing table, cost estimator, format helpers.
@@ -290,7 +296,7 @@ All persisted via `@dynatrace-sdk/react-hooks` `useUserAppState` / `useSetUserAp
 
 Pure functions — pricing, classification, attribute normalization, agent health scoring, FinOps scoring — are covered by Vitest. Run `npm test` for a single pass or `npm run test:watch` while developing.
 
-Current coverage: 91 tests across 6 files spanning detection, pricing, SLA scoring, and FinOps scoring modules.
+Current coverage: 99 tests across 7 files spanning detection, attribute-capability registry, pricing, SLA scoring, and FinOps scoring modules.
 
 ## Tech stack
 
