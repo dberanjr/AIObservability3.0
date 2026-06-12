@@ -14,6 +14,8 @@ import { AIServicesTable } from "./AIServicesTable";
 import { ExplorerFindings } from "./ExplorerFindings";
 import { ExplorerSidebar } from "./ExplorerSidebar";
 import { ExplorerTiles } from "./ExplorerTiles";
+import { RagPanel } from "./RagPanel";
+import { CapabilityGate } from "../../components/CapabilityGate";
 import { ServiceModelHeatmap } from "./ServiceModelHeatmap";
 import {
   type ExplorerFilter,
@@ -125,6 +127,9 @@ export const ExplorerPage = () => {
             onSelect={setSelectedFinding}
           />
           <ServiceModelHeatmap result={heatmap} />
+          <CapabilityGate id="vectorDb">
+            <RagPanel />
+          </CapabilityGate>
           <AIServicesTable
             rows={aiServices.filtered}
             isLoading={aiServices.isLoading}
