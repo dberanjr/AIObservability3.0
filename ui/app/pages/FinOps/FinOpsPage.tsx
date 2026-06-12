@@ -8,6 +8,8 @@ import { CostEfficiencyByService } from "./CostEfficiencyByService";
 import { DailyCostStackedBar } from "./DailyCostStackedBar";
 import { FinOpsFindings } from "./FinOpsFindings";
 import { FinOpsTilesRow } from "./FinOpsTilesRow";
+import { CacheCostPanel } from "./CacheCostPanel";
+import { CapabilityGate } from "../../components/CapabilityGate";
 import { ModelComparisonPanel } from "./ModelComparisonPanel";
 import { useFinOps } from "./useFinOps";
 import { useModels } from "../Models/useModels";
@@ -39,6 +41,9 @@ export const FinOpsPage = () => {
       >
         {finOps.error && <ErrorBanner error={finOps.error} />}
         <FinOpsTilesRow data={finOps} />
+        <CapabilityGate id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}>
+          <CacheCostPanel />
+        </CapabilityGate>
         <FinOpsFindings
           data={finOps}
           models={models}

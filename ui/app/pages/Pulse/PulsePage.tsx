@@ -11,6 +11,9 @@ import { AgentCostBarList } from "./AgentCostBarList";
 import { PlatformHealthCard } from "./PlatformHealthCard";
 import { ProviderMixDonut } from "./ProviderMixDonut";
 import { SummaryTilesRow } from "./SummaryTilesRow";
+import { SafetyPanel } from "./SafetyPanel";
+import { FeedbackPanel } from "./FeedbackPanel";
+import { CapabilityGate } from "../../components/CapabilityGate";
 import { TokenEfficiencyTiles } from "./TokenEfficiencyTiles";
 import { TokenConsumptionChart } from "./TokenConsumptionChart";
 import { TopFindingsStrip } from "./TopFindingsStrip";
@@ -93,6 +96,12 @@ export const PulsePage = () => {
           onSelect={setSelectedFinding}
         />
         <PlatformHealthCard health={health} />
+        <CapabilityGate id={["guardrails", "piiCategories"]}>
+          <SafetyPanel />
+        </CapabilityGate>
+        <CapabilityGate id={["feedback", "promptVersion"]}>
+          <FeedbackPanel />
+        </CapabilityGate>
         <div
           style={{
             display: "grid",
