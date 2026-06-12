@@ -70,13 +70,6 @@ export const PulsePage = () => {
           href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/"
           hrefLabel="OTel GenAI"
         />
-        <TokenEfficiencyTiles />
-        <LatencyTierPanel />
-        <TopFindingsStrip
-          findings={anomalies}
-          isLoading={anomaliesLoading}
-          onSelect={setSelectedFinding}
-        />
         <div
           style={{
             display: "grid",
@@ -92,6 +85,13 @@ export const PulsePage = () => {
           />
           <ActivityHistogramPanel result={histogram} />
         </div>
+        <TokenEfficiencyTiles />
+        <LatencyTierPanel />
+        <TopFindingsStrip
+          findings={anomalies}
+          isLoading={anomaliesLoading}
+          onSelect={setSelectedFinding}
+        />
         <PlatformHealthCard health={health} />
         <div
           style={{
