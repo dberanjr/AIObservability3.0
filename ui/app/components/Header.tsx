@@ -15,7 +15,6 @@ const NAV_ITEMS: { to: string; label: string }[] = [
   { to: "/prompts", label: "Prompts" },
   { to: "/topology", label: "Topology" },
   { to: "/mcp-health", label: "MCP Health" },
-  { to: "/attribute-audit", label: "AI Attribute Audit" },
   { to: "/models", label: "Models" },
   { to: "/finops", label: "FinOps" },
 ];
