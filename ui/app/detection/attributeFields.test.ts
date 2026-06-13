@@ -7,7 +7,6 @@ import {
   CAPABILITY_IDS,
   AI_SPAN_POPULATION,
 } from "./attributeFields";
-import { SECTIONS } from "../pages/AttributeAudit/catalog";
 
 /** Every back-ticked attribute path referenced anywhere in a string. */
 const pathsIn = (s: string): string[] =>
@@ -44,30 +43,10 @@ describe("capability registry", () => {
     }
   });
 
-  // The drift guard: the Audit catalog is the canonical inventory of every
-  // attribute the app knows about. A capability may only gate on attributes the
-  // catalog already lists — otherwise the Audit page and the wired features
-  // would disagree about what exists.
-  it("only gates on attributes catalogued by the Audit page", () => {
-    const catalogPaths = new Set(
-      SECTIONS.flatMap((s) => s.attributes).flatMap((a) => pathsIn(a.expr)),
-    );
-    for (const c of CAPABILITIES) {
-      for (const path of pathsIn(c.predicate)) {
-        expect(
-          catalogPaths.has(path),
-          `capability "${c.id}" gates on uncatalogued attribute "${path}"`,
-        ).toBe(true);
-      }
-    }
-  });
-
-  it("references catalog section ids that exist", () => {
-    const sectionIds = new Set(SECTIONS.map((s) => s.id));
-    for (const c of CAPABILITIES) {
-      expect(sectionIds.has(c.sectionId)).toBe(true);
-    }
-  });
+  // NOTE: the catalog drift-guard tests ("only gates on attributes catalogued
+  // by the Audit page" / "references catalog section ids that exist") moved out
+  // with the AI Attributes Audit catalog when that tab was extracted into its
+  // own app. The capability registry is now self-contained here.
 
   it("probes a non-empty AI-span population", () => {
     expect(pathsIn(AI_SPAN_POPULATION).length).toBeGreaterThan(0);

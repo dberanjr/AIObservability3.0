@@ -10,11 +10,11 @@ AI Observability 3.0 turns OpenTelemetry GenAI spans collected in Dynatrace Grai
 
 Modern AI applications fan out across orchestrators, agents, tools, RAG pipelines, and a half-dozen model providers. The data is in Grail thanks to the OpenTelemetry GenAI semantic conventions, but the questions teams actually need to answer — *which agent is regressing? which model is the most expensive per useful answer? where is latency coming from?* — require a UI that understands the shape of agentic systems.
 
-That's what this app provides: ten purpose-built tabs that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request, and surface findings you can pivot from directly into Traces, Services, and Problems.
+That's what this app provides: nine purpose-built tabs that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request, and surface findings you can pivot from directly into Traces, Services, and Problems.
 
 ## Features
 
-Ten purpose-built tabs, each reading the same `gen_ai.*` spans and sharing one global scope (timeframe + segments + filters). Every chart can be expanded to a modal, most values are click-to-filter, and each tab degrades gracefully with a data-gap note when an attribute your telemetry doesn't emit yet would otherwise power a panel.
+Nine purpose-built tabs, each reading the same `gen_ai.*` spans and sharing one global scope (timeframe + segments + filters). Every chart can be expanded to a modal, most values are click-to-filter, and each tab degrades gracefully with a data-gap note when an attribute your telemetry doesn't emit yet would otherwise power a panel.
 
 ### Pulse — fleet health & efficiency
 
@@ -83,13 +83,6 @@ The richest tab: a searchable record of every LLM/agent interaction.
 - **Activity chart** — Dual-axis MCP requests vs. errors per bucket (sampling-extrapolated).
 - **Tool-health table** — Calls, error %, P50, P95, and a status pill, sortable and click-to-filter. Reads `traceloop.span.kind = tool` spans plus OTel MCP conventions, with an instrumentation note for what richer `mcp.*` attributes would add.
 
-### AI Attribute Audit — telemetry coverage
-
-- **Overall coverage ring** plus hero stats: attributes present (X/Y), categories complete (X/10), categories with gaps, and (sampling-extrapolated) span activity.
-- **Live table-of-contents** that jumps to and expands any section.
-- **Ten sections across six groups** — Core (LLM/inference `gen_ai.*`), Orchestration (Agent, Traceloop workflow, LangGraph), Tools (`gen_ai.tool.*`, MCP `mcp.*`), Retrieval (vector DB), Quality (evaluation & quality, session & user), and Platform (infrastructure/platform context).
-- **Per-attribute detail** — Present/Missing verdict, "what it buys you" one-liner, coverage bar with span count, and a detail modal; each section links to the canonical OTel / OpenLLMetry specs. A caveat explains that heavy sampling can produce false "missing" readings.
-
 ### Models — model comparison
 
 - **Type filter** — All / Generative / Embedding / Reranking.
@@ -114,7 +107,7 @@ The richest tab: a searchable record of every LLM/agent interaction.
 - **Server-side provider & model normalization** — Bedrock invocations are unwrapped to their underlying vendor (Anthropic, Meta, Cohere, Mistral…) directly in DQL, and model identifiers are canonicalized (region/vendor prefixes, dates, and revisions stripped) so charts reflect the real model, not the gateway.
 - **Built-in pricing for 22 models** (Anthropic, OpenAI, Google, plus Bedrock-hosted Amazon Titan and Cohere) with **org-wide overrideable rates** via the toolbar Model-Pricing panel; retrieval models (embeddings/rerank) are detected and excluded from generation-quality ratios.
 - **Logical-error detection** — Catches HTTP-200 responses that are really failures (refusals, content filtering, max-token truncation, `gen_ai.error.*`) across Explorer, Pulse, and the SLA detectors.
-- **Self-activating capability panels** — The app catalogs far more attributes than it consumes (see the AI Attribute Audit tab). A single app-wide capability probe detects which of those attributes your telemetry actually emits, and a set of panels render *automatically* once their attribute appears — no code change, no redeploy. Today these cover: **prompt cache & reported cost** (`gen_ai.usage.cached_tokens` / `cache_creation_input_tokens` / `cost`, FinOps), **safety & guardrails** (`gen_ai.*.guardrail_*` / `gen_ai.privacy.*`, Pulse), **retrieval / RAG** (`db.system` / `vector_db.*`, Explorer), and **feedback & prompt versioning** (`gen_ai.feedback.*` / `gen_ai.prompt_hub.*`, Pulse). A panel is free until its data exists, then lights up. The wired set is kept in sync with the Audit catalog by a unit drift-guard test.
+- **Self-activating capability panels** — The app knows about far more attributes than it consumes (the full inventory lives in the companion **AI Attributes Audit** app). A single app-wide capability probe detects which of those attributes your telemetry actually emits, and a set of panels render *automatically* once their attribute appears — no code change, no redeploy. Today these cover: **prompt cache & reported cost** (`gen_ai.usage.cached_tokens` / `cache_creation_input_tokens` / `cost`, FinOps), **safety & guardrails** (`gen_ai.*.guardrail_*` / `gen_ai.privacy.*`, Pulse), **retrieval / RAG** (`db.system` / `vector_db.*`, Explorer), and **feedback & prompt versioning** (`gen_ai.feedback.*` / `gen_ai.prompt_hub.*`, Pulse). A panel is free until its data exists, then lights up.
 - **Tweaks panel** — Per-user appearance and display controls: theme, density (comfortable / compact / minimal), tile style, 16 accent colors (incl. custom hex), chart style/curve/value-labels, color-blindness filters (protanopia / deuteranopia / tritanopia / achromatopsia), and page-config switches (Tools definition mode, Agents TTFT column).
 - **SLA configuration** — Per-user thresholds (P90, P99, error rate, cost/invocation, TTFT) that override the Intelligence baseline for agent health scoring, a degraded-trend panel against the rolling 7-day baseline, and an Intelligence-detector drawer with ready-to-copy DQL for runaway-latency, token-spike, and logical-error-surge detectors.
 - **Cross-app navigation** — `sendIntent` wiring launches Distributed Tracing (single-trace waterfall or filtered Explorer), Services, Problems, and Notebooks against the exact entity / trace / span / timeframe in context, with Notebook DQL fallbacks.
@@ -125,9 +118,9 @@ The richest tab: a searchable record of every LLM/agent interaction.
 
 ```
 ui/app/
-├── pages/               Ten feature tabs (Pulse, Explorer, Agents, Tools,
-│                        Prompts, Topology, McpHealth, AttributeAudit, Models,
-│                        FinOps). Each page owns its queries.ts + hooks + panels.
+├── pages/               Nine feature tabs (Pulse, Explorer, Agents, Tools,
+│                        Prompts, Topology, McpHealth, Models, FinOps). Each
+│                        page owns its queries.ts + hooks + panels.
 ├── scope/               Timeframe, segments, scan-limit, sampling, global
 │                        filter + capability contexts + the useScopedDql
 │                        wrapper that injects them all into every query.
