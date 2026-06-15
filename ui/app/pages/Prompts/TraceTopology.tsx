@@ -17,7 +17,7 @@ import {
   ImageIcon,
 } from "@dynatrace/strato-icons";
 import { fmtTokens, fmtMs } from "../../data/format";
-import { getPricing, estimateCost } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import {
   spanCategory,
   CAT_COLOR,
@@ -119,10 +119,9 @@ const traceTotals = (spans: TraceSpan[]): TraceTotals => {
   for (const s of spans) {
     inTok += s.inTokens;
     outTok += s.outTokens;
-    const pricing = getPricing(s.model);
     cost +=
-      (s.inTokens > 0 ? estimateCost(s.inTokens, 0, pricing) : 0) +
-      (s.outTokens > 0 ? estimateCost(0, s.outTokens, pricing) : 0);
+      (s.inTokens > 0 ? costOf(s.inTokens, 0, s.model) : 0) +
+      (s.outTokens > 0 ? costOf(0, s.outTokens, s.model) : 0);
     if (s.timestampMs < minStart) minStart = s.timestampMs;
     const end = s.timestampMs + Math.max(0, s.durationMs);
     if (end > maxEnd) maxEnd = end;
@@ -159,10 +158,9 @@ const buildLayout = (
     if (!visible(s)) continue;
     const n = nodeOf(s);
     keyOf.set(s.spanId, n.key);
-    const pricing = getPricing(s.model);
     const cost =
-      (s.inTokens > 0 ? estimateCost(s.inTokens, 0, pricing) : 0) +
-      (s.outTokens > 0 ? estimateCost(0, s.outTokens, pricing) : 0);
+      (s.inTokens > 0 ? costOf(s.inTokens, 0, s.model) : 0) +
+      (s.outTokens > 0 ? costOf(0, s.outTokens, s.model) : 0);
     const agg = nodes.get(n.key);
     if (agg) {
       agg.count += 1;

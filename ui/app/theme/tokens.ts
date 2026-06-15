@@ -286,4 +286,20 @@ ${toBlock(darkSurfaces)}
   outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
+
+/* Pulse hero: the AI Application Architecture map and the summary tiles sit
+   side by side, with the tiles in a fixed-width right column (which the tile
+   grid fills as two columns). When the viewport is narrowed, the tiles drop
+   BELOW the map so the diagram is always the first priority. */
+.aiobs-pulse-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 344px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1180px) {
+  .aiobs-pulse-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 `;

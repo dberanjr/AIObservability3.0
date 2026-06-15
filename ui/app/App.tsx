@@ -4,16 +4,13 @@ import React from "react";
 import { Route, Routes } from "react-router-dom";
 import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
+import { RedirectKeepingSearch } from "./lib/nav";
 import { Home } from "./pages/Home";
 import { AgentsPage } from "./pages/Agents/AgentsPage";
 import { ExplorerPage } from "./pages/Explorer/ExplorerPage";
-import { FinOpsPage } from "./pages/FinOps/FinOpsPage";
 import { ModelsPage } from "./pages/Models/ModelsPage";
 import { PromptsPage } from "./pages/Prompts/PromptsPage";
 import { PulsePage } from "./pages/Pulse/PulsePage";
-import { ToolsPage } from "./pages/Tools/ToolsPage";
-import { TopologyPage } from "./pages/Topology/TopologyPage";
-import { McpHealthPage } from "./pages/McpHealth/McpHealthPage";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
 import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
@@ -57,12 +54,27 @@ export const App = () => {
                 <Route path="/pulse" element={<PulsePage />} />
                 <Route path="/explorer" element={<ExplorerPage />} />
                 <Route path="/agents" element={<AgentsPage />} />
-                <Route path="/tools" element={<ToolsPage />} />
                 <Route path="/prompts" element={<PromptsPage />} />
-                <Route path="/topology" element={<TopologyPage />} />
-                <Route path="/mcp-health" element={<McpHealthPage />} />
                 <Route path="/models" element={<ModelsPage />} />
-                <Route path="/finops" element={<FinOpsPage />} />
+                {/* Folded tabs — redirect old deep-links to their new homes.
+                    Tools + Topology → Agents, MCP Health → Pulse, FinOps →
+                    Models / FinOps. Query string (timeframe, focus) carries. */}
+                <Route
+                  path="/tools"
+                  element={<RedirectKeepingSearch to="/agents" />}
+                />
+                <Route
+                  path="/topology"
+                  element={<RedirectKeepingSearch to="/agents" />}
+                />
+                <Route
+                  path="/mcp-health"
+                  element={<RedirectKeepingSearch to="/pulse" />}
+                />
+                <Route
+                  path="/finops"
+                  element={<RedirectKeepingSearch to="/models" />}
+                />
                 <Route path="/home" element={<Home />} />
               </Routes>
             </div>

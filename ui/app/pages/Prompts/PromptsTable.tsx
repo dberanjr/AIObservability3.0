@@ -10,7 +10,7 @@ import {
   SettingIcon,
 } from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
-import { getPricing, estimateCost } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
@@ -560,14 +560,10 @@ export const computeAnomalyStats = (rows: PromptRow[]): AnomalyStats => ({
   inTok: thresholdsFor(rows.map((r) => r.inTokens)),
   outTok: thresholdsFor(rows.map((r) => r.outTokens)),
   inCost: thresholdsFor(
-    rows.map((r) =>
-      r.inTokens > 0 ? estimateCost(r.inTokens, 0, getPricing(r.model)) : 0,
-    ),
+    rows.map((r) => (r.inTokens > 0 ? costOf(r.inTokens, 0, r.model) : 0)),
   ),
   outCost: thresholdsFor(
-    rows.map((r) =>
-      r.outTokens > 0 ? estimateCost(0, r.outTokens, getPricing(r.model)) : 0,
-    ),
+    rows.map((r) => (r.outTokens > 0 ? costOf(0, r.outTokens, r.model) : 0)),
   ),
 });
 
@@ -590,9 +586,9 @@ const StreamRow = ({
   const outputText =
     privacy === "mask" ? maskPII(prompt.responseText) : prompt.responseText;
 
-  const pricing = getPricing(prompt.model);
-  const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
-  const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+  const inCost = prompt.inTokens > 0 ? costOf(prompt.inTokens, 0, prompt.model) : 0;
+  const outCost =
+    prompt.outTokens > 0 ? costOf(0, prompt.outTokens, prompt.model) : 0;
 
   const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
   const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
@@ -773,9 +769,9 @@ const MetadataRow = ({
   visibleCols: Set<VisibleColumn>;
   stats: AnomalyStats;
 }) => {
-  const pricing = getPricing(prompt.model);
-  const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
-  const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+  const inCost = prompt.inTokens > 0 ? costOf(prompt.inTokens, 0, prompt.model) : 0;
+  const outCost =
+    prompt.outTokens > 0 ? costOf(0, prompt.outTokens, prompt.model) : 0;
 
   const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
   const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);

@@ -2,9 +2,14 @@ import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
+import { fmtCount, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { useTokenEfficiency } from "./useTokenEfficiency";
+import { usePulseSeries } from "./archMap/usePulseSeries";
+import { useSpendBreakdown } from "./useSpendBreakdown";
+import { Spark } from "./archMap/Spark";
+
+const ok = (s: number[]): number[] | undefined => (s.length > 1 ? s : undefined);
 
 const TileShell = ({
   label,
@@ -71,14 +76,43 @@ const Big = ({
   </Flex>
 );
 
-const Driver = ({ label, value }: { label: string; value: string }) => (
-  <Flex justifyContent="space-between" gap={8}>
-    <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>{label}</Text>
+const Driver = ({
+  label,
+  value,
+  spark,
+  sparkColor,
+  sparkFormat,
+  sparkLabels,
+}: {
+  label: string;
+  value: string;
+  spark?: number[];
+  sparkColor?: string;
+  sparkFormat?: (n: number) => string;
+  sparkLabels?: string[];
+}) => (
+  <Flex alignItems="center" gap={12}>
+    <Text style={{ fontSize: 11.5, color: "var(--text-3)", whiteSpace: "nowrap" }}>{label}</Text>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "flex-end" }}>
+      {spark && (
+        <div style={{ flex: 1, minWidth: 80 }}>
+          <Spark
+            data={spark}
+            color={sparkColor ?? "var(--blue)"}
+            height={24}
+            fluid
+            format={sparkFormat}
+            labels={sparkLabels}
+          />
+        </div>
+      )}
+    </div>
     <Text
       style={{
         fontSize: 11.5,
         color: "var(--text-2)",
         fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
       }}
     >
       {value}
@@ -91,6 +125,20 @@ const scoreColor = (score: number): string =>
 
 export const TokenEfficiencyTiles = () => {
   const eff = useTokenEfficiency();
+  const series = usePulseSeries();
+  const spend = useSpendBreakdown();
+
+  // Derived per-bucket driver series. Spend per bucket distributes the REAL
+  // per-model total (useSpendBreakdown) by token share — no flat blended rate.
+  const calls = series.throughput.llm ?? [];
+  const sumTok = series.tokens.reduce((a, b) => a + b, 0);
+  const secPerBucket = series.intervalMs / 1000;
+  const inputPerReq = calls.map((c, i) => (c > 0 ? (series.inputTokens[i] ?? 0) / c : 0));
+  const costPer1kOut = series.outputTokens.map((out, i) => {
+    const spendBucket = sumTok > 0 ? spend.total * ((series.tokens[i] ?? 0) / sumTok) : 0;
+    return out > 0 ? spendBucket / (out / 1000) : 0;
+  });
+  const tokPerSec = series.outputTokens.map((out) => (secPerBucket > 0 ? out / secPerBucket : 0));
 
   return (
     <div
@@ -136,10 +184,18 @@ export const TokenEfficiencyTiles = () => {
               <Driver
                 label="Input tokens / request"
                 value={fmtTokens(eff.inputTokensPerRequest)}
+                spark={ok(inputPerReq)}
+                sparkColor="var(--blue)"
+                sparkFormat={fmtTokens}
+                sparkLabels={series.labels}
               />
               <Driver
                 label="Truncation (waste)"
                 value={fmtPercent(eff.truncationRatePct, 1)}
+                spark={ok(series.truncation)}
+                sparkColor="var(--amber)"
+                sparkFormat={fmtCount}
+                sparkLabels={series.labels}
               />
             </Flex>
           </>
@@ -173,10 +229,18 @@ export const TokenEfficiencyTiles = () => {
                     ? "—"
                     : fmtUSD(eff.costPer1kOutput)
                 }
+                spark={ok(costPer1kOut)}
+                sparkColor="var(--green-2)"
+                sparkFormat={(n) => fmtUSD(n)}
+                sparkLabels={series.labels}
               />
               <Driver
                 label="Throughput"
                 value={`${Math.round(eff.tokensPerSec).toLocaleString()} tok/s`}
+                spark={ok(tokPerSec)}
+                sparkColor="var(--purple)"
+                sparkFormat={(n) => `${Math.round(n).toLocaleString()} tok/s`}
+                sparkLabels={series.labels}
               />
             </Flex>
           </>

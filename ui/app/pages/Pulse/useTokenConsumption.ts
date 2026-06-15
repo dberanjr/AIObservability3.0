@@ -5,7 +5,7 @@ import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServi
 import { useSampling } from "../../scope/SamplingContext";
 import { parseScopeMs, pickChartBucket } from "../../scope/chartInterval";
 import { buildTokenSeriesQuery } from "./dataQueries";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
 
 interface SeriesRecord {
@@ -55,14 +55,14 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
       return Number.isFinite(n) ? n * samplingRatio : 0;
     });
     const intervalMs = intervalSec * 1000;
-    const blended = getPricing("claude-sonnet-4-6");
     const points: TokenSeriesPoint[] = arr.map((tokens, i) => {
       const halfIn = tokens / 2;
       const halfOut = tokens / 2;
       return {
         t: i * intervalMs,
         tokens,
-        estCost: estimateCost(halfIn, halfOut, blended),
+        // Fleet-aggregate bucket: price at the blended rate (model: null).
+        estCost: costOf(halfIn, halfOut, null),
       };
     });
 

@@ -49,7 +49,7 @@ export const buildNodeRedQuery = (
   expr: string,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 | filter ${expr}
 | fieldsAdd ${logicalErrorField("err")}
 | summarize calls = count(), errors = sum(err),
@@ -62,7 +62,7 @@ export const buildNodeSeriesQuery = (
   timeframe: Timeframe,
   intervalSec: number,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 | filter ${expr}
 | makeTimeseries { calls = count(), p90 = percentile(duration, 90) }, interval: ${intervalSec}s
 `.trim();
@@ -81,10 +81,14 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
 export const buildAggregateTopologyQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
+  /** When set, scope the graph to a single agent's own call topology
+   *  (Agents-tab Topology sub-view) rather than the whole fleet. */
+  agentName?: string,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
+${agentName ? `| filter gen_ai.agent.name == "${dqlEscape(agentName)}"` : ""}
 | fieldsAdd ${logicalErrorField("has_err")}
 | summarize calls = count(), errors = sum(has_err), by: {
     service = entityName(dt.entity.service),
@@ -102,7 +106,7 @@ export const buildAiServiceIdsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
 | summarize spans = count(), name = takeFirst(entityName(dt.entity.service)), by: { svc = dt.entity.service }

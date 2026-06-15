@@ -187,35 +187,68 @@ const ContributorList = ({
     {rows.length === 0 ? (
       <Text style={{ fontSize: 11.5, color: "var(--text-4)" }}>None</Text>
     ) : (
-      rows.map((r) => (
-        <Flex key={r.name} alignItems="center" justifyContent="space-between" gap={8}>
-          <Text
-            style={{
-              fontSize: 12,
-              fontFamily: "var(--mono, monospace)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={r.name}
-          >
-            {r.name}
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              fontVariantNumeric: "tabular-nums",
-              color:
-                metric === "error" ? "var(--red)" : "var(--text-2)",
-              flex: "0 0 auto",
-            }}
-          >
-            {metric === "error"
-              ? fmtPercent(r.errorRatePct ?? 0)
-              : `${fmtMs(r.p95Ms)} · ${fmtCount(r.calls)}`}
-          </Text>
-        </Flex>
-      ))
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: metric === "error" ? "1fr auto" : "1fr auto auto",
+          columnGap: 14,
+          rowGap: 5,
+          alignItems: "center",
+        }}
+      >
+        {rows.map((r) => (
+          <React.Fragment key={r.name}>
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "var(--mono, monospace)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+              title={r.name}
+            >
+              {r.name}
+            </Text>
+            {metric === "error" ? (
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontVariantNumeric: "tabular-nums",
+                  color: "var(--red)",
+                  textAlign: "right",
+                }}
+              >
+                {fmtPercent(r.errorRatePct ?? 0)}
+              </Text>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--text-2)",
+                    textAlign: "right",
+                  }}
+                >
+                  {fmtMs(r.p95Ms)}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--text-3)",
+                    textAlign: "right",
+                  }}
+                >
+                  {fmtCount(r.calls)}
+                </Text>
+              </>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
     )}
   </Flex>
 );
@@ -240,7 +273,8 @@ export interface PlatformHealthCardProps {
 }
 
 export const PlatformHealthCard = ({ health }: PlatformHealthCardProps) => {
-  const [open, setOpen] = useState(false);
+  // Expanded by default — the contributor tables are the actionable detail.
+  const [open, setOpen] = useState(true);
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>

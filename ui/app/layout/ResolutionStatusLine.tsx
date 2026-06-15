@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { useResolvedCounts } from "../scope/useResolvedCounts";
@@ -17,6 +18,11 @@ const formatCount = (n: number | null): string => (n == null ? "—" : String(n)
 
 export const ResolutionStatusLine = () => {
   const counts = useResolvedCounts();
+  const { pathname } = useLocation();
+  // On Pulse the architecture-map header already carries the service / agent /
+  // tool / finding counts, so the strip drops them there to avoid duplication
+  // and just anchors scope ("Fleet-wide") + the segments hint + refresh time.
+  const onPulse = pathname === "/" || pathname === "/pulse";
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -41,10 +47,15 @@ export const ResolutionStatusLine = () => {
       }}
     >
       <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-        <strong>Fleet-wide</strong> ·{" "}
-        <strong>{formatCount(counts.services)}</strong> services with AI spans ·{" "}
-        <strong>{formatCount(counts.agents)}</strong> agents ·{" "}
-        <strong>{formatCount(counts.tools)}</strong> tools
+        <strong>Fleet-wide</strong>
+        {!onPulse && (
+          <>
+            {" "}·{" "}
+            <strong>{formatCount(counts.services)}</strong> services with AI spans ·{" "}
+            <strong>{formatCount(counts.agents)}</strong> agents ·{" "}
+            <strong>{formatCount(counts.tools)}</strong> tools
+          </>
+        )}
       </Text>
       <Flex flexGrow={1} />
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>

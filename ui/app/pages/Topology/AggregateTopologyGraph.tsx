@@ -219,10 +219,14 @@ export const AggregateTopologyGraph = ({
     dragRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
   };
   const onMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.x;
-    const dy = e.clientY - dragRef.current.y;
-    setView((v) => ({ ...v, tx: dragRef.current!.tx + dx, ty: dragRef.current!.ty + dy }));
+    // Snapshot the drag origin BEFORE setView. The state updater can run after
+    // endDrag (mouseup/mouseleave) has nulled dragRef.current; reading
+    // dragRef.current!.tx inside the updater then throws "reading 'tx'".
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    setView((v) => ({ ...v, tx: d.tx + dx, ty: d.ty + dy }));
   };
   const endDrag = () => {
     dragRef.current = null;

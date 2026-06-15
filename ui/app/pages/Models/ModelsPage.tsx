@@ -13,6 +13,7 @@ import {
   ModelTypeSegmented,
   type ModelTypeFilter,
 } from "./ModelTypeSegmented";
+import { ModelsFinOpsSections } from "./ModelsFinOpsSections";
 import { useModels } from "./useModels";
 
 export const ModelsPage = () => {
@@ -72,6 +73,9 @@ export const ModelsPage = () => {
           <ModelsSidePanels models={filtered} isLoading={isLoading} />
         </div>
         <ModelsTable models={filtered} isLoading={isLoading} />
+        {/* FinOps merged in as collapsible sections below the bubble chart +
+            table. Cost figures flow through the section-G cost model. */}
+        <ModelsFinOpsSections models={models} onSelectFinding={setSelectedFinding} />
       </Flex>
       <FindingDrawer
         finding={selectedFinding}

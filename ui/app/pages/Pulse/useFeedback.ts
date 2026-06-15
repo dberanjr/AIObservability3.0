@@ -49,7 +49,7 @@ const num = (v: unknown): number => {
 
 const countsQuery = (from: string, to: string): string =>
   `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
 | filter isNotNull(\`gen_ai.feedback.rating\`) or isNotNull(\`gen_ai.feedback.label\`)
 | summarize {
     n = count(),
@@ -59,7 +59,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)},
 
 const labelQuery = (from: string, to: string): string =>
   `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
 | filter isNotNull(\`gen_ai.feedback.label\`)
 | summarize n = count(), by: { label = toString(\`gen_ai.feedback.label\`) }
 | sort n desc
@@ -68,7 +68,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)},
 
 const versionQuery = (from: string, to: string): string =>
   `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
 | filter isNotNull(\`gen_ai.prompt_hub.name\`) or isNotNull(\`gen_ai.prompt_hub.version\`)
 | summarize {
     versions = countDistinct(coalesce(toString(\`gen_ai.prompt_hub.version\`), toString(\`gen_ai.prompt_hub.name\`))),

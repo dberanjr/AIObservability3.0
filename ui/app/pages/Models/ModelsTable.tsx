@@ -14,6 +14,8 @@ import {
   fmtUSD,
 } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
+import { BlendedBadge } from "../../components/displayHints";
+import { useModelDisplay } from "../../components/useModelDisplay";
 import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
 
 type SortKey =
@@ -206,6 +208,7 @@ export interface ModelsTableProps {
 }
 
 export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
+  const fmtModel = useModelDisplay();
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: "requests",
     dir: "desc",
@@ -323,7 +326,7 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                   value={m.rawModels}
                   label="model"
                 >
-                  {m.model}
+                  {fmtModel(m.rawModels?.[0] ?? m.model)}
                 </FilterTrigger>
               </Cell>
               <Cell width={100}>
@@ -397,19 +400,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 )}
               </Cell>
               <Cell width={90} align="right" mono>
-                {m.pricingUnknown ? (
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-4)",
-                      fontFamily: "var(--mono, monospace)",
-                    }}
-                  >
-                    —
-                  </Text>
-                ) : (
-                  fmtUSD(m.cost)
-                )}
+                {fmtUSD(m.cost)}
+                {m.pricingUnknown && <BlendedBadge />}
               </Cell>
               <Cell
                 width={90}
@@ -417,19 +409,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 mono
                 color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
               >
-                {m.pricingUnknown ? (
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-4)",
-                      fontFamily: "var(--mono, monospace)",
-                    }}
-                  >
-                    —
-                  </Text>
-                ) : (
-                  fmtUSD(m.costPerMTok)
-                )}
+                {fmtUSD(m.costPerMTok)}
+                {m.pricingUnknown && <BlendedBadge />}
               </Cell>
             </div>
           ))

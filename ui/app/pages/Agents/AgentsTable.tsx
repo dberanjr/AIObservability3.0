@@ -15,6 +15,10 @@ import { useSLA } from "../../components/SLAConfig/SLAContext";
 import { useTweaks } from "../../tweaks/TweaksContext";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { StageBreakdownBar } from "./StageBreakdownBar";
+import { AgentToolsSubview } from "./AgentToolsSubview";
+import { AgentTopologySubview } from "./AgentTopologySubview";
+import { AgentContextStoresSubview } from "./AgentContextStoresSubview";
+import { useHighFrequencyAgents } from "./useHighFrequencyAgents";
 import type { AgentRow } from "./useAgents";
 
 const STATUS_COLOR: Record<AgentHealthStatus, string> = {
@@ -117,7 +121,50 @@ const TTFTValue = ({ value }: { value: number | null }) =>
     </Text>
   );
 
-const ExpandedDetail = ({ row }: { row: AgentRow }) => (
+type DetailTab = "tools" | "topology" | "context";
+
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: "tools", label: "Tools" },
+  { id: "topology", label: "Topology" },
+  { id: "context", label: "Context stores" },
+];
+
+const SubTabBar = ({
+  active,
+  onSelect,
+}: {
+  active: DetailTab;
+  onSelect: (t: DetailTab) => void;
+}) => (
+  <Flex gap={4} style={{ borderBottom: "1px solid var(--border)" }}>
+    {DETAIL_TABS.map((t) => (
+      <button
+        key={t.id}
+        type="button"
+        onClick={() => onSelect(t.id)}
+        aria-current={active === t.id ? "true" : undefined}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          padding: "6px 12px",
+          fontSize: 12.5,
+          fontWeight: active === t.id ? 600 : 400,
+          color: active === t.id ? "var(--text-1)" : "var(--text-3)",
+          borderBottom:
+            active === t.id
+              ? "2px solid var(--accent, var(--blue-2))"
+              : "2px solid transparent",
+        }}
+      >
+        {t.label}
+      </button>
+    ))}
+  </Flex>
+);
+
+const ExpandedDetail = ({ row }: { row: AgentRow }) => {
+  const [tab, setTab] = useState<DetailTab>("tools");
+  return (
   <Flex
     flexDirection="column"
     gap={8}
@@ -204,8 +251,19 @@ const ExpandedDetail = ({ row }: { row: AgentRow }) => (
         )}
       </Flex>
     </Flex>
+
+    {/* TODO: "Patterns" sub-tab. Surface relevant entries from
+        ui/app/data/ai-layer-patterns.ts based on the agent's detected
+        traceloop.span.kind values. Not in scope for this task. */}
+    <SubTabBar active={tab} onSelect={setTab} />
+    <div style={{ paddingTop: 8 }}>
+      {tab === "tools" && <AgentToolsSubview agentName={row.agent} />}
+      {tab === "topology" && <AgentTopologySubview agentName={row.agent} />}
+      {tab === "context" && <AgentContextStoresSubview />}
+    </div>
   </Flex>
-);
+  );
+};
 
 export interface AgentsTableProps {
   rows: AgentRow[];
@@ -216,6 +274,7 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
   const { thresholds, hasActive } = useSLA();
   const { pageConfig } = useTweaks();
   const showTtft = pageConfig.agentsShowTtft;
+  const highFreqAgents = useHighFrequencyAgents();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const toggle = (id: string) =>
@@ -328,6 +387,23 @@ export const AgentsTable = ({ rows, isLoading }: AgentsTableProps) => {
                     >
                       {r.agent}
                     </FilterTrigger>
+                    {highFreqAgents.has(r.agent) && (
+                      <span
+                        title="A single tool was called above the high-frequency threshold for this agent (possible N+1 / tool loop). See the Tools sub-view."
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 9.5,
+                          fontWeight: 600,
+                          color: "var(--amber)",
+                          border: "1px solid var(--amber)",
+                          borderRadius: 4,
+                          padding: "0 4px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        ⚠ high tool frequency
+                      </span>
+                    )}
                   </Cell>
                   <Cell width={140} mono color="var(--text-2)">
                     {r.service ? (

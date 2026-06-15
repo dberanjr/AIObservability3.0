@@ -124,7 +124,7 @@ export const buildPromptsListQuery = (
     : "";
   const extraClauses = sidebarClauses(sidebar);
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 // An LLM "prompt" span = has a provider/system and is a chat/completion call.
@@ -220,7 +220,7 @@ export const buildPromptFacetValuesQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | summarize
@@ -241,7 +241,7 @@ export const buildPromptAgentMapQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | summarize agent = takeFirst(gen_ai.agent.name), by: { trace_id = trace.id }
@@ -256,7 +256,7 @@ export const buildPromptsSummaryQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)
@@ -289,7 +289,7 @@ export const buildPromptQualityQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.provider.name)
@@ -343,7 +343,7 @@ export const buildTraceSpansQuery = (
 ): string => {
   const { from, to } = traceWindow(startMs);
   return `
-fetch spans, samplingRatio: 1, from: ${from}, to: ${to}, scanLimitGBytes: 100
+fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
 | filter trace.id == toUid("${dqlEscape(traceId)}")
 | dedup {span.id}
 | fieldsAdd
@@ -399,7 +399,7 @@ export const buildTraceLogsQuery = (
 ): string => {
   const { from, to } = traceWindow(startMs);
   return `
-fetch logs, from: ${from}, to: ${to}, scanLimitGBytes: 500
+fetch logs, from: ${from}, to: ${to}
 | filter trace_id == "${dqlEscape(traceId)}"
 | fields
     timestamp,
@@ -423,7 +423,7 @@ export const buildSpanDetailQuery = (
   spanId: string,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 | filter span.id == toUid("${dqlEscape(spanId)}")
 | fields
     finish_reason = coalesce(gen_ai.completion.0.finish_reason, toString(gen_ai.response.finish_reasons)),
@@ -443,7 +443,7 @@ export const buildSpanLogsQuery = (
   spanId: string,
   timeframe: Timeframe,
 ): string => `
-fetch logs, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 200
+fetch logs, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 | filter span_id == toUid("${dqlEscape(spanId)}")
 | summarize error_logs = countIf(status == "ERROR"), warning_logs = countIf(status == "WARN"), total = count()
 `.trim();

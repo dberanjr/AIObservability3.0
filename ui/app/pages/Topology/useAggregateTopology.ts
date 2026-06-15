@@ -121,13 +121,24 @@ const TIER_CAP: Record<AggTier, number> = {
   downstream: 30,
 };
 
-export const useAggregateTopology = (): AggTopologyResult => {
+export const useAggregateTopology = (
+  /** When set, the co-occurrence query is scoped to this agent so the graph
+   *  shows the agent's own call topology (Agents-tab sub-view), not the fleet.
+   *  The renderer is unchanged — only the data source is scoped (Path b). */
+  agentName?: string,
+): AggTopologyResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
 
   const coocRes = useScopedDql<CoocRecord>(
-    canQuery ? buildAggregateTopologyQuery(resolution.serviceIds, scope.timeframe) : "",
+    canQuery
+      ? buildAggregateTopologyQuery(
+          resolution.serviceIds,
+          scope.timeframe,
+          agentName,
+        )
+      : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
   const idRes = useScopedDql<IdRecord>(
@@ -145,15 +156,15 @@ export const useAggregateTopology = (): AggTopologyResult => {
   // (which doesn't apply to smartscape) from being injected.
   const upstreamRes = useScopedDql<EdgeRecord>(
     aiServiceIds.length ? buildUpstreamEdgesQuery(aiServiceIds) : "",
-    { enabled: aiServiceIds.length > 0, staleTime: 60_000, ignoreGlobalFilter: true, ignoreScanLimit: true },
+    { enabled: aiServiceIds.length > 0, staleTime: 60_000, ignoreGlobalFilter: true },
   );
   const downstreamRes = useScopedDql<EdgeRecord>(
     aiServiceIds.length ? buildDownstreamEdgesQuery(aiServiceIds) : "",
-    { enabled: aiServiceIds.length > 0, staleTime: 60_000, ignoreGlobalFilter: true, ignoreScanLimit: true },
+    { enabled: aiServiceIds.length > 0, staleTime: 60_000, ignoreGlobalFilter: true },
   );
   const affectedRes = useScopedDql<AffectedRecord>(
     aiServiceIds.length ? buildAffectedServiceIdsQuery(aiServiceIds) : "",
-    { enabled: aiServiceIds.length > 0, staleTime: 60_000, ignoreGlobalFilter: true, ignoreScanLimit: true },
+    { enabled: aiServiceIds.length > 0, staleTime: 60_000, ignoreGlobalFilter: true },
   );
 
   // Map AI service entity id → resolved name (for problem-ring lookup).

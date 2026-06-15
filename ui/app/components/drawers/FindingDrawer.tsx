@@ -15,6 +15,15 @@ import {
   type FindingSeverity,
 } from "./types";
 import { dispatchIntent } from "../../lib/intents";
+import { useTabNav } from "../../lib/nav";
+import { encodePromptsFilter, promptsFilterForFinding } from "../../pages/Prompts/findingFilter";
+import { fmtCount, fmtMs } from "../../data/format";
+import { Spark } from "../../pages/Pulse/archMap/Spark";
+import {
+  usePulseSeries,
+  seriesForFinding,
+  seriesLabelForFinding,
+} from "../../pages/Pulse/archMap/usePulseSeries";
 
 const SEVERITY_COLOR: Record<FindingSeverity, string> = {
   info: "var(--blue)",
@@ -103,6 +112,22 @@ const handlerFor = (
 export const FindingDrawer = ({ finding, onDismiss }: FindingDrawerProps) => {
   const intents = finding?.intents ?? DEFAULT_FINDING_INTENTS;
   const timestamp = formatTime(finding?.timestampMs);
+  const goToTab = useTabNav();
+  // Per-finding metric series (only scanned while a finding is open) so the
+  // drawer shows WHEN the condition spiked over the window.
+  const series = usePulseSeries(Boolean(finding));
+  const anomaly: (Finding & { type?: string }) | null = finding;
+  const findingSeries = anomaly ? seriesForFinding(anomaly, series) : undefined;
+  const isLatency = anomaly?.type === "latency-spike" || anomaly?.type === "ttft-degradation";
+
+  const openInPrompts = () => {
+    if (!finding) return;
+    onDismiss();
+    goToTab("/prompts", {
+      focus: "llm",
+      params: encodePromptsFilter(promptsFilterForFinding(finding)),
+    });
+  };
 
   return (
     <Sheet
@@ -140,23 +165,41 @@ export const FindingDrawer = ({ finding, onDismiss }: FindingDrawerProps) => {
             </Text>
           </Flex>
 
-          {/* 24h trend sparkline — pending Session 5 chart components. */}
-          <div
-            aria-hidden
-            style={{
-              height: 60,
-              borderRadius: 6,
-              background: "var(--surface-2)",
-              border: "1px dashed var(--border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-              24h trend — sparkline arrives with the Pulse charts session
-            </Text>
-          </div>
+          {/* When the condition occurred — the relevant metric over the window. */}
+          {findingSeries && findingSeries.length > 1 ? (
+            <Flex flexDirection="column" gap={4}>
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {seriesLabelForFinding(anomaly ?? {})}
+                {series.intervalLabel ? ` · ${series.intervalLabel}` : ""}
+              </Text>
+              <Spark
+                data={findingSeries}
+                color={SEVERITY_COLOR[finding.severity]}
+                width={440}
+                height={60}
+                fluid
+                labels={series.labels}
+                format={isLatency ? fmtMs : fmtCount}
+              />
+            </Flex>
+          ) : (
+            <div
+              aria-hidden
+              style={{
+                height: 60,
+                borderRadius: 6,
+                background: "var(--surface-2)",
+                border: "1px dashed var(--border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {series.isLoading ? "Loading trend…" : "No time series for this finding"}
+              </Text>
+            </div>
+          )}
 
           {finding.detail && (
             <Text style={{ fontSize: 13, color: "var(--text-2)" }}>
@@ -177,6 +220,14 @@ export const FindingDrawer = ({ finding, onDismiss }: FindingDrawerProps) => {
               Continue the investigation
             </Text>
             <Flex flexDirection="column" gap={6}>
+              <Button
+                variant="emphasized"
+                color="primary"
+                onClick={openInPrompts}
+                title="Open the Prompts stream filtered to the spans that contributed to this finding"
+              >
+                View contributing prompts
+              </Button>
               {intents.map((intent) => {
                 const onClick = handlerFor(intent, finding);
                 return (

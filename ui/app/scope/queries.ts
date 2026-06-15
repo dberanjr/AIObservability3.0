@@ -85,7 +85,7 @@ export const buildAgentCountQuery = (
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -106,7 +106,7 @@ export const buildToolCountQuery = (
   // reading "0 tools". Approximate under the scan cap (high-volume compute
   // tools dominate the scan); the Tools page is the authoritative view.
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name) or (isNotNull(gen_ai.agent.name) and (span.kind == "internal" or span.kind == "client") and isNull(gen_ai.provider.name) and isNull(gen_ai.request.model) and span.name != gen_ai.agent.name)
@@ -117,7 +117,7 @@ ${globalFilterClauses(filters)}
 
 /** Distinct-services count for the status line. */
 export const FLEET_SERVICE_COUNT_QUERY = `
-fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: now()-24h
 | filter isNotNull(gen_ai.provider.name)
 | summarize services = countDistinct(dt.entity.service)
 `.trim();
@@ -192,7 +192,7 @@ export const buildFilterOptionsQuery = (
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | summarize

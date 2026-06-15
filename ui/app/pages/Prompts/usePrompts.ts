@@ -13,7 +13,7 @@ import {
   type LatencyFilter,
 } from "./queries";
 import { canonicalizeModel } from "../../detection/attributes";
-import { getPricing, estimateCost } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
 
 /** True when `val` satisfies a numeric range filter (>, <, between). */
@@ -298,9 +298,8 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       const modelLabel = r.model ? canonicalizeModel(r.model).label : null;
       const inTok = num(r.in_tok);
       const outTok = num(r.out_tok);
-      const pricing = getPricing(modelLabel);
-      const inCost = inTok > 0 ? estimateCost(inTok, 0, pricing) : 0;
-      const outCost = outTok > 0 ? estimateCost(0, outTok, pricing) : 0;
+      const inCost = inTok > 0 ? costOf(inTok, 0, modelLabel) : 0;
+      const outCost = outTok > 0 ? costOf(0, outTok, modelLabel) : 0;
 
       prompts.push({
         id: spanId ?? `${traceId ?? "?"}-${prompts.length}`,

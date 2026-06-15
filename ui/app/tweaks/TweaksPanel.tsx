@@ -491,7 +491,7 @@ export const TweaksPanel = () => {
           <Flex flexDirection="column" gap={12}>
             <SectionLabel>Page configuration</SectionLabel>
             <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Tools tab · tool definition</FieldLabel>
+              <FieldLabel>Agent tools · definition</FieldLabel>
               <Segmented
                 ariaLabel="Tools mode"
                 options={TOOLS_MODE_OPTIONS}
@@ -516,6 +516,35 @@ export const TweaksPanel = () => {
                 Off by default —{" "}
                 <code>gen_ai.usage.time_to_first_token</code> is not
                 instrumented in this environment.
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Show with example data</FieldLabel>
+              <Segmented
+                ariaLabel="Show example data"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.showExampleData ? "on" : "off"}
+                onChange={(v) => t.setShowExampleData(v === "on")}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Render capability-gated panels with example data when your
+                telemetry doesn&apos;t emit the attribute, so you can see what
+                you&apos;re missing. Example data is clearly labelled and never
+                mixed with real data.
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Model names</FieldLabel>
+              <Segmented
+                ariaLabel="Model name display"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.showRawModels ? "on" : "off"}
+                onChange={(v) => t.setShowRawModels(v === "on")}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                On shows the RAW model string (e.g.{" "}
+                <code>us.anthropic.claude-…-v1:0</code>); off shows the
+                normalized label (version suffixes folded).
               </Text>
             </Flex>
           </Flex>

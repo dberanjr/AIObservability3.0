@@ -12,11 +12,11 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
  * Durations are divided by `1ms` (a duration unit), never a scalar, so round()
  * works on a number rather than silently returning a duration.
  *
- * samplingRatio and scanLimitGBytes are placeholders that useScopedDql rewrites
- * to the toolbar's active sampling and scan-limit selections.
+ * samplingRatio is a placeholder useScopedDql rewrites to the toolbar's active
+ * sampling; the scan limit is injected by useScopedDql (never hardcoded here).
  */
 export const buildMcpHealthQuery = (timeframe: Timeframe): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 | filter span.name == "mcp.server" or traceloop.span.kind == "tool"
 | fieldsAdd tool = if(span.name == "mcp.server", "mcp.server (aggregate)", else: span.name)
 | summarize {
@@ -44,7 +44,7 @@ export const buildMcpActivityQuery = (
   timeframe: Timeframe,
   intervalSec: number,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 | filter span.name == "mcp.server" or traceloop.span.kind == "tool"
 | makeTimeseries {
     mcp_server_calls = countIf(span.name == "mcp.server"),

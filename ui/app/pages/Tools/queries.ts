@@ -3,41 +3,10 @@ import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
-/** Matches a tool by its discovered span name OR the strict gen_ai.tool.name. */
-const toolFilter = (tool: string): string =>
-  `| filter span.name == "${dqlEscape(tool)}" or gen_ai.tool.name == "${dqlEscape(tool)}"`;
-
-/**
- * Per-tool call volume + p90 latency over time, for the detail modal's trend
- * chart (volume area on the left axis, p90 latency line on the right). Null
- * buckets are treated as 0 / gap client-side.
- */
-export const buildToolTimeseriesQuery = (
-  tool: string,
-  timeframe: Timeframe,
-  intervalSec: number,
-): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
-${toolFilter(tool)}
-| makeTimeseries { calls = count(), p90 = percentile(duration, 90) }, interval: ${intervalSec}s
-`.trim();
-
-/**
- * Sample traces that contain the tool — slowest first, so the modal's Trace
- * tab opens on the most interesting example. trace.id serializes as a hex
- * string that useTraceSpans wraps in toUid() for the span lookup.
- */
-export const buildToolTracesQuery = (
-  tool: string,
-  timeframe: Timeframe,
-): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
-${toolFilter(tool)}
-| fieldsAdd dur_ms = duration / 1000000, ${logicalErrorField("err")}
-| fields trace_id = trace.id, ts = start_time, dur_ms, err, svc = coalesce(service.name, gen_ai.agent.name)
-| sort dur_ms desc
-| limit 10
-`.trim();
+// NOTE: this file once also held the standalone Tools tab's per-tool detail
+// queries (timeseries / traces). The Tools tab folded into the Agents tab, so
+// only the two aggregate builders below remain — reused by the Agents "Tools"
+// sub-view (AgentToolsSubview) with an agent filter.
 
 /**
  * Per-tool aggregates. Reads gen_ai.tool.name as the canonical tool key.
@@ -51,11 +20,14 @@ export const buildToolsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  /** When set, scope the tool table to a single agent (Agents-tab sub-view). */
+  agentName?: string,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name)
+${agentName ? `| filter gen_ai.agent.name == "${dqlEscape(agentName)}"` : ""}
 | dedup {span.id}
 | fieldsAdd
     ${logicalErrorField()},
@@ -97,11 +69,14 @@ export const buildDiscoveredToolsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  /** When set, scope the tool table to a single agent (Agents-tab sub-view). */
+  agentName?: string,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
+${agentName ? `| filter gen_ai.agent.name == "${dqlEscape(agentName)}"` : ""}
 | filter span.kind == "internal" or span.kind == "client"
 | filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
 | filter span.name != gen_ai.agent.name

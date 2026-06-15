@@ -58,7 +58,7 @@ const buildValuesQuery = (
     ? `| filter contains(toString(${attribute}), "${dqlEscape(term)}")`
     : "";
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to)}
 | filter isNotNull(${attribute})
 ${searchClause}
 | summarize cnt = count(), by: { v = toString(${attribute}) }

@@ -21,7 +21,7 @@ export const buildAgentsQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -90,7 +90,7 @@ export const buildOrchestrationNodesQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -135,7 +135,7 @@ export const buildAgentTraceJoinQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.request.model)
 | dedup {span.id}
@@ -178,7 +178,7 @@ export const buildLatencyDecompositionQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.provider.name)
@@ -217,7 +217,7 @@ export const buildAgentLoopsQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(traceloop.association.properties.langgraph_node)
@@ -246,7 +246,7 @@ export const buildAgentEvalQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -276,7 +276,7 @@ export const buildAiServiceIdsQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -314,7 +314,7 @@ export const buildInvocationsSeriesQuery = (
   intervalSec: number,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -332,7 +332,7 @@ export const buildDegradedTrendQuery = (
 ): string => {
   if (topAgents.length === 0) {
     return `
-fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 100
+fetch spans, samplingRatio: 1, from: now()-24h
 | filter false
 | summarize n = count()
 `.trim();
@@ -341,7 +341,7 @@ fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 100
     .map((n) => `"${dqlEscape(n)}"`)
     .join(", ");
   return `
-fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: now()-24h, to: now()
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter in(gen_ai.agent.name, array(${agentArray}))
@@ -351,3 +351,23 @@ ${globalFilterClauses(filters)}
     by: { agent = gen_ai.agent.name }
 `.trim();
 };
+
+/**
+ * Max single-tool call count per agent — input to the "high tool frequency"
+ * (N+1) badge. Uses the Discovered tool definition (internal/client function
+ * spans by name), matching the Agents-tab default, so it works on fleets that
+ * don't emit gen_ai.tool.name.
+ */
+export const buildHighFrequencyToolsQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name)
+| filter span.kind == "internal" or span.kind == "client"
+| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
+| filter span.name != gen_ai.agent.name
+| summarize calls = count(), by: { agent = gen_ai.agent.name, tool = span.name }
+| summarize maxToolCalls = max(calls), by: { agent }
+`.trim();

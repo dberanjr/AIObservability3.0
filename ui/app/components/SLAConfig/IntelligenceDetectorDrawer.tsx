@@ -47,6 +47,73 @@ const DEFAULT_SUGGESTIONS: DetectorSuggestion[] = [
 | filter isNotNull(gen_ai.error.type) or isNotNull(gen_ai.guardrail.action)
 | summarize count()`,
   },
+  {
+    name: "Within-trace token growth",
+    type: "metric-anomaly",
+    signal: "Billable tokens per LLM call within a trace",
+    filter: "gen_ai.request.model is set · ordered by time within trace.id",
+    sensitivity: "Medium · learn 7d",
+    baselineHint: "Last call >= 2.5× the first across 3+ calls (cache reads excluded)",
+    dql: `fetch spans
+| filter isNotNull(gen_ai.request.model)
+| sort timestamp asc
+| summarize ins = collectArray(toLong(gen_ai.usage.input_tokens)), n = count(), by: { trace = trace.id }
+| filter n >= 3`,
+  },
+  {
+    name: "Model fallback / mismatch",
+    type: "static-threshold",
+    signal: "request.model != response.model (normalized)",
+    filter: "gen_ai.request.model and gen_ai.response.model set",
+    sensitivity: "Static · > 15% of calls",
+    baselineHint: "Normalize version suffixes before comparing",
+    dql: `fetch spans
+| filter isNotNull(gen_ai.request.model) and isNotNull(gen_ai.response.model)
+| summarize requests = count(), by: { req = gen_ai.request.model, resp = gen_ai.response.model }`,
+  },
+  {
+    name: "Context-window truncation",
+    type: "static-threshold",
+    signal: "finish_reason max_tokens / length",
+    filter: "gen_ai.response.finish_reasons set",
+    sensitivity: "Static · > 2% of generations",
+    baselineHint: "Hard threshold on truncated share",
+    dql: `fetch spans
+| filter isNotNull(gen_ai.request.model)
+| summarize total = count(), truncated = countIf(contains(lower(toString(gen_ai.response.finish_reasons)), "max_tokens") or contains(lower(toString(gen_ai.response.finish_reasons)), "length"))`,
+  },
+  {
+    name: "Provider rate-limit / backoff",
+    type: "static-threshold",
+    signal: "429 / throttling at the LLM boundary",
+    filter: "http.response.status_code == 429 or rate-limit error code",
+    sensitivity: "Static · any sustained 429s",
+    baselineHint: "Watch for exponential-backoff retry signatures",
+    dql: `fetch spans, from: now()-15m
+| filter toLong(coalesce(http.response.status_code, 0)) == 429
+| summarize count()`,
+  },
+  {
+    name: "TTFT degradation",
+    type: "metric-anomaly",
+    signal: "Streaming time-to-first-token",
+    filter: "gen_ai.usage.time_to_first_token set (capability-gated)",
+    sensitivity: "Medium · learn 7d",
+    baselineHint: "Latest hour vs rolling avg · alerts on 1.5× regression",
+    dql: `timeseries ttft = avg(toDouble(gen_ai.usage.time_to_first_token)), interval: 1h`,
+  },
+  {
+    name: "Tool-output → token spike (I.2)",
+    type: "metric-anomaly",
+    signal: "Next LLM call's billable tokens after a tool call",
+    filter: "tool span followed by an LLM call in the same trace",
+    sensitivity: "Medium · learn 7d",
+    baselineHint:
+      "Attributes a context-bloat jump to a specific tool. Needs span-sequence correlation — lift into a Notebook workflow.",
+    dql: `fetch spans
+| filter (traceloop.span.kind == "tool" or span.name == "mcp.server") or isNotNull(gen_ai.request.model)
+| sort timestamp asc`,
+  },
 ];
 
 const SuggestionCard = ({ s }: { s: DetectorSuggestion }) => {

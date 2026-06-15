@@ -15,9 +15,10 @@ import {
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import type { UseTokenConsumptionResult } from "./useTokenConsumption";
 import type { UseTokenForecastResult } from "./useTokenForecast";
+import { useSpendBreakdown } from "./useSpendBreakdown";
 
 /**
  * Build labels for every bucket on the combined (history + forecast) axis.
@@ -94,6 +95,8 @@ export const TokenConsumptionChart = ({
   onToggleForecast,
 }: TokenConsumptionChartProps) => {
   const { setTimeframe } = useScope();
+  const spend = useSpendBreakdown();
+  const spendTotal = !spend.isLoading && spend.total > 0 ? spend.total : result.totalCost;
   const historicalTokens = result.points.map((p) => p.tokens);
   const historicalCosts = result.points.map((p) => p.estCost);
   const histLen = historicalTokens.length;
@@ -132,9 +135,9 @@ export const TokenConsumptionChart = ({
   // Per-bucket cost is derived from per-bucket tokens via the same blended
   // pricing as the historical Est. cost line, so the forecasted cost band
   // tracks the forecasted token band 1:1.
-  const blended = useMemo(() => getPricing("claude-sonnet-4-6"), []);
-  const tokensToCost = (n: number) =>
-    estimateCost(n / 2, n / 2, blended);
+  // Fleet-aggregate buckets priced at the blended rate (model: null) through
+  // the cache-aware cost model.
+  const tokensToCost = (n: number) => costOf(n / 2, n / 2, null);
 
   const forecastBands: ForecastBand[] = useMemo(() => {
     if (!forecastEnabled || !fc || histLen === 0) return [];
@@ -162,7 +165,6 @@ export const TokenConsumptionChart = ({
         axis: "right",
       },
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forecastEnabled, fc, histLen]);
 
   // Time domain spans `now - histLen*intervalMs` (historical start) through
@@ -235,7 +237,7 @@ export const TokenConsumptionChart = ({
               <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
                 Token consumption
               </Heading>
-              <InfoTooltip text="Token usage over the active timeframe, bucketed at a snapped interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per bucket; dashed line is blended estimated cost on the right axis. Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range." />
+              <InfoTooltip text="Token usage over the active timeframe, bucketed at a snapped interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per bucket; dashed line is estimated cost (per-bucket, from token usage) on the right axis. The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range." />
             </Flex>
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
               Tokens (solid) · Est. cost (dashed, right axis) · {result.intervalLabel} buckets
@@ -247,7 +249,10 @@ export const TokenConsumptionChart = ({
               <strong>{fmtTokens(result.totalTokens)}</strong> tokens
             </Text>
             <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-              <strong>{fmtUSDCompact(result.totalCost)}</strong> blended est.
+              <strong>{fmtUSDCompact(spendTotal)}</strong> spend
+              {spend.hasEstimated && !spend.isLoading
+                ? ` · ${fmtUSDCompact(spend.actual)} actual + ${fmtUSDCompact(spend.estimated)} est.`
+                : ""}
             </Text>
             <ForecastToggle
               enabled={forecastEnabled}

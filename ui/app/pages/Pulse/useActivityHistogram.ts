@@ -27,13 +27,12 @@ export const useActivityHistogram = (): UseActivityHistogramResult => {
   const { serviceIds, isLoading: servicesLoading } = _resolution;
   const canQuery = canQueryScope(_resolution);
 
-  // The 24h activity panel always asks for the hardcoded 5 TB budget
-  // declared in buildActivityHistogramQuery — the toolbar's scan-limit
-  // pick doesn't apply here, so this panel can show real fleet rollup
-  // even when the user lowered the rest of the app to 500 GB.
+  // Honors the toolbar scan-limit selector like every other query (injected by
+  // useScopedDql) — no fixed budget. If the user lowers the scan limit, the 24h
+  // histogram is bounded the same as the rest of the app.
   const { data, isLoading, error } = useScopedDql<HistogramRecord>(
     canQuery ? buildActivityHistogramQuery(serviceIds) : "",
-    { enabled: canQuery, staleTime: 60_000, ignoreScanLimit: true },
+    { enabled: canQuery, staleTime: 60_000 },
   );
 
   return useMemo<UseActivityHistogramResult>(() => {

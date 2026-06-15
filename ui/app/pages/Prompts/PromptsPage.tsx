@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import {
@@ -16,9 +17,25 @@ import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
 import { usePromptQuality } from "./usePromptQuality";
 import { usePromptSummary } from "./usePromptSummary";
+import { decodePromptsFilter } from "./findingFilter";
 
 export const PromptsPage = () => {
-  const [filter, setFilter] = useState<PromptsFilter>({});
+  const { search } = useLocation();
+  const [filter, setFilter] = useState<PromptsFilter>(() =>
+    decodePromptsFilter(typeof window !== "undefined" ? window.location.search : ""),
+  );
+  // A finding drill arrives with a `pf_*` filter in the URL — apply it (once per
+  // distinct filter) on top of whatever the user has, so the stream pre-scopes
+  // to the spans that contributed to that problem pattern.
+  const appliedFilterRef = useRef<string>("");
+  useEffect(() => {
+    const incoming = decodePromptsFilter(search);
+    const sig = JSON.stringify(incoming);
+    if (sig !== "{}" && sig !== appliedFilterRef.current) {
+      appliedFilterRef.current = sig;
+      setFilter((prev) => ({ ...prev, ...incoming }));
+    }
+  }, [search]);
   const [view, setView] = useState<PromptView>("stream");
   // Sticky sidebar height must equal the space from its (pinned) top to the
   // viewport bottom — a fixed calc() guesses the page-header height wrong and
