@@ -28,6 +28,9 @@ import {
 import { useScope } from "../../scope/ScopeContext";
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
+import { useSpendBreakdown } from "./useSpendBreakdown";
+import { useMcpHealth } from "../McpHealth/useMcpHealth";
+import { useAnomalies } from "./anomalies/useAnomalies";
 
 type DonutColumnMode = "tokens" | "mcp";
 
@@ -482,6 +485,9 @@ const TileSkeleton = () => (
 
 export interface SummaryTilesRowProps {
   summary: PulseSummary;
+  /** Initial column count before the ResizeObserver measures (avoids a flash
+   * when rendered in the narrow hero side-column, where 2 columns is right). */
+  initialColumns?: number;
 }
 
 /**
@@ -514,14 +520,61 @@ const pickColumns = (width: number): number => {
   return 1;
 };
 
-export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
+export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRowProps) => {
   const breakdowns = useTileBreakdowns();
+  const spend = useSpendBreakdown();
+  // MCP tiles (Tool calls + MCP error rate) fold into this row; shown only when
+  // MCP / tool spans are present (replaces the old standalone MCP strip).
+  const mcp = useMcpHealth();
+  const showMcp = !mcp.isLoading && !mcp.isEmpty;
+  const mcpErr = mcp.kpis.errorRatePct;
+  const toolErrorSlices = breakdowns.mcpTools
+    .map((s) => ({ ...s, value: s.spanErrors + s.toolErrors }))
+    .filter((s) => s.value > 0);
+  const totalToolErrors = toolErrorSlices.reduce((a, b) => a + b.value, 0);
+  const hasToolErrors = totalToolErrors > 0;
+
+  // Avg tokens / request — average context size per call.
+  const avgTokensPerReq =
+    summary.requests && summary.requests > 0 && summary.tokens != null
+      ? summary.tokens / summary.requests
+      : null;
+
+  // Active findings broken down by severity (for the donut).
+  const { anomalies } = useAnomalies();
+  const sev = { critical: 0, warning: 0, info: 0 };
+  for (const a of anomalies) sev[a.severity] += 1;
+  const findingsTotal = sev.critical + sev.warning + sev.info;
+  const findingSlices = (
+    [
+      ["critical", "var(--red)", sev.critical],
+      ["warning", "var(--amber)", sev.warning],
+      ["info", "var(--blue)", sev.info],
+    ] as const
+  ).filter(([, , n]) => n > 0);
+  // Prefer the per-model split (actual + estimated) over the all-blended
+  // headline once model rows have loaded; fall back to the quick estimate.
+  const useSplit = !spend.isLoading && spend.total > 0;
+  const totalSpend = useSplit ? spend.total : summary.spend;
+  const costPerReq =
+    useSplit && summary.requests && summary.requests > 0
+      ? spend.total / summary.requests
+      : summary.costPerRequest;
+  const spendSub = spend.isLoading
+    ? "estimating…"
+    : spend.hasEstimated
+      ? `${fmtUSDCompact(spend.actual)} actual · ${fmtUSDCompact(spend.estimated)} est.`
+      : "actual rates";
+  const costPerReqSub = spend.isLoading
+    ? "estimating…"
+    : spend.hasEstimated
+      ? `${spend.estimatedModels.length} model${spend.estimatedModels.length === 1 ? "" : "s"} estimated`
+      : "all models priced";
   const { scope } = useScope();
   const timeframeLabel = formatTimeframe(scope.timeframe.from, scope.timeframe.to);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  // Default to 9 columns until the observer fires — avoids a jarring
-  // reflow on first mount on wide viewports.
-  const [columns, setColumns] = useState(9);
+  // Default until the observer fires — avoids a jarring reflow on first mount.
+  const [columns, setColumns] = useState(initialColumns);
 
   useEffect(() => {
     if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
@@ -596,7 +649,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
     return {
       title,
-      subtitle: `${info} · ${summary.spark.intervalLabel} buckets`,
+      subtitle: `${info} · per ${summary.spark.intervalLabel}`,
       body: (
         <AreaChart
           height={420}
@@ -774,7 +827,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         expanded={() =>
           sparklineExpanded(
             "Tokens",
-            "Per-bucket sum of input + output tokens across the active timeframe.",
+            "Per-interval sum of input + output tokens across the active timeframe.",
             summary.spark.tokens,
             fmtTokens,
           )
@@ -782,14 +835,14 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
       />
       <Tile
         label="Spend"
-        info="Blended USD estimate computed by applying default per-model pricing to the input/output token counts. Useful as a directional cost signal; the FinOps tab is authoritative."
-        value={fmtUSDCompact(summary.spend)}
-        sub="Blended est."
+        info="USD spend = actual (models priced in the table) + estimated (models not in the table, costed at a blended fallback rate). The sub-line splits the two. Counts are extrapolated to the unsampled population when sampling is on."
+        value={fmtUSDCompact(totalSpend)}
+        sub={spendSub}
         bottom={renderSpark(summary.spark.spend, "var(--blue)", fmtUSDCompact)}
         expanded={() =>
           sparklineExpanded(
             "Spend",
-            "Per-bucket blended cost derived from token usage and default pricing.",
+            "Per-interval blended cost derived from token usage and default pricing.",
             summary.spark.spend,
             fmtUSDCompact,
           )
@@ -803,7 +856,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         expanded={() =>
           sparklineExpanded(
             "P95 latency",
-            "Per-bucket 95th percentile of span duration.",
+            "Per-interval 95th percentile of span duration.",
             summary.spark.p95Ms,
             fmtMs,
           )
@@ -821,12 +874,46 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         expanded={() =>
           sparklineExpanded(
             "Error rate",
-            "Per-bucket fraction of spans with an exception.type set.",
+            "Per-interval fraction of spans with an exception.type set.",
             summary.spark.errorRatePct,
             (n) => fmtPercent(n, 1),
           )
         }
       />
+
+      {showMcp && (
+        <Tile
+          label="MCP error rate"
+          info="Share of MCP tool calls that errored (span errors + functional tool errors). The donut breaks errors down by tool; the center shows the overall error rate. Expand for the full per-tool table."
+          variant="visual"
+          visual={
+            <MiniDonut
+              size={96}
+              thickness={14}
+              values={hasToolErrors ? toolErrorSlices.map((s) => s.value) : [1]}
+              labels={hasToolErrors ? toolErrorSlices.map((s) => s.label) : ["No errors"]}
+              colors={hasToolErrors ? undefined : ["var(--green-2)"]}
+              valueFormatter={(n) => `${fmtCount(n)} err`}
+              centerValue={fmtPercent(mcpErr, 1)}
+            />
+          }
+          visualCaption="errored calls"
+          expanded={
+            hasToolErrors
+              ? () =>
+                  donutExpanded(
+                    "MCP errors",
+                    "Tool-call errors (span + functional) broken down by tool.",
+                    totalToolErrors,
+                    "error",
+                    toolErrorSlices,
+                    (n) => `${fmtCount(n)} err`,
+                    "mcp",
+                  )
+              : undefined
+          }
+        />
+      )}
 
       <Tile
         label="Models"
@@ -886,8 +973,8 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         }
       />
       <Tile
-        label="MCP tools"
-        info="Distinct MCP tools invoked within MCP workflows. Tool name comes from gen_ai.tool.name with a fallback to traceloop.entity.name. Donut sized by call count."
+        label="Tools"
+        info="Distinct tools invoked within MCP workflows. Tool name comes from gen_ai.tool.name with a fallback to traceloop.entity.name. Donut sized by call count; center shows the distinct tool count."
         variant="visual"
         visual={
           <MiniDonut
@@ -905,7 +992,7 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
         }
         expanded={() =>
           donutExpanded(
-            "MCP tools",
+            "Tools",
             "Distinct tools invoked within MCP workflows, sized by call count.",
             summary.mcpTools,
             "Tool",
@@ -918,13 +1005,13 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
 
       <Tile
         label="Cost / request"
-        info="Total blended spend divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (green = cheap, red = expensive). Ratio is sampling-invariant."
-        value={fmtUSD(summary.costPerRequest)}
-        sub="blended, all models"
+        info="Total spend (actual + estimated) divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (green = cheap, red = expensive). Ratio is sampling-invariant."
+        value={fmtUSD(costPerReq)}
+        sub={costPerReqSub}
         bottom={
-          summary.costPerRequest != null ? (
+          costPerReq != null ? (
             <MiniScale
-              value={summary.costPerRequest}
+              value={costPerReq}
               min={0}
               max={costScaleMax}
               ticks={[costScaleMax / 2]}
@@ -947,6 +1034,35 @@ export const SummaryTilesRow = ({ summary }: SummaryTilesRowProps) => {
           />
         }
         visualCaption="output / total"
+      />
+
+      <Tile
+        label="Avg tokens / request"
+        info="Total tokens ÷ requests — the average context size per call. A right-sizing signal alongside Cost/request. Ratio is sampling-invariant."
+        value={avgTokensPerReq != null ? fmtCount(avgTokensPerReq) : "—"}
+        sub="tokens ÷ requests"
+      />
+
+      <Tile
+        label="Active findings"
+        info="Open problem patterns detected in the current scope, broken down by severity (critical / warning / info). Select a finding in the list below the map for detail and the contributing prompts."
+        variant="visual"
+        visual={
+          <MiniDonut
+            size={96}
+            thickness={14}
+            values={findingsTotal > 0 ? findingSlices.map((s) => s[2]) : [1]}
+            labels={findingsTotal > 0 ? findingSlices.map((s) => s[0]) : ["None"]}
+            colors={findingsTotal > 0 ? findingSlices.map((s) => s[1]) : ["var(--green-2)"]}
+            valueFormatter={(n) => `${fmtCount(n)}`}
+            centerValue={String(findingsTotal)}
+          />
+        }
+        visualCaption={
+          findingsTotal > 0
+            ? `${sev.critical} crit · ${sev.warning} warn · ${sev.info} info`
+            : "none open"
+        }
       />
     </div>
   );

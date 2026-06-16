@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   AreaChart,
@@ -12,12 +12,16 @@ import {
   ChartModal,
   useChartExpander,
 } from "../../components/charts/ChartExpander";
-import { InfoTooltip } from "../../components/InfoTooltip";
+import { ForecastToggle } from "../../components/charts/ForecastToggle";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
-import { estimateCost, getPricing } from "../../data/pricing";
-import type { UseTokenConsumptionResult } from "./useTokenConsumption";
-import type { UseTokenForecastResult } from "./useTokenForecast";
+import { intervalPhraseFromMs } from "../../scope/chartInterval";
+import { costOf } from "../../data/pricing";
+import { usePersistedState } from "../../state/usePersistedState";
+import { useTokenConsumption } from "./useTokenConsumption";
+import { useTokenForecast } from "./useTokenForecast";
+import { useSpendBreakdown } from "./useSpendBreakdown";
 
 /**
  * Build labels for every bucket on the combined (history + forecast) axis.
@@ -80,20 +84,17 @@ const buildAxisTicks = (
   return ticks;
 };
 
-export interface TokenConsumptionChartProps {
-  result: UseTokenConsumptionResult;
-  forecast: UseTokenForecastResult;
-  forecastEnabled: boolean;
-  onToggleForecast: (next: boolean) => void;
-}
-
-export const TokenConsumptionChart = ({
-  result,
-  forecast,
-  forecastEnabled,
-  onToggleForecast,
-}: TokenConsumptionChartProps) => {
+const TokenConsumptionBody = () => {
+  const result = useTokenConsumption();
+  const [forecastEnabled, onToggleForecast] = usePersistedState<boolean>(
+    "ai-obs.pulse.forecast-enabled",
+    false,
+  );
+  const forecast = useTokenForecast(forecastEnabled);
   const { setTimeframe } = useScope();
+  const spend = useSpendBreakdown();
+  const spendTotal = !spend.isLoading && spend.total > 0 ? spend.total : result.totalCost;
+  const intervalPhrase = intervalPhraseFromMs(result.intervalMs);
   const historicalTokens = result.points.map((p) => p.tokens);
   const historicalCosts = result.points.map((p) => p.estCost);
   const histLen = historicalTokens.length;
@@ -132,9 +133,9 @@ export const TokenConsumptionChart = ({
   // Per-bucket cost is derived from per-bucket tokens via the same blended
   // pricing as the historical Est. cost line, so the forecasted cost band
   // tracks the forecasted token band 1:1.
-  const blended = useMemo(() => getPricing("claude-sonnet-4-6"), []);
-  const tokensToCost = (n: number) =>
-    estimateCost(n / 2, n / 2, blended);
+  // Fleet-aggregate buckets priced at the blended rate (model: null) through
+  // the cache-aware cost model.
+  const tokensToCost = (n: number) => costOf(n / 2, n / 2, null);
 
   const forecastBands: ForecastBand[] = useMemo(() => {
     if (!forecastEnabled || !fc || histLen === 0) return [];
@@ -162,7 +163,6 @@ export const TokenConsumptionChart = ({
         axis: "right",
       },
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forecastEnabled, fc, histLen]);
 
   // Time domain spans `now - histLen*intervalMs` (historical start) through
@@ -191,12 +191,12 @@ export const TokenConsumptionChart = ({
     return [
       { label: "Total tokens", value: fmtTokens(result.totalTokens) },
       { label: "Total est. cost", value: fmtUSDCompact(result.totalCost) },
-      { label: "Per-bucket min", value: fmtTokens(min) },
-      { label: "Per-bucket median", value: fmtTokens(median) },
-      { label: "Per-bucket avg", value: fmtTokens(avg) },
-      { label: "Per-bucket max", value: fmtTokens(max) },
+      { label: `Min per ${intervalPhrase}`, value: fmtTokens(min) },
+      { label: `Median per ${intervalPhrase}`, value: fmtTokens(median) },
+      { label: `Avg per ${intervalPhrase}`, value: fmtTokens(avg) },
+      { label: `Peak per ${intervalPhrase}`, value: fmtTokens(max) },
     ];
-  }, [historicalTokens, result.totalTokens, result.totalCost]);
+  }, [historicalTokens, result.totalTokens, result.totalCost, intervalPhrase]);
 
   const chart = (chartHeight: number) => (
     <AreaChart
@@ -227,27 +227,21 @@ export const TokenConsumptionChart = ({
   );
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         <Flex alignItems="baseline" justifyContent="space-between">
-          <Flex flexDirection="column" gap={2}>
-            <Flex alignItems="center" gap={6}>
-              <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-                Token consumption
-              </Heading>
-              <InfoTooltip text="Token usage over the active timeframe, bucketed at a snapped interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per bucket; dashed line is blended estimated cost on the right axis. Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range." />
-            </Flex>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Tokens (solid) · Est. cost (dashed, right axis) · {result.intervalLabel} buckets
-              {forecastEnabled ? " · Forecast (dashed purple)" : ""}
-            </Text>
-          </Flex>
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            Tokens (solid) · Est. cost (dashed, right axis) · per {intervalPhrase}
+            {forecastEnabled ? " · Forecast (dashed purple)" : ""}
+          </Text>
           <Flex alignItems="center" gap={12}>
             <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
               <strong>{fmtTokens(result.totalTokens)}</strong> tokens
             </Text>
             <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-              <strong>{fmtUSDCompact(result.totalCost)}</strong> blended est.
+              <strong>{fmtUSDCompact(spendTotal)}</strong> spend
+              {spend.hasEstimated && !spend.isLoading
+                ? ` · ${fmtUSDCompact(spend.actual)} actual + ${fmtUSDCompact(spend.estimated)} est.`
+                : ""}
             </Text>
             <ForecastToggle
               enabled={forecastEnabled}
@@ -298,73 +292,25 @@ export const TokenConsumptionChart = ({
             Forecast unavailable: {forecast.error.message}
           </Text>
         )}
+        <ChartModal
+          open={expander.open}
+          onClose={() => expander.setOpen(false)}
+          title="Token consumption"
+          subtitle={`Tokens (solid) · Est. cost (dashed, right axis) · per ${intervalPhrase}${forecastEnabled ? " · Forecast (dashed)" : ""}`}
+          stats={stats}
+        >
+          {chart(440)}
+        </ChartModal>
       </Flex>
-      <ChartModal
-        open={expander.open}
-        onClose={() => expander.setOpen(false)}
-        title="Token consumption"
-        subtitle={`Tokens (solid) · Est. cost (dashed, right axis) · ${result.intervalLabel} buckets${forecastEnabled ? " · Forecast (dashed)" : ""}`}
-        stats={stats}
-      >
-        {chart(440)}
-      </ChartModal>
-    </Surface>
   );
 };
 
-interface ForecastToggleProps {
-  enabled: boolean;
-  loading: boolean;
-  error: Error | undefined;
-  onChange: (next: boolean) => void;
-}
-
-const ForecastToggle = ({
-  enabled,
-  loading,
-  error,
-  onChange,
-}: ForecastToggleProps) => {
-  const label = enabled ? (loading ? "Forecasting…" : "Forecast on") : "Forecast";
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label="Toggle Dynatrace Intelligence forecast overlay"
-      onClick={() => onChange(!enabled)}
-      title={
-        error
-          ? `Forecast error: ${error.message}`
-          : "Predict the next ~30% of the timeframe using Dynatrace Intelligence (GenericForecastAnalyzer). Forecast always reads unsampled data."
-      }
-      style={{
-        all: "unset",
-        cursor: "pointer",
-        padding: "4px 10px",
-        borderRadius: 999,
-        fontSize: 11.5,
-        fontWeight: enabled ? 600 : 500,
-        color: enabled ? "var(--purple-2)" : "var(--text-2)",
-        background: enabled ? "var(--intel-soft)" : "var(--surface-2)",
-        border: `1px solid ${enabled ? "var(--purple-2)" : "var(--border)"}`,
-        fontVariantNumeric: "tabular-nums",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: enabled ? "var(--purple-2)" : "var(--text-3)",
-          opacity: loading ? 0.6 : 1,
-        }}
-      />
-      {label}
-    </button>
-  );
-};
+export const TokenConsumptionChart = () => (
+  <CollapsibleCard
+    title="Token consumption"
+    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; dashed line is estimated cost (per interval, from token usage) on the right axis. The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range."
+    defaultOpen
+  >
+    <TokenConsumptionBody />
+  </CollapsibleCard>
+);

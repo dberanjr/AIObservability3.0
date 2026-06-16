@@ -12,7 +12,7 @@ import {
   buildSummaryQuery,
   buildSummarySparkSeriesQuery,
 } from "./dataQueries";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 
 interface SummaryRecord {
   requests?: number;
@@ -122,15 +122,12 @@ const formatIntervalLabel = (sec: number): string => {
 };
 
 /**
- * Cheap blended cost estimate: spend = avg(price) × tokens. We don't have a
- * per-row spend in the summary so we average the headline models. The
- * per-agent breakdown in useAgentCosts is the authoritative dollar figure;
- * this is only used for the tile-level "Spend" value.
+ * Cheap blended cost estimate: spend = blended-rate × tokens. We don't have a
+ * per-row spend in the summary, so cost flows through the cache-aware model at
+ * the blended rate (costOf(..., null)). The per-agent breakdown in
+ * useAgentCosts is the authoritative dollar figure; this is only the tile-level
+ * "Spend" value.
  */
-const BLENDED_PRICE_PER_MTOK = {
-  input: getPricing("claude-sonnet-4-6").inputPerMTok,
-  output: getPricing("claude-sonnet-4-6").outputPerMTok,
-};
 
 export const usePulseSummary = (): PulseSummary => {
   const { scope } = useScope();
@@ -179,13 +176,7 @@ export const usePulseSummary = (): PulseSummary => {
     const tokens = extrapolate(row?.total_tokens, samplingRatio);
     const requests = extrapolate(row?.requests, samplingRatio);
 
-    const spend = estimateCost(inTok, outTok, {
-      inputPerMTok: BLENDED_PRICE_PER_MTOK.input,
-      outputPerMTok: BLENDED_PRICE_PER_MTOK.output,
-      contextWindow: null,
-      provider: "Blended",
-      tier: "mid",
-    });
+    const spend = costOf(inTok, outTok, null);
 
     // costPerRequest is invariant under sampling — spend and requests
     // are both scaled by samplingRatio, so the quotient cancels.
@@ -210,13 +201,7 @@ export const usePulseSummary = (): PulseSummary => {
     const requestsSeries = toNumArr(sparkRow?.requests);
 
     const spendSeries = tokensSeries.map((bucketTokens) =>
-      estimateCost(bucketTokens / 2, bucketTokens / 2, {
-        inputPerMTok: BLENDED_PRICE_PER_MTOK.input,
-        outputPerMTok: BLENDED_PRICE_PER_MTOK.output,
-        contextWindow: null,
-        provider: "Blended",
-        tier: "mid",
-      }),
+      costOf(bucketTokens / 2, bucketTokens / 2, null),
     );
     const p95MsSeries = p95NsSeries.map((ns) =>
       ns > 0 ? ns / 1_000_000 : 0,

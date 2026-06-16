@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { ChevronRightIcon } from "@dynatrace/strato-icons";
 import type { Finding, FindingSeverity } from "./drawers/types";
+import { layerByKey } from "../data/ai-layer-patterns";
 
 const SEVERITY_COLOR: Record<FindingSeverity, string> = {
   info: "var(--blue)",
@@ -79,6 +80,23 @@ export const FindingCard = ({ finding, onClick }: FindingCardProps) => {
           >
             {finding.category}
           </Text>
+          {finding.layer && (
+            <span
+              title={`${layerByKey(finding.layer).label} layer`}
+              style={{
+                fontSize: 9.5,
+                fontWeight: 600,
+                color: "var(--text-3)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "0 4px",
+                whiteSpace: "nowrap",
+                flex: "0 0 auto",
+              }}
+            >
+              {layerByKey(finding.layer).label} layer
+            </span>
+          )}
         </Flex>
 
         <Text

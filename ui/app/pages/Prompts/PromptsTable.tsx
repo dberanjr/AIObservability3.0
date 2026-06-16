@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
@@ -9,8 +9,9 @@ import {
   RefreshIcon,
   SettingIcon,
 } from "@dynatrace/strato-icons";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtMs, fmtTokens } from "../../data/format";
-import { getPricing, estimateCost } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
@@ -560,14 +561,10 @@ export const computeAnomalyStats = (rows: PromptRow[]): AnomalyStats => ({
   inTok: thresholdsFor(rows.map((r) => r.inTokens)),
   outTok: thresholdsFor(rows.map((r) => r.outTokens)),
   inCost: thresholdsFor(
-    rows.map((r) =>
-      r.inTokens > 0 ? estimateCost(r.inTokens, 0, getPricing(r.model)) : 0,
-    ),
+    rows.map((r) => (r.inTokens > 0 ? costOf(r.inTokens, 0, r.model) : 0)),
   ),
   outCost: thresholdsFor(
-    rows.map((r) =>
-      r.outTokens > 0 ? estimateCost(0, r.outTokens, getPricing(r.model)) : 0,
-    ),
+    rows.map((r) => (r.outTokens > 0 ? costOf(0, r.outTokens, r.model) : 0)),
   ),
 });
 
@@ -590,9 +587,9 @@ const StreamRow = ({
   const outputText =
     privacy === "mask" ? maskPII(prompt.responseText) : prompt.responseText;
 
-  const pricing = getPricing(prompt.model);
-  const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
-  const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+  const inCost = prompt.inTokens > 0 ? costOf(prompt.inTokens, 0, prompt.model) : 0;
+  const outCost =
+    prompt.outTokens > 0 ? costOf(0, prompt.outTokens, prompt.model) : 0;
 
   const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
   const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
@@ -773,9 +770,9 @@ const MetadataRow = ({
   visibleCols: Set<VisibleColumn>;
   stats: AnomalyStats;
 }) => {
-  const pricing = getPricing(prompt.model);
-  const inCost = prompt.inTokens > 0 ? estimateCost(prompt.inTokens, 0, pricing) : 0;
-  const outCost = prompt.outTokens > 0 ? estimateCost(0, prompt.outTokens, pricing) : 0;
+  const inCost = prompt.inTokens > 0 ? costOf(prompt.inTokens, 0, prompt.model) : 0;
+  const outCost =
+    prompt.outTokens > 0 ? costOf(0, prompt.outTokens, prompt.model) : 0;
 
   const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
   const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
@@ -933,9 +930,8 @@ export interface PromptsTableProps {
   onRefresh: () => void;
 }
 
-export const PromptsTable = ({
+const PromptsTableBody = ({
   view,
-  onViewChange,
   prompts,
   isLoading,
   privacy,
@@ -998,10 +994,6 @@ export const PromptsTable = ({
   // Anomaly thresholds derived from the rows currently in view.
   const anomalyStats = useMemo(() => computeAnomalyStats(filtered), [filtered]);
 
-  const selectedPrompt = useMemo(
-    () => sorted.find((p) => p.id === selectedId) ?? null,
-    [sorted, selectedId],
-  );
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -1014,24 +1006,7 @@ export const PromptsTable = ({
   }, [selectedId]);
 
   return (
-    <Surface elevation="raised" padding={0}>
       <Flex flexDirection="column" gap={0}>
-        <Flex
-          alignItems="center"
-          justifyContent="space-between"
-          style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
-        >
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Prompts
-          </Heading>
-          <Flex alignItems="center" gap={12}>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              {sorted.length} shown
-            </Text>
-            <ViewSegmented value={view} onChange={onViewChange} />
-          </Flex>
-        </Flex>
-
         {view === "evaluations" ? (
           <EvaluationsEmptyState />
         ) : (
@@ -1044,6 +1019,9 @@ export const PromptsTable = ({
                 gap: 12,
               }}
             >
+              <Text style={{ fontSize: 11.5, color: "var(--text-3)", flex: "0 0 auto" }}>
+                {sorted.length} shown
+              </Text>
               <input
                 type="text"
                 placeholder="Search prompts..."
@@ -1141,6 +1119,17 @@ export const PromptsTable = ({
           </>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const PromptsTable = (props: PromptsTableProps) => (
+  <CollapsibleCard
+    title="Prompts"
+    headerRight={
+      <ViewSegmented value={props.view} onChange={props.onViewChange} />
+    }
+    defaultOpen
+  >
+    <PromptsTableBody {...props} />
+  </CollapsibleCard>
+);

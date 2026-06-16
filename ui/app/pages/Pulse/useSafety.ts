@@ -44,7 +44,7 @@ const num = (v: unknown): number => {
 
 const countsQuery = (from: string, to: string): string =>
   `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
 | filter ${AI_SPAN_POPULATION}
 | summarize {
     spans = count(),
@@ -55,7 +55,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)},
 
 const actionQuery = (from: string, to: string): string =>
   `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
 | filter isNotNull(\`gen_ai.response.guardrail_action\`)
 | summarize n = count(), by: { action = toString(\`gen_ai.response.guardrail_action\`) }
 | sort n desc

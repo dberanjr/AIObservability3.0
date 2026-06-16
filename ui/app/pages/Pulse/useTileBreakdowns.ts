@@ -4,7 +4,7 @@ import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
 import { canonicalizeModel } from "../../detection/attributes";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import {
   buildMcpServersBreakdownQuery,
@@ -77,8 +77,6 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const BLENDED_PRICING = getPricing("claude-sonnet-4-6");
-
 export const useTileBreakdowns = (): UseTileBreakdownsResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
@@ -136,13 +134,12 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
     }
     const models: BreakdownSlice[] = Array.from(modelAcc.entries())
       .map(([key, agg]) => {
-        const pricing = getPricing(agg.pricingKey);
         return {
           key,
           label: agg.label,
           value: agg.requests,
           tokens: agg.inputTokens + agg.outputTokens,
-          cost: estimateCost(agg.inputTokens, agg.outputTokens, pricing),
+          cost: costOf(agg.inputTokens, agg.outputTokens, agg.pricingKey),
           avgDurationMs: 0,
           p50DurationMs: 0,
           p95DurationMs: 0,

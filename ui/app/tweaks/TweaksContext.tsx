@@ -56,6 +56,25 @@ export type ColorBlindFilter =
 export type ToolsMode = "strict" | "discovered";
 
 /**
+ * How aggressively to cap the global filter's resolved trace-id set. The global
+ * filter is trace-scoped: it resolves the matching trace.ids once and injects
+ * them into every query. A very broad filter can match more traces than fit in
+ * a DQL array literal, so the set is capped:
+ *   - fast     — 5k traces (snappiest; truncates sooner)
+ *   - balanced — 25k traces (default; best correctness/reliability balance)
+ *   - exact    — no cap (always precise; can fail loud on very broad filters)
+ * Truncated results are flagged in the filter strip ("approximate").
+ */
+export type TraceMatchCap = "fast" | "balanced" | "exact";
+
+/** Trace-id cap for each TraceMatchCap option. `Infinity` = no cap. */
+export const TRACE_MATCH_CAPS: Record<TraceMatchCap, number> = {
+  fast: 5000,
+  balanced: 25000,
+  exact: Infinity,
+};
+
+/**
  * Per-tab custom configuration. Extensible: add a key here and a control in
  * the Tweaks panel's "Page configuration" section for any future per-tab knob.
  */
@@ -67,6 +86,19 @@ export interface PageConfig {
    * gen_ai.usage.time_to_first_token is not instrumented in BOS (0 rows).
    */
   agentsShowTtft: boolean;
+  /**
+   * App-wide: render capability-gated panels with EXAMPLE data when the tenant
+   * doesn't emit the required attribute, so users can see what they're missing.
+   * Off by default (real data only).
+   */
+  showExampleData: boolean;
+  /**
+   * App-wide: show the RAW model string (e.g. us.anthropic.claude-…-v1:0)
+   * instead of the normalized label. Off by default (normalized everywhere).
+   */
+  showRawModels: boolean;
+  /** App-wide: how aggressively to cap the global filter's trace-id set. */
+  traceMatchCap: TraceMatchCap;
 }
 
 export interface TweaksState {
@@ -86,7 +118,7 @@ export interface TweaksState {
 
 export const DEFAULT_TWEAKS: TweaksState = {
   theme: "light",
-  density: "comfortable",
+  density: "minimal",
   tileStyle: "card",
   accent: "blue",
   customAccent: "#1C5BE5",
@@ -95,8 +127,13 @@ export const DEFAULT_TWEAKS: TweaksState = {
   chartLabels: "none",
   colorBlindFilter: "none",
   pageConfig: {
-    toolsMode: "strict",
+    // Discovered by default: gen_ai.tool.name is absent on real fleets, so
+    // counting MCP / internal function spans by name is the useful default.
+    toolsMode: "discovered",
     agentsShowTtft: false,
+    showExampleData: false,
+    showRawModels: false,
+    traceMatchCap: "balanced",
   },
 };
 
@@ -112,6 +149,9 @@ export interface TweaksContextValue extends TweaksState {
   setColorBlindFilter: (v: ColorBlindFilter) => void;
   setToolsMode: (v: ToolsMode) => void;
   setAgentsShowTtft: (v: boolean) => void;
+  setShowExampleData: (v: boolean) => void;
+  setShowRawModels: (v: boolean) => void;
+  setTraceMatchCap: (v: TraceMatchCap) => void;
   resetTweaks: () => void;
   isPanelOpen: boolean;
   openPanel: () => void;
@@ -193,6 +233,9 @@ export const TweaksProvider = ({
       setColorBlindFilter: merge("colorBlindFilter"),
       setToolsMode: mergePage("toolsMode"),
       setAgentsShowTtft: mergePage("agentsShowTtft"),
+      setShowExampleData: mergePage("showExampleData"),
+      setShowRawModels: mergePage("showRawModels"),
+      setTraceMatchCap: mergePage("traceMatchCap"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),
       isPanelOpen,
       openPanel: () => setPanelOpen(true),

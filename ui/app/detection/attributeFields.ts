@@ -40,6 +40,42 @@ export const firstNonNull = (...paths: string[]): string =>
     ? bt(paths[0])
     : `coalesce(${paths.map(bt).join(", ")})`;
 
+/** DQL boolean: ALL listed attributes are present on the span. */
+export const allPresent = (...paths: string[]): string =>
+  paths.map((p) => `isNotNull(${bt(p)})`).join(" and ");
+
+/**
+ * Dedicated vector-store `db.system` values. RAG detection keys on these
+ * VALUES (a vector store surfaces as a db.system value, e.g. "pinecone") — NOT
+ * on db.system merely being present, which also matches every ordinary
+ * relational DB (Oracle/MySQL/…) and would light RAG up on plain database
+ * traffic. Validation confirmed this: ualpre's db.system is 100% relational
+ * (zero vector stores), while demolive emits real `pinecone` spans. Limited to
+ * purpose-built vector stores; ambiguous engines (redis/mongodb/elasticsearch/
+ * opensearch) that *can* store vectors but usually don't are excluded to avoid
+ * false positives.
+ */
+export const VECTOR_DB_SYSTEMS = [
+  "pinecone",
+  "qdrant",
+  "chroma",
+  "chromadb",
+  "weaviate",
+  "milvus",
+  "pgvector",
+  "vespa",
+  "lancedb",
+  "marqo",
+  "deeplake",
+  "faiss",
+  "vectara",
+  "turbopuffer",
+] as const;
+
+/** DQL boolean: `db.system` is one of the dedicated vector stores. */
+export const dbSystemIsVectorStore = (): string =>
+  `in(${bt("db.system")}, ${VECTOR_DB_SYSTEMS.map((v) => `"${v}"`).join(", ")})`;
+
 /** Stable identifiers for each wired capability. */
 export type CapabilityId =
   | "cacheTokens"
@@ -49,7 +85,13 @@ export type CapabilityId =
   | "piiCategories"
   | "vectorDb"
   | "feedback"
-  | "promptVersion";
+  | "promptVersion"
+  | "ttft"
+  | "evalScore"
+  | "sessionUser"
+  | "mcp"
+  | "injectionEnrichment"
+  | "memoryStore";
 
 export interface Capability {
   id: CapabilityId;
@@ -106,12 +148,13 @@ export const CAPABILITIES: Capability[] = [
     id: "vectorDb",
     label: "Vector database / RAG",
     sectionId: "vectordb",
-    predicate: anyPresent(
-      "db.system",
+    // Vector store as a db.system VALUE (not db.system-any) OR explicit
+    // vector_db.* attributes. See VECTOR_DB_SYSTEMS for why.
+    predicate: `${dbSystemIsVectorStore()} or ${anyPresent(
       "vector_db.query.text",
       "vector_db.results",
       "vector_db.query.top_k",
-    ),
+    )}`,
   },
   {
     id: "feedback",
@@ -125,18 +168,84 @@ export const CAPABILITIES: Capability[] = [
     sectionId: "evaluation",
     predicate: anyPresent("gen_ai.prompt_hub.name", "gen_ai.prompt_hub.version"),
   },
+  {
+    id: "ttft",
+    label: "Time to first token (TTFT)",
+    sectionId: "llm",
+    predicate: anyPresent(
+      "gen_ai.usage.time_to_first_token",
+      "gen_ai.response.ttft",
+      "gen_ai.response.time_to_first_chunk",
+    ),
+  },
+  {
+    id: "evalScore",
+    label: "Quality / hallucination scores",
+    sectionId: "evaluation",
+    predicate: anyPresent(
+      "gen_ai.evaluation.score",
+      "gen_ai.evaluation.overall_score",
+      "gen_ai.evaluation.correctness",
+      "gen_ai.evaluation.faithfulness",
+      "gen_ai.evaluation.hallucination",
+      "gen_ai.evaluation.relevance",
+    ),
+  },
+  {
+    id: "sessionUser",
+    label: "Session / user cost attribution",
+    sectionId: "llm",
+    // Both are needed for per-session AND per-user attribution (F.3).
+    predicate: allPresent("session.id", "gen_ai.user"),
+  },
+  {
+    id: "mcp",
+    label: "MCP servers / tools",
+    sectionId: "tools",
+    predicate: `span.name == "mcp.server" or ${anyPresent(
+      "mcp.method.name",
+      "mcp.server.name",
+    )}`,
+  },
+  {
+    id: "injectionEnrichment",
+    label: "Prompt-injection / PII enrichment",
+    sectionId: "client",
+    // Populated by an upstream OpenPipeline security/PII enrichment rule — the
+    // app consumes the field when present, it does not build the enrichment.
+    predicate: anyPresent(
+      "gen_ai.privacy.pii_detected",
+      "gen_ai.security.prompt_injection",
+      "gen_ai.security.injection_score",
+      "security.threat.detected",
+    ),
+  },
+  {
+    id: "memoryStore",
+    label: "Memory / state store",
+    sectionId: "memory",
+    predicate: anyPresent(
+      "gen_ai.conversation.id",
+      "traceloop.association.properties.thread_id",
+      "traceloop.association.properties.langgraph_checkpoint_ns",
+    ),
+  },
 ];
 
 export const CAPABILITY_IDS: CapabilityId[] = CAPABILITIES.map((c) => c.id);
 
 /**
- * Broad "AI activity" population for the capability probe. Wide on purpose so
- * vector-DB-only or agent-only spans still count toward the denominator.
+ * "AI activity" population for the capability probe. Wide enough that
+ * vector-store-only or agent-only spans still count toward the denominator, but
+ * deliberately NOT `db.system`-any: on a large tenant ordinary relational DB
+ * spans (100M+ on ualpre) would dominate the scanned population and, under the
+ * honoured scan-limit selector, truncate the probe before rare GenAI attributes
+ * are seen — causing false-negative capability detection. Scoping to dedicated
+ * vector stores keeps the population AI-relevant and the probe reliable.
  */
-export const AI_SPAN_POPULATION = anyPresent(
+export const AI_SPAN_POPULATION = `${anyPresent(
   "gen_ai.request.model",
   "gen_ai.operation.name",
   "gen_ai.agent.name",
   "traceloop.span.kind",
-  "db.system",
-);
+)} or ${dbSystemIsVectorStore()}`;

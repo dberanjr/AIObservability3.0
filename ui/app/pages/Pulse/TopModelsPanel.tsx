@@ -1,11 +1,12 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList } from "../../components/charts/BarList";
 import type { BarListItem } from "../../components/charts/BarList";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtTokens } from "../../data/format";
-import type { ModelRow } from "../Models/useModels";
+import { useModels, type ModelRow } from "../Models/useModels";
 
 export interface TopModelsPanelProps {
   models: ModelRow[];
@@ -42,16 +43,7 @@ export const TopModelsPanel = ({ models, isLoading }: TopModelsPanelProps) => {
     models.find((m) => m.modelKey === item.key)?.providerColor ?? "var(--blue)";
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Top models
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            by token volume (input + output)
-          </Text>
-        </Flex>
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         {isLoading && items.length === 0 ? (
           <Flex flexDirection="column" gap={8}>
             {Array.from({ length: 4 }).map((_, i) => (
@@ -66,6 +58,23 @@ export const TopModelsPanel = ({ models, isLoading }: TopModelsPanelProps) => {
           <BarList items={items} color={colorFor} />
         )}
       </Flex>
-    </Surface>
+  );
+};
+
+/**
+ * Pulse-local self-fetching wrapper: calls useModels() and renders the
+ * presentational TopModelsPanel inside a CollapsibleCard, so the query only
+ * runs while the section is expanded.
+ */
+export const TopModelsCard = () => {
+  const { models, isLoading } = useModels();
+  return (
+    <CollapsibleCard
+      title="Top models"
+      subtitle="by token volume (input + output)"
+      defaultOpen
+    >
+      <TopModelsPanel models={models} isLoading={isLoading} />
+    </CollapsibleCard>
   );
 };

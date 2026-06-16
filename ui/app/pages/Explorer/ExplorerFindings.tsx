@@ -3,6 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { FindingCard } from "../../components/FindingCard";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import type { Finding } from "../../components/drawers/types";
 
 export interface ExplorerFindingsProps {
@@ -11,7 +12,7 @@ export interface ExplorerFindingsProps {
   onSelect: (finding: Finding) => void;
 }
 
-export const ExplorerFindings = ({
+const ExplorerFindingsBody = ({
   findings,
   isLoading,
   onSelect,
@@ -23,6 +24,7 @@ export const ExplorerFindings = ({
           display: "grid",
           gridTemplateColumns: `repeat(5, minmax(0, 1fr))`,
           gap: 12,
+          padding: 12,
         }}
       >
         {Array.from({ length: 5 }).map((_, i) => (
@@ -34,7 +36,7 @@ export const ExplorerFindings = ({
 
   if (findings.length === 0) {
     return (
-      <Flex style={{ padding: "8px 4px" }}>
+      <Flex style={{ padding: "16px 12px" }}>
         <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
           No findings surfaced in the current scope.
         </Text>
@@ -48,6 +50,7 @@ export const ExplorerFindings = ({
         display: "grid",
         gridTemplateColumns: `repeat(${Math.min(findings.length, 5)}, minmax(0, 1fr))`,
         gap: 12,
+        padding: 12,
       }}
     >
       {findings.map((f) => (
@@ -56,3 +59,9 @@ export const ExplorerFindings = ({
     </div>
   );
 };
+
+export const ExplorerFindings = (props: ExplorerFindingsProps) => (
+  <CollapsibleCard title="Findings" defaultOpen>
+    <ExplorerFindingsBody {...props} />
+  </CollapsibleCard>
+);

@@ -1,16 +1,3 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cmd=$(jq -r '.tool_input.command // \"\"'); if printf '%s' \"$cmd\" | grep -qE '(^|&&|;)[[:space:]]*(npm run deploy|npx dt-app deploy|dt-app deploy)([[:space:]]|$)'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"RELEASE STEP \\u2014 update the README before this deploy. Verify README.md reflects everything shipped since the last release: new or changed tabs, panels, capabilities, cross-cutting features, npm scripts, OAuth scopes, the test-count line, and the version number. If anything new shipped without a README change, update README.md now (then commit it), then continue the deploy. If the README is already current, proceed.\"}}'; fi",
-            "statusMessage": "README release check"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }

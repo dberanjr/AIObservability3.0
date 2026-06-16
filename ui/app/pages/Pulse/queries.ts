@@ -12,7 +12,7 @@ export const buildSlowAgentsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | dedup {span.id}
@@ -32,7 +32,7 @@ export const buildSlowModelsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(tfTo(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | dedup {span.id}
@@ -54,7 +54,7 @@ export const buildOperationalQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.tool.name)
 | dedup {span.id}
@@ -74,7 +74,7 @@ export const buildQualityPresenceQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
@@ -99,7 +99,7 @@ export const buildCostQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(timeframe.to ?? "now()")}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
@@ -113,7 +113,7 @@ ${scopeFilterClause(serviceIds)}
 export const buildCostBaselineQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, samplingRatio: 1, from: now()-7d, to: now(), scanLimitGBytes: 1000
+fetch spans, samplingRatio: 1, from: now()-7d, to: now()
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}

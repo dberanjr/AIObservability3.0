@@ -76,7 +76,7 @@ export const Sparkline = ({
   const hoverValue = hoverIdx != null ? values[hoverIdx] : null;
   const hoverLabel =
     hoverIdx != null
-      ? (labels?.[hoverIdx] ?? `Bucket ${hoverIdx + 1} / ${values.length}`)
+      ? (labels?.[hoverIdx] ?? `Point ${hoverIdx + 1} / ${values.length}`)
       : null;
 
   return (

@@ -15,7 +15,7 @@ export const buildTokenEfficiencyQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | dedup {span.id}
@@ -46,7 +46,7 @@ export const buildSummaryQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
@@ -91,7 +91,7 @@ export const buildAgentCostQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.agent.name)
 | filter isNotNull(gen_ai.usage.input_tokens) or isNotNull(gen_ai.usage.output_tokens)
@@ -117,7 +117,7 @@ export const buildTokenSeriesQuery = (
   timeframe: Timeframe,
   intervalSec: number,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
@@ -138,7 +138,7 @@ export const buildMcpCountQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
 | fieldsAdd tool = coalesce(gen_ai.tool.name, traceloop.entity.name)
@@ -159,7 +159,7 @@ export const buildSummarySparkSeriesQuery = (
   timeframe: Timeframe,
   intervalSec: number,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
@@ -182,7 +182,7 @@ ${scopeFilterClause(serviceIds)}
 export const buildActivityHistogramQuery = (
   serviceIds: string[] | null,
 ): string => `
-fetch spans, samplingRatio: 1, from: now()-24h, to: now(), scanLimitGBytes: 5000
+fetch spans, samplingRatio: 1, from: now()-24h, to: now()
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}
@@ -199,7 +199,7 @@ export const buildModelsBreakdownQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.request.model)
 | dedup {span.id}
@@ -228,7 +228,7 @@ export const buildMcpServersBreakdownQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
 | filter traceloop.span.kind == "server"
@@ -259,7 +259,7 @@ export const buildMcpToolsBreakdownQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter matchesValue(traceloop.workflow.name, "*.mcp")
 | filter traceloop.span.kind == "tool"
@@ -289,7 +289,7 @@ export const buildProviderMixQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name)
 | dedup {span.id}

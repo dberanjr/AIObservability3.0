@@ -1,14 +1,11 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtTokens } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
-import type { UseExplorerHeatmapResult } from "./useExplorerHeatmap";
-
-export interface ServiceModelHeatmapProps {
-  result: UseExplorerHeatmapResult;
-}
+import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { useExplorerHeatmap } from "./useExplorerHeatmap";
 
 const CELL_W = 64;
 const CELL_H = 28;
@@ -22,18 +19,14 @@ const cellColor = (tokens: number, max: number, color: string): string => {
   return `color-mix(in oklab, ${color} ${pct}%, transparent)`;
 };
 
-export const ServiceModelHeatmap = ({ result }: ServiceModelHeatmapProps) => (
-  <Surface elevation="raised" padding={16}>
-    <Flex flexDirection="column" gap={12}>
-      <Flex alignItems="baseline" justifyContent="space-between">
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Service × model usage
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Tokens per service / model — log-scaled cell color
-          </Text>
-        </Flex>
+// Body is a separate component so useExplorerHeatmap (an independent DQL query)
+// only runs while the section is expanded — collapsing unmounts the body and
+// issues no query.
+const ServiceModelHeatmapBody = () => {
+  const result = useExplorerHeatmap();
+  return (
+    <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
+      <Flex alignItems="baseline" justifyContent="flex-end">
         <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
           {result.rows.length} services · {result.columns.length} models
         </Text>
@@ -198,5 +191,15 @@ export const ServiceModelHeatmap = ({ result }: ServiceModelHeatmapProps) => (
         </div>
       )}
     </Flex>
-  </Surface>
+  );
+};
+
+export const ServiceModelHeatmap = () => (
+  <CollapsibleCard
+    title="Service × model usage"
+    subtitle="Tokens per service / model — log-scaled cell color"
+    defaultOpen
+  >
+    <ServiceModelHeatmapBody />
+  </CollapsibleCard>
 );

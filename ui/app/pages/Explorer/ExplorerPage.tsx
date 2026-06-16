@@ -22,7 +22,6 @@ import {
   useAIServices,
 } from "./useAIServices";
 import { useExplorerFindings } from "./useExplorerFindings";
-import { useExplorerHeatmap } from "./useExplorerHeatmap";
 import { useExplorerSummary } from "./useExplorerSummary";
 
 const PROVIDER_SET = new Set<ProviderId>(ALL_PROVIDER_IDS);
@@ -87,10 +86,11 @@ export const ExplorerPage = () => {
   const aiServices = useAIServices(filter);
   const summary = useExplorerSummary(aiServices.services);
   const findings = useExplorerFindings(aiServices.services, summary);
-  const heatmap = useExplorerHeatmap();
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
 
-  const firstError = aiServices.error ?? heatmap.error ?? null;
+  // The heatmap query now runs inside ServiceModelHeatmap's lazily-mounted body
+  // (so a collapsed section issues no DQL); its errors surface within that card.
+  const firstError = aiServices.error ?? null;
 
   return (
     <>
@@ -126,7 +126,7 @@ export const ExplorerPage = () => {
             isLoading={aiServices.isLoading}
             onSelect={setSelectedFinding}
           />
-          <ServiceModelHeatmap result={heatmap} />
+          <ServiceModelHeatmap />
           <CapabilityGate id="vectorDb">
             <RagPanel />
           </CapabilityGate>

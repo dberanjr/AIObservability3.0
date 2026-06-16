@@ -62,3 +62,25 @@ export const pickChartIntervalFor = (from: string): ChartBucket =>
 /** Convenience: just the interval seconds for a scope `from` expression. */
 export const pickChartIntervalSec = (from: string): number =>
   pickChartIntervalFor(from).sec;
+
+/**
+ * Human-readable time phrase for an interval in seconds — e.g. "5 min",
+ * "1 hour", "6 hours", "1 day". Use this (NOT "buckets") wherever a chart's
+ * granularity is shown to the user.
+ */
+export const intervalPhrase = (sec: number): string => {
+  if (sec >= 86400 && sec % 86400 === 0) {
+    const d = sec / 86400;
+    return `${d} day${d > 1 ? "s" : ""}`;
+  }
+  if (sec >= 3600 && sec % 3600 === 0) {
+    const h = sec / 3600;
+    return `${h} hour${h > 1 ? "s" : ""}`;
+  }
+  const m = Math.max(1, Math.round(sec / 60));
+  return `${m} min`;
+};
+
+/** Same as {@link intervalPhrase} but from a millisecond interval. */
+export const intervalPhraseFromMs = (ms: number): string =>
+  intervalPhrase(Math.round(ms / 1000));

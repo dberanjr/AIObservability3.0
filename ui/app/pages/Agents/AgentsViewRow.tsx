@@ -92,38 +92,49 @@ const Segmented = <T extends string>({
   </Flex>
 );
 
-export interface AgentsViewRowProps {
+export interface AgentsSegmentedControlsProps {
   view: AgentView;
   operation: AgentOperation;
   onViewChange: (v: AgentView) => void;
   onOperationChange: (f: AgentOperation) => void;
-  onSetupDetector: () => void;
-  onConfigureSLA: () => void;
 }
 
-export const AgentsViewRow = ({
+/** The View + Operation segmented selectors (now hosted in the Agents card). */
+export const AgentsSegmentedControls = ({
   view,
   operation,
   onViewChange,
   onOperationChange,
+}: AgentsSegmentedControlsProps) => (
+  <Flex alignItems="center" gap={16} style={{ flexWrap: "wrap" }}>
+    <Segmented
+      label="View"
+      value={view}
+      options={VIEW_OPTIONS}
+      onChange={onViewChange}
+    />
+    <Segmented
+      label="Operation"
+      value={operation}
+      options={OPERATION_OPTIONS}
+      onChange={onOperationChange}
+    />
+  </Flex>
+);
+
+export interface AgentsActionsRowProps {
+  onSetupDetector: () => void;
+  onConfigureSLA: () => void;
+}
+
+/** Page-level action buttons (anomaly detector / SLA), kept in the top toolbar. */
+export const AgentsActionsRow = ({
   onSetupDetector,
   onConfigureSLA,
-}: AgentsViewRowProps) => {
+}: AgentsActionsRowProps) => {
   const { hasActive } = useSLA();
   return (
-    <Flex alignItems="center" gap={16} style={{ flexWrap: "wrap" }}>
-      <Segmented
-        label="View"
-        value={view}
-        options={VIEW_OPTIONS}
-        onChange={onViewChange}
-      />
-      <Segmented
-        label="Operation"
-        value={operation}
-        options={OPERATION_OPTIONS}
-        onChange={onOperationChange}
-      />
+    <Flex alignItems="center" gap={12} style={{ flexWrap: "wrap" }}>
       <Flex flexGrow={1} />
       <Button variant="default" onClick={onSetupDetector}>
         <Button.Prefix>
@@ -132,7 +143,7 @@ export const AgentsViewRow = ({
         Setup anomaly detector
       </Button>
       <Button
-        variant={hasActive ? "default" : "default"}
+        variant="default"
         onClick={onConfigureSLA}
         style={hasActive ? { color: "var(--amber)" } : undefined}
       >

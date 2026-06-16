@@ -7,7 +7,7 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildModelsQuery } from "./queries";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { costOf, getPricing } from "../../data/pricing";
 import {
   canonicalizeModel,
   normalizeProvider,
@@ -216,7 +216,9 @@ export const useModels = (): UseModelsResult => {
       const avgInputTokens = requests > 0 ? agg.wAvgIn / requests : 0;
       const avgOutputTokens = requests > 0 ? agg.wAvgOut / requests : 0;
       const avgMs = requests > 0 ? agg.wAvgMs / requests : 0;
-      const cost = estimateCost(inputTokens, outputTokens, pricing);
+      // Cost via the cache-aware model (blended fallback for unknowns); the
+      // `pricing` record above is still used for contextWindow + pricingUnknown.
+      const cost = costOf(inputTokens, outputTokens, agg.domModel);
       const totalTokens = inputTokens + outputTokens;
       const costPerMTok =
         totalTokens > 0 ? (cost / totalTokens) * 1_000_000 : 0;

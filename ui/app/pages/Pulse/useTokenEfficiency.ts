@@ -6,7 +6,7 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildTokenEfficiencyQuery } from "./dataQueries";
-import { estimateCost, getPricing, isRetrievalModel } from "../../data/pricing";
+import { costOf, isRetrievalModel } from "../../data/pricing";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -85,7 +85,7 @@ export const useTokenEfficiency = (): TokenEfficiency => {
       durS += num(r.dur_s);
       // Ratios are scale-invariant, so sampling extrapolation isn't needed —
       // price the sampled tokens directly with the per-model rate.
-      cost += estimateCost(inTok, outTok, getPricing(r.model));
+      cost += costOf(inTok, outTok, r.model);
     }
 
     const totalTok = input + output;

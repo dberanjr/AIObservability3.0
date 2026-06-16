@@ -10,6 +10,7 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useSampling } from "../../scope/SamplingContext";
 import { dqlTimeArg } from "../../scope/queries";
+import { dbSystemIsVectorStore } from "../../detection/attributeFields";
 import { toNum } from "../../data/format";
 
 interface RagRecord {
@@ -40,8 +41,8 @@ const num = (v: unknown): number => {
 
 const buildQuery = (from: string, to: string): string =>
   `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}, scanLimitGBytes: 500
-| filter isNotNull(\`db.system\`) or isNotNull(\`vector_db.query.text\`) or isNotNull(\`vector_db.results\`) or isNotNull(\`vector_db.query.top_k\`)
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
+| filter ${dbSystemIsVectorStore()} or isNotNull(\`vector_db.query.text\`) or isNotNull(\`vector_db.results\`) or isNotNull(\`vector_db.query.top_k\`)
 | summarize {
     queries = count(),
     avg_top_k = avg(toDouble(\`vector_db.query.top_k\`))

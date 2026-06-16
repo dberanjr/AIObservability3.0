@@ -1,15 +1,12 @@
-import React, { useState } from "react";
+import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
 import { fmtPercent } from "../../data/format";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
-import type {
-  PromptQuality,
-  QualityMetricSnapshot,
-} from "./usePromptQuality";
+import { usePromptQuality, type QualityMetricSnapshot } from "./usePromptQuality";
 
 interface MetricTileProps {
   label: string;
@@ -86,54 +83,14 @@ const MetricTile = ({ label, snapshot, inverted }: MetricTileProps) => {
   );
 };
 
-export interface PromptQualityAnalyticsProps {
-  quality: PromptQuality;
-}
-
-export const PromptQualityAnalytics = ({ quality }: PromptQualityAnalyticsProps) => {
-  const [open, setOpen] = useState(false);
+// Body is a separate component so the query (usePromptQuality) only runs while
+// the section is expanded — CollapsibleCard renders children solely when open,
+// so a collapsed section issues no DQL.
+const PromptQualityBody = () => {
+  const quality = usePromptQuality();
   return (
-  <Surface elevation="raised" padding={16}>
-    <Flex flexDirection="column" gap={open ? 12 : 0}>
-      <Flex alignItems="center" justifyContent="space-between">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          {open ? (
-            <ChevronDownIcon size={16} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
-          ) : (
-            <ChevronRightIcon size={16} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
-          )}
-          <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Prompt quality analytics
-            </Heading>
-            {open && (
-              <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                Aggregate evaluation scores across LLM spans in the current scope
-              </Text>
-            )}
-          </Flex>
-        </button>
-        {quality.hasAnyEval && (
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            {quality.totalLlmSpans.toLocaleString()} LLM spans
-          </Text>
-        )}
-      </Flex>
-
-      {!open ? null : quality.isLoading && !quality.hasAnyEval ? (
+    <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
+      {quality.isLoading && !quality.hasAnyEval ? (
         <div
           style={{
             display: "grid",
@@ -170,15 +127,20 @@ export const PromptQualityAnalytics = ({ quality }: PromptQualityAnalyticsProps)
         </div>
       )}
 
-      {open && (
-        <Text
-          style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}
-        >
-          Three paths to populate: add eval attrs to LLM spans, run a Workflow
-          LLM-as-judge, or push offline eval results as business events.
-        </Text>
-      )}
+      <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
+        Three paths to populate: add eval attrs to LLM spans, run a Workflow
+        LLM-as-judge, or push offline eval results as business events.
+      </Text>
     </Flex>
-  </Surface>
   );
 };
+
+export const PromptQualityAnalytics = () => (
+  <CollapsibleCard
+    title="Prompt quality analytics"
+    subtitle="Aggregate evaluation scores across LLM spans in the current scope"
+    defaultOpen
+  >
+    <PromptQualityBody />
+  </CollapsibleCard>
+);

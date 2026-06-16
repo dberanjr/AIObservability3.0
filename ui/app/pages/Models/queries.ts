@@ -14,7 +14,7 @@ export const buildModelsQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
 ): string => `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.request.model)

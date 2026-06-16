@@ -7,6 +7,7 @@ import {
   fmtPercent,
   fmtTokens,
 } from "../../data/format";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import type { ExplorerSummary } from "./useExplorerSummary";
 
 interface TileProps {
@@ -62,7 +63,7 @@ export interface ExplorerTilesProps {
   isLoading: boolean;
 }
 
-export const ExplorerTiles = ({ summary, isLoading }: ExplorerTilesProps) => {
+const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
   if (isLoading && summary.tokens === 0) {
     return (
       <div
@@ -70,6 +71,7 @@ export const ExplorerTiles = ({ summary, isLoading }: ExplorerTilesProps) => {
           display: "grid",
           gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
           gap: 10,
+          padding: 12,
         }}
       >
         {Array.from({ length: 7 }).map((_, i) => (
@@ -90,6 +92,7 @@ export const ExplorerTiles = ({ summary, isLoading }: ExplorerTilesProps) => {
         display: "grid",
         gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
         gap: 10,
+        padding: 12,
       }}
     >
       <Tile label="AI services" value={fmtCount(summary.aiServiceCount)} />
@@ -116,3 +119,9 @@ export const ExplorerTiles = ({ summary, isLoading }: ExplorerTilesProps) => {
     </div>
   );
 };
+
+export const ExplorerTiles = (props: ExplorerTilesProps) => (
+  <CollapsibleCard title="Overview" defaultOpen>
+    <ExplorerTilesBody {...props} />
+  </CollapsibleCard>
+);

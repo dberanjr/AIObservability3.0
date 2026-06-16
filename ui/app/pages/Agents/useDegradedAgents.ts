@@ -8,12 +8,17 @@ import {
 import { useSLA } from "../../components/SLAConfig/SLAContext";
 import type { DegradedTrendItem } from "../../components/SLAConfig/types";
 import { fmtMs } from "../../data/format";
-import { buildDegradedTrendQuery } from "./queries";
+import { buildDegradedTrendQuery, buildAgentBaselineQuery } from "./queries";
 import type { AgentRow } from "./useAgents";
 
 interface TrendRecord {
   agent?: string;
   p90_ns?: (number | null)[] | null;
+}
+
+interface BaselineRecord {
+  agent?: string;
+  baseline_ns?: number | null;
 }
 
 export interface UseDegradedAgentsResult {
@@ -56,6 +61,18 @@ export const useDegradedAgents = (
     },
   );
 
+  // Real rolling-7d P90 baseline (separate window) — replaces the old
+  // first-half-of-trend placeholder so "% vs baseline" is meaningful.
+  const baselineResult = useScopedDql<BaselineRecord>(
+    canQuery && topNames.length > 0
+      ? buildAgentBaselineQuery(resolution.serviceIds, topNames)
+      : "",
+    {
+      enabled: canQuery && topNames.length > 0,
+      staleTime: 5 * 60_000,
+    },
+  );
+
   return useMemo<UseDegradedAgentsResult>(() => {
     const trendByAgent = new Map<string, number[]>();
     for (const r of data?.records ?? []) {
@@ -66,14 +83,21 @@ export const useDegradedAgents = (
       trendByAgent.set(r.agent, trend);
     }
 
+    const baselineByAgent = new Map<string, number>();
+    for (const r of baselineResult.data?.records ?? []) {
+      if (!r.agent || typeof r.baseline_ns !== "number") continue;
+      baselineByAgent.set(r.agent, r.baseline_ns / 1_000_000);
+    }
+
     const items: DegradedTrendItem[] = slow.map((agent) => {
       const trend = trendByAgent.get(agent.agent) ?? [];
-      // 7d baseline placeholder: average of the trend's first half until a
-      // dedicated 7d query lands (Session 14 polish).
+      // Prefer the real 7d baseline; fall back to the trend's first half only
+      // if the baseline query hasn't resolved a value for this agent yet.
       const baseline =
-        trend.length > 4
+        baselineByAgent.get(agent.agent) ??
+        (trend.length > 4
           ? arrAvg(trend.slice(0, Math.floor(trend.length / 2)))
-          : agent.p90Ms;
+          : agent.p90Ms);
       const pctVsBaseline =
         baseline > 0 ? ((agent.p90Ms - baseline) / baseline) * 100 : 0;
       const isDegraded = pctVsBaseline > 20;
@@ -98,7 +122,17 @@ export const useDegradedAgents = (
     return {
       items,
       isLoading,
-      error: error ?? undefined,
+      error: error ?? baselineResult.error ?? undefined,
     };
-  }, [slow, data, isLoading, error, hasActive, thresholds.p90Ms, filters]);
+  }, [
+    slow,
+    data,
+    baselineResult.data,
+    baselineResult.error,
+    isLoading,
+    error,
+    hasActive,
+    thresholds.p90Ms,
+    filters,
+  ]);
 };

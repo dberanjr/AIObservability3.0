@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
@@ -10,8 +10,10 @@ import {
   MoneyIcon,
   TargetFilledIcon,
 } from "@dynatrace/strato-icons";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
-import type { Pillar, PillarStatus, PulseHealth } from "./types";
+import type { Pillar, PillarStatus } from "./types";
+import { usePulseHealth } from "./usePulseHealth";
 import {
   useHealthContributors,
   type Contributor,
@@ -187,35 +189,68 @@ const ContributorList = ({
     {rows.length === 0 ? (
       <Text style={{ fontSize: 11.5, color: "var(--text-4)" }}>None</Text>
     ) : (
-      rows.map((r) => (
-        <Flex key={r.name} alignItems="center" justifyContent="space-between" gap={8}>
-          <Text
-            style={{
-              fontSize: 12,
-              fontFamily: "var(--mono, monospace)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={r.name}
-          >
-            {r.name}
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              fontVariantNumeric: "tabular-nums",
-              color:
-                metric === "error" ? "var(--red)" : "var(--text-2)",
-              flex: "0 0 auto",
-            }}
-          >
-            {metric === "error"
-              ? fmtPercent(r.errorRatePct ?? 0)
-              : `${fmtMs(r.p95Ms)} · ${fmtCount(r.calls)}`}
-          </Text>
-        </Flex>
-      ))
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: metric === "error" ? "1fr auto" : "1fr auto auto",
+          columnGap: 14,
+          rowGap: 5,
+          alignItems: "center",
+        }}
+      >
+        {rows.map((r) => (
+          <React.Fragment key={r.name}>
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "var(--mono, monospace)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+              title={r.name}
+            >
+              {r.name}
+            </Text>
+            {metric === "error" ? (
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontVariantNumeric: "tabular-nums",
+                  color: "var(--red)",
+                  textAlign: "right",
+                }}
+              >
+                {fmtPercent(r.errorRatePct ?? 0)}
+              </Text>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--text-2)",
+                    textAlign: "right",
+                  }}
+                >
+                  {fmtMs(r.p95Ms)}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontVariantNumeric: "tabular-nums",
+                    color: "var(--text-3)",
+                    textAlign: "right",
+                  }}
+                >
+                  {fmtCount(r.calls)}
+                </Text>
+              </>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
     )}
   </Flex>
 );
@@ -235,24 +270,12 @@ const HealthDrilldown = () => {
   );
 };
 
-export interface PlatformHealthCardProps {
-  health: PulseHealth;
-}
-
-export const PlatformHealthCard = ({ health }: PlatformHealthCardProps) => {
-  const [open, setOpen] = useState(false);
+const PlatformHealthBody = () => {
+  const health = usePulseHealth();
+  // Expanded by default — the contributor tables are the actionable detail.
+  const [open, setOpen] = useState(true);
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Platform health
-          </Heading>
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            Surfaced by Dynatrace Intelligence
-          </Text>
-        </Flex>
-
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         {health.isLoading ? (
           <Flex gap={24}>
             {[0, 1, 2].map((i) => (
@@ -309,6 +332,19 @@ export const PlatformHealthCard = ({ health }: PlatformHealthCardProps) => {
           </>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const PlatformHealthCard = () => (
+  <CollapsibleCard
+    title="Platform health"
+    headerRight={
+      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+        Surfaced by Dynatrace Intelligence
+      </Text>
+    }
+    defaultOpen
+  >
+    <PlatformHealthBody />
+  </CollapsibleCard>
+);

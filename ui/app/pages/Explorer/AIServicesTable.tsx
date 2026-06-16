@@ -1,7 +1,8 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import {
   ChevronRightIcon,
   WarningIcon,
@@ -154,33 +155,12 @@ export interface AIServicesTableProps {
   onRowClick?: (row: AIService) => void;
 }
 
-export const AIServicesTable = ({
+const AIServicesTableBody = ({
   rows,
   isLoading,
   onRowClick,
 }: AIServicesTableProps) => (
-  <Surface elevation="raised" padding={0}>
     <Flex flexDirection="column" gap={0}>
-      <Flex
-        alignItems="center"
-        justifyContent="space-between"
-        style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
-      >
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            AI services
-          </Heading>
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            Any monitored service that emitted LLM spans
-            (<code>gen_ai.provider.name</code>) in scope — classified
-            automatically, no tagging required.
-          </Text>
-        </Flex>
-        <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-          {rows.length} {rows.length === 1 ? "service" : "services"}
-        </Text>
-      </Flex>
-
       <div
         style={{ display: "flex", alignItems: "center", padding: "0 10px" }}
       >
@@ -405,5 +385,25 @@ export const AIServicesTable = ({
         </Text>
       </Flex>
     </Flex>
-  </Surface>
+);
+
+export const AIServicesTable = (props: AIServicesTableProps) => (
+  <CollapsibleCard
+    title="AI services"
+    subtitle={
+      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+        Any monitored service that emitted LLM spans
+        (<code>gen_ai.provider.name</code>) in scope — classified
+        automatically, no tagging required.
+      </Text>
+    }
+    headerRight={
+      <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+        {props.rows.length} {props.rows.length === 1 ? "service" : "services"}
+      </Text>
+    }
+    defaultOpen
+  >
+    <AIServicesTableBody {...props} />
+  </CollapsibleCard>
 );

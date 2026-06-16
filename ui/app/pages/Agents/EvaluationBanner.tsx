@@ -5,6 +5,7 @@ import { Button } from "@dynatrace/strato-components/buttons";
 import { Switch } from "@dynatrace/strato-components/forms";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent, fmtTokens } from "../../data/format";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import type { AgentEvalSnapshot } from "./useAgentEval";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
 
@@ -106,6 +107,17 @@ export const EvaluationBanner = ({
   const isPlaceholder = showPlaceholders && !previewMode;
 
   return (
+    <CollapsibleCard
+      title="Evaluations"
+      info="Quality signals from gen_ai.evaluation.* attributes (tool-call correctness, hallucination rate, task success, average context tokens). Collapsed by default until evaluation data is detected in scope."
+      subtitle={
+        snapshot.hasAnyEval
+          ? `${snapshot.coverage.correctness}/${snapshot.coverage.total} spans carry eval attributes`
+          : "No evaluation data in scope yet"
+      }
+      defaultOpen={snapshot.hasAnyEval}
+      bodyPadding={16}
+    >
     <Flex flexDirection="column" gap={8}>
       <Flex
         alignItems="center"
@@ -221,5 +233,6 @@ export const EvaluationBanner = ({
         </div>
       )}
     </Flex>
+    </CollapsibleCard>
   );
 };

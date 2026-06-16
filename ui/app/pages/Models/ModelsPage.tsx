@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
 import { ModelBubbleChart } from "./ModelBubbleChart";
@@ -13,6 +14,7 @@ import {
   ModelTypeSegmented,
   type ModelTypeFilter,
 } from "./ModelTypeSegmented";
+import { ModelsFinOpsSections } from "./ModelsFinOpsSections";
 import { useModels } from "./useModels";
 
 export const ModelsPage = () => {
@@ -59,19 +61,43 @@ export const ModelsPage = () => {
           href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/"
           hrefLabel="OTel GenAI"
         />
-        <ModelsFindings models={filtered} onSelect={setSelectedFinding} />
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-            gap: 16,
-            alignItems: "start",
-          }}
+        <CollapsibleCard
+          title="Model findings"
+          subtitle="Cost and concentration risks surfaced from the current scope."
+          defaultOpen
+          bodyPadding={16}
         >
-          <ModelBubbleChart models={filtered} isLoading={isLoading} />
-          <ModelsSidePanels models={filtered} isLoading={isLoading} />
-        </div>
-        <ModelsTable models={filtered} isLoading={isLoading} />
+          <ModelsFindings models={filtered} onSelect={setSelectedFinding} />
+        </CollapsibleCard>
+        <CollapsibleCard
+          title="Tokens, latency & mix"
+          subtitle="Per-model token-vs-latency scatter, top spenders, and provider mix."
+          defaultOpen
+          bodyPadding={16}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <ModelBubbleChart models={filtered} isLoading={isLoading} />
+            <ModelsSidePanels models={filtered} isLoading={isLoading} />
+          </div>
+        </CollapsibleCard>
+        <CollapsibleCard
+          title="All models"
+          subtitle={`${filtered.length} ${filtered.length === 1 ? "model" : "models"} in the current scope.`}
+          defaultOpen
+          bodyPadding={0}
+        >
+          <ModelsTable models={filtered} isLoading={isLoading} />
+        </CollapsibleCard>
+        {/* FinOps merged in as collapsible sections below the bubble chart +
+            table. Cost figures flow through the section-G cost model. */}
+        <ModelsFinOpsSections models={models} onSelectFinding={setSelectedFinding} />
       </Flex>
       <FindingDrawer
         finding={selectedFinding}

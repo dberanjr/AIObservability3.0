@@ -4,7 +4,7 @@ import { useScope } from "../../scope/ScopeContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildAgentsQuery, buildAgentTraceJoinQuery } from "./queries";
-import { estimateCost, getPricing } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import { partitionAgents } from "../../detection/classifier";
 import { canonicalizeModel } from "../../detection/attributes";
 import { toNum } from "../../data/format";
@@ -136,11 +136,12 @@ export const useAgents = (): UseAgentsResult => {
   );
 
   // Secondary query: attribute LLM cost/operations to agents via trace.id.
-  // Opts out of global-filter injection: its first stage must keep BOTH agent
-  // and LLM (null-agent) spans, which a span-level filter would break.
+  // Respects the global filter, which is now trace-scoped (in(trace.id, …)):
+  // that keeps BOTH agent and LLM (null-agent) spans for in-scope traces, so it
+  // no longer breaks the join the way the old span-attribute filter did.
   const { data: joinData } = useScopedDql<TraceJoinRecord>(
     canQuery ? buildAgentTraceJoinQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
+    { enabled: canQuery, staleTime: 60_000 },
   );
 
   return useMemo<UseAgentsResult>(() => {
@@ -201,10 +202,10 @@ export const useAgents = (): UseAgentsResult => {
       const outputTokens = costAttributed
         ? join!.outputTokens
         : num(r.output_tokens);
-      // Price with the dominant linked model (raw id for pricing lookup).
-      const pricing = getPricing(joinModels[0] ?? agentSpanModels[0]);
+      // Price with the dominant linked model (raw id), via the cache-aware
+      // cost model — blended fallback so an unknown model estimates, not $0.
       const cost = costAttributed
-        ? estimateCost(inputTokens, outputTokens, pricing)
+        ? costOf(inputTokens, outputTokens, joinModels[0] ?? agentSpanModels[0])
         : 0;
       const costPerInvocation =
         costAttributed && invocations > 0 ? cost / invocations : 0;

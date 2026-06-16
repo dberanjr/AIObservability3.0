@@ -17,7 +17,7 @@ import {
   ImageIcon,
 } from "@dynatrace/strato-icons";
 import { fmtTokens, fmtMs } from "../../data/format";
-import { getPricing, estimateCost } from "../../data/pricing";
+import { costOf } from "../../data/pricing";
 import {
   spanCategory,
   CAT_COLOR,
@@ -119,10 +119,9 @@ const traceTotals = (spans: TraceSpan[]): TraceTotals => {
   for (const s of spans) {
     inTok += s.inTokens;
     outTok += s.outTokens;
-    const pricing = getPricing(s.model);
     cost +=
-      (s.inTokens > 0 ? estimateCost(s.inTokens, 0, pricing) : 0) +
-      (s.outTokens > 0 ? estimateCost(0, s.outTokens, pricing) : 0);
+      (s.inTokens > 0 ? costOf(s.inTokens, 0, s.model) : 0) +
+      (s.outTokens > 0 ? costOf(0, s.outTokens, s.model) : 0);
     if (s.timestampMs < minStart) minStart = s.timestampMs;
     const end = s.timestampMs + Math.max(0, s.durationMs);
     if (end > maxEnd) maxEnd = end;
@@ -135,7 +134,7 @@ const traceTotals = (spans: TraceSpan[]): TraceTotals => {
   };
 };
 
-const buildLayout = (
+export const buildLayout = (
   spans: TraceSpan[],
   indicators: IndicatorState,
   sizeBy: SizeBy,
@@ -144,7 +143,11 @@ const buildLayout = (
   const visible = (s: TraceSpan) => indicators[spanCategory(s)];
   const nearestVisibleAncestor = (s: TraceSpan): string | null => {
     let p = s.parentSpanId;
-    while (p) {
+    // Guard against cyclic / self-referential parent pointers (malformed
+    // instrumentation): walk up at most once per span id.
+    const seen = new Set<string>();
+    while (p && !seen.has(p)) {
+      seen.add(p);
       const ps = byId.get(p);
       if (!ps) return null;
       if (visible(ps)) return ps.spanId;
@@ -159,10 +162,9 @@ const buildLayout = (
     if (!visible(s)) continue;
     const n = nodeOf(s);
     keyOf.set(s.spanId, n.key);
-    const pricing = getPricing(s.model);
     const cost =
-      (s.inTokens > 0 ? estimateCost(s.inTokens, 0, pricing) : 0) +
-      (s.outTokens > 0 ? estimateCost(0, s.outTokens, pricing) : 0);
+      (s.inTokens > 0 ? costOf(s.inTokens, 0, s.model) : 0) +
+      (s.outTokens > 0 ? costOf(0, s.outTokens, s.model) : 0);
     const agg = nodes.get(n.key);
     if (agg) {
       agg.count += 1;
@@ -209,6 +211,12 @@ const buildLayout = (
     return { from, to };
   });
 
+  // Tier each node by its distance from an entry via plain BFS. Each node is
+  // assigned a depth exactly once (the first time it's reached) and never
+  // re-enqueued — so this terminates even when the aggregated node graph has
+  // cycles. Recursive agent/MCP traces (e.g. mcp.server → tool → mcp.server)
+  // collapse to cyclic node graphs; a longest-path relaxation here would loop
+  // forever and freeze the tab.
   const depth = new Map<string, number>();
   const queue: string[] = [];
   for (const [key, n] of nodes) {
@@ -227,7 +235,7 @@ const buildLayout = (
     const k = queue.shift()!;
     const d = depth.get(k)!;
     for (const next of adj.get(k) ?? []) {
-      if (!depth.has(next) || depth.get(next)! < d + 1) {
+      if (!depth.has(next)) {
         depth.set(next, d + 1);
         queue.push(next);
       }

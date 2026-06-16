@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   ChevronDownIcon,
@@ -14,6 +14,8 @@ import {
   fmtUSD,
 } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
+import { BlendedBadge } from "../../components/displayHints";
+import { useModelDisplay } from "../../components/useModelDisplay";
 import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
 
 type SortKey =
@@ -206,6 +208,7 @@ export interface ModelsTableProps {
 }
 
 export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
+  const fmtModel = useModelDisplay();
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: "requests",
     dir: "desc",
@@ -235,21 +238,7 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
     );
 
   return (
-    <Surface elevation="raised" padding={0}>
-      <Flex flexDirection="column" gap={0}>
-        <Flex
-          alignItems="center"
-          justifyContent="space-between"
-          style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
-        >
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            All models
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            {models.length} {models.length === 1 ? "model" : "models"}
-          </Text>
-        </Flex>
-
+    <Flex flexDirection="column" gap={0}>
         <Flex
           alignItems="center"
           style={{ padding: "0 10px", borderBottom: "1px solid var(--border)" }}
@@ -323,7 +312,7 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                   value={m.rawModels}
                   label="model"
                 >
-                  {m.model}
+                  {fmtModel(m.rawModels?.[0] ?? m.model)}
                 </FilterTrigger>
               </Cell>
               <Cell width={100}>
@@ -397,19 +386,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 )}
               </Cell>
               <Cell width={90} align="right" mono>
-                {m.pricingUnknown ? (
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-4)",
-                      fontFamily: "var(--mono, monospace)",
-                    }}
-                  >
-                    —
-                  </Text>
-                ) : (
-                  fmtUSD(m.cost)
-                )}
+                {fmtUSD(m.cost)}
+                {m.pricingUnknown && <BlendedBadge />}
               </Cell>
               <Cell
                 width={90}
@@ -417,19 +395,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 mono
                 color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
               >
-                {m.pricingUnknown ? (
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-4)",
-                      fontFamily: "var(--mono, monospace)",
-                    }}
-                  >
-                    —
-                  </Text>
-                ) : (
-                  fmtUSD(m.costPerMTok)
-                )}
+                {fmtUSD(m.costPerMTok)}
+                {m.pricingUnknown && <BlendedBadge />}
               </Cell>
             </div>
           ))
@@ -449,7 +416,6 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
             80%). Tokens/sec shows "—" for embedding models.
           </Text>
         </Flex>
-      </Flex>
-    </Surface>
+    </Flex>
   );
 };

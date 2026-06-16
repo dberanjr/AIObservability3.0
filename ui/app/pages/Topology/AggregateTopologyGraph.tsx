@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { fmtCount, fmtPercent } from "../../data/format";
 import {
   TIER_COLOR,
+  TIER_LABEL,
   TIER_ORDER,
   type AggEdge,
   type AggNode,
@@ -143,6 +144,11 @@ export interface AggregateTopologyGraphProps {
   isolateId?: string | null;
   /** Node IDs with an active Davis problem (red dashed ring). */
   affectedNodeIds?: Set<string>;
+  /**
+   * Scoped (per-agent) mode: bigger nodes, always-visible name + type labels,
+   * larger fonts so a small graph stays readable when the SVG is scaled to fit.
+   */
+  scoped?: boolean;
 }
 
 export const AggregateTopologyGraph = ({
@@ -156,6 +162,7 @@ export const AggregateTopologyGraph = ({
   selectedId,
   isolateId,
   affectedNodeIds,
+  scoped = false,
 }: AggregateTopologyGraphProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
@@ -191,9 +198,11 @@ export const AggregateTopologyGraph = ({
     () =>
       visibleNodes.map((node) => {
         const p = positions.get(node.id) ?? { x: VIEW_W / 2, y: VIEW_H / 2 };
-        return { node, x: p.x, y: p.y, r: radiusFor(node.calls, maxCalls) };
+        // Scoped graphs have few nodes scaled to fit, so enlarge them.
+        const r = radiusFor(node.calls, maxCalls) * (scoped ? 1.8 : 1);
+        return { node, x: p.x, y: p.y, r };
       }),
-    [visibleNodes, positions, maxCalls],
+    [visibleNodes, positions, maxCalls, scoped],
   );
   const placedById = useMemo(() => new Map(placed.map((p) => [p.node.id, p])), [placed]);
 
@@ -219,10 +228,14 @@ export const AggregateTopologyGraph = ({
     dragRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
   };
   const onMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.x;
-    const dy = e.clientY - dragRef.current.y;
-    setView((v) => ({ ...v, tx: dragRef.current!.tx + dx, ty: dragRef.current!.ty + dy }));
+    // Snapshot the drag origin BEFORE setView. The state updater can run after
+    // endDrag (mouseup/mouseleave) has nulled dragRef.current; reading
+    // dragRef.current!.tx inside the updater then throws "reading 'tx'".
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    setView((v) => ({ ...v, tx: d.tx + dx, ty: d.ty + dy }));
   };
   const endDrag = () => {
     dragRef.current = null;
@@ -285,6 +298,7 @@ export const AggregateTopologyGraph = ({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+        preserveAspectRatio="xMidYMid meet"
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
@@ -331,13 +345,34 @@ export const AggregateTopologyGraph = ({
                 )}
                 {isSel && <circle r={p.r + 5} fill="none" stroke="var(--blue)" strokeWidth={2} />}
                 <circle r={p.r} fill={TIER_COLOR[p.node.tier]} fillOpacity={0.85} stroke="var(--surface)" strokeWidth={1.5} />
-                {(p.r >= 12 || p.node.id === hover) && (
+                {(scoped || p.r >= 12 || p.node.id === hover) && (
                   <text
-                    y={p.r + 12}
+                    y={p.r + (scoped ? 30 : 12)}
                     textAnchor="middle"
-                    style={{ fontSize: 10, fill: "var(--text-2)", pointerEvents: "none" }}
+                    style={{
+                      fontSize: scoped ? 26 : 10,
+                      fontWeight: scoped ? 600 : 400,
+                      fill: "var(--text)",
+                      pointerEvents: "none",
+                    }}
                   >
-                    {p.node.label.length > 22 ? `${p.node.label.slice(0, 21)}…` : p.node.label}
+                    {p.node.label.length > 28 ? `${p.node.label.slice(0, 27)}…` : p.node.label}
+                  </text>
+                )}
+                {scoped && (
+                  <text
+                    y={p.r + 56}
+                    textAnchor="middle"
+                    style={{
+                      fontSize: 21,
+                      fontWeight: 600,
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                      fill: "var(--text-3)",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {TIER_LABEL[p.node.tier]}
                   </text>
                 )}
               </g>

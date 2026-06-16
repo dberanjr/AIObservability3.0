@@ -33,6 +33,15 @@ export const dqlIdArray = (ids: string[]): string =>
   ids.map((id) => `"${dqlEscape(id)}"`).join(", ");
 
 /**
+ * Format a list of ids as `uid`-typed DQL array elements:
+ * `toUid("id1"), toUid("id2"), ...`. `trace.id` / `span.id` are uid columns —
+ * comparing them to bare string literals silently matches nothing, so any
+ * `in(trace.id, …)` must wrap each id in `toUid(...)`.
+ */
+export const dqlUidArray = (ids: string[]): string =>
+  ids.map((id) => `toUid("${dqlEscape(id)}")`).join(", ");
+
+/**
  * Emit a service-id filter clause when a resolved service list is provided.
  * `null` (the only value passed today) yields an empty clause so the query
  * runs fleet-wide. The signature preserves the option of reintroducing
@@ -85,7 +94,7 @@ export const buildAgentCountQuery = (
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
@@ -106,7 +115,7 @@ export const buildToolCountQuery = (
   // reading "0 tools". Approximate under the scan cap (high-volume compute
   // tools dominate the scan); the Tools page is the authoritative view.
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.tool.name) or (isNotNull(gen_ai.agent.name) and (span.kind == "internal" or span.kind == "client") and isNull(gen_ai.provider.name) and isNull(gen_ai.request.model) and span.name != gen_ai.agent.name)
@@ -117,7 +126,7 @@ ${globalFilterClauses(filters)}
 
 /** Distinct-services count for the status line. */
 export const FLEET_SERVICE_COUNT_QUERY = `
-fetch spans, samplingRatio: 1, from: now()-24h, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: now()-24h
 | filter isNotNull(gen_ai.provider.name)
 | summarize services = countDistinct(dt.entity.service)
 `.trim();
@@ -186,13 +195,94 @@ export const injectGlobalFilters = (
   );
 };
 
+/* ------------------------------------------------------------------ *
+ * Trace-scoped global filtering
+ *
+ * The active filter is resolved ONCE (TraceScopeContext) into the set of
+ * trace.ids whose trace satisfies every condition, then `injectTraceScope`
+ * scopes every page query to those traces. This is the correct model for
+ * distributed AI traces: a trace's attributes are spread across span types
+ * (agent name on the agent span, model on the LLM span, tool name on the tool
+ * span), so a per-span AND across conditions can never match. Per-trace, a
+ * condition is satisfied when ANY span in the trace matches it.
+ * ------------------------------------------------------------------ */
+
+/** A trace-scope predicate for one condition (values OR within the condition). */
+const conditionPredicate = (c: FilterCondition): string =>
+  `in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`;
+
+/** Filter conditions that are well-formed and carry at least one value. */
+export const validConditions = (f?: GlobalFilters): FilterCondition[] =>
+  (f?.conditions ?? []).filter(
+    (c) =>
+      c &&
+      SAFE_ATTR_RE.test(c.attribute) &&
+      Array.isArray(c.values) &&
+      c.values.length > 0,
+  );
+
+/**
+ * Build the resolver query: every trace.id whose trace satisfies ALL active
+ * conditions (each condition matched by ANY span in the trace; conditions AND
+ * across the trace). `cap` bounds the result; we request cap+1 so the caller
+ * can detect truncation. Pass `Infinity` for no cap (exact — may fail on very
+ * broad filters, which is the intended "fail loud" behaviour).
+ */
+export const buildTraceScopeQuery = (
+  timeframe: { from: string; to?: string },
+  f: GlobalFilters,
+  cap: number,
+): string => {
+  const preds = validConditions(f).map(conditionPredicate);
+  const orAll = preds.join(" or ");
+  const counters = preds.map((p, i) => `c${i} = countIf(${p})`).join(",\n    ");
+  const having = preds.map((_, i) => `c${i} > 0`).join(" and ");
+  const limit = Number.isFinite(cap) ? `\n| limit ${cap + 1}` : "";
+  const toClause = dqlTimeArg(timeframe.to ?? "now()");
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
+| filter ${orAll}
+| summarize
+    ${counters},
+    by: { trace.id }
+| filter ${having}
+| fields trace_id = toString(trace.id)${limit}
+`.trim();
+};
+
+/** Sentinel uid (a syntactically valid all-zero trace id) that matches no real
+ *  trace — injected when a filter is active but resolves to zero traces, so
+ *  downstream pages correctly render empty. */
+const NO_MATCH_TRACE_ID = "00000000000000000000000000000000";
+
+/**
+ * Inject a `| filter in(trace.id, array(toUid(...)))` after EVERY
+ * `fetch spans|logs` statement (including any nested span fetch) so the resolved
+ * trace scope applies app-wide. `trace.id` is a uid column, so ids are wrapped
+ * in `toUid(...)` — comparing the column to bare strings matches nothing.
+ * `traceIds === null` means no active filter (query returned unchanged); an
+ * empty array means the filter matched nothing.
+ */
+export const injectTraceScope = (
+  query: string,
+  traceIds: string[] | null,
+): string => {
+  if (traceIds === null || !query) return query;
+  const ids = traceIds.length > 0 ? traceIds : [NO_MATCH_TRACE_ID];
+  const pipe = `| filter in(trace.id, array(${dqlUidArray(ids)}))`;
+  return query.replace(
+    /^([ \t]*fetch\s+(?:spans|logs)\b[^\n]*)$/gm,
+    `$1\n${pipe}`,
+  );
+};
+
 export const buildFilterOptionsQuery = (
   serviceIds: string[] | null,
   timeframe: { from: string; to?: string },
 ): string => {
   const toClause = dqlTimeArg(timeframe.to ?? "now()");
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}, scanLimitGBytes: 200
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
 ${scopeFilterClause(serviceIds)}
 | filter isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.agent.name)
 | summarize

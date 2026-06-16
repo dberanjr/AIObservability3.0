@@ -1,19 +1,17 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList } from "../../components/charts/BarList";
 import type { BarListItem } from "../../components/charts/BarList";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtTokens, fmtUSD } from "../../data/format";
-import type { UseAgentCostsResult } from "./useAgentCosts";
+import { useAgentCosts } from "./useAgentCosts";
 
 const TOP_N = 8;
 
-export interface AgentCostBarListProps {
-  result: UseAgentCostsResult;
-}
-
-export const AgentCostBarList = ({ result }: AgentCostBarListProps) => {
+const AgentCostBody = () => {
+  const result = useAgentCosts();
   const items: BarListItem[] = result.rows.slice(0, TOP_N).map((r) => ({
     key: r.agent,
     label: r.agent,
@@ -24,22 +22,12 @@ export const AgentCostBarList = ({ result }: AgentCostBarListProps) => {
   }));
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Top agents by estimated cost
-            </Heading>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              cost = (input × in_price + output × out_price) per model
-            </Text>
-          </Flex>
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
+        <Flex justifyContent="flex-end">
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
             Total {fmtUSD(result.totalCost)}
           </Text>
         </Flex>
-
         {result.isLoading ? (
           <Flex flexDirection="column" gap={8}>
             {Array.from({ length: 5 }).map((_, i) => (
@@ -54,6 +42,15 @@ export const AgentCostBarList = ({ result }: AgentCostBarListProps) => {
           <BarList items={items} color="var(--purple)" />
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const AgentCostBarList = () => (
+  <CollapsibleCard
+    title="Top agents by estimated cost"
+    subtitle="cost = (input × in_price + output × out_price) per model"
+    defaultOpen
+  >
+    <AgentCostBody />
+  </CollapsibleCard>
+);

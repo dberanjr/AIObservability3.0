@@ -10,12 +10,31 @@ export interface ModelPricing {
   inputPerMTok: number;
   /** USD per 1M output tokens. */
   outputPerMTok: number;
+  /**
+   * USD per 1M cache-READ tokens (re-using an already-cached prefix). Deeply
+   * discounted vs base input. Optional: when absent, a provider-aware default
+   * is applied (see `cacheRates`) so a flat input rate is never used for cache.
+   */
+  cacheReadPerMTok?: number;
+  /**
+   * USD per 1M cache-WRITE tokens (creating a cache entry). Carries a premium
+   * over base input. Optional: defaulted when absent.
+   */
+  cacheWritePerMTok?: number;
   /** Maximum context window size in tokens. Null when unknown. */
   contextWindow: number | null;
   /** Provider as normalized by detection layer. */
   provider: string;
   /** Quality tier, used by FinOps scoring. */
   tier: "low" | "mid" | "high" | "frontier";
+  /**
+   * True when these rates are a BLENDED fallback — the model was not found in
+   * the pricing table, so the average rate across all priced generation models
+   * is used instead of $0. Consumers should surface this subtly (e.g. a small
+   * "≈ blended rate" hint) and invite the user to add the model to the table
+   * for an accurate figure. Real table entries leave this undefined.
+   */
+  blended?: boolean;
 }
 
 export const UNKNOWN_PRICE: ModelPricing = {
@@ -119,6 +138,20 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "Anthropic",
     tier: "frontier",
   },
+  "claude-opus-4-1": {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "frontier",
+  },
+  "claude-2-1": {
+    inputPerMTok: 8,
+    outputPerMTok: 24,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "mid",
+  },
 
   // OpenAI
   "gpt-4-1": {
@@ -142,6 +175,29 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "OpenAI",
     tier: "mid",
   },
+  "gpt-3-5-turbo": {
+    inputPerMTok: 0.5,
+    outputPerMTok: 1.5,
+    contextWindow: 16_385,
+    provider: "OpenAI",
+    tier: "low",
+  },
+  // OpenAI open-weight model, served via Bedrock as `gpt-oss-20b-1:0`.
+  // Both the dated key and the bare alias are present so either form resolves.
+  "gpt-oss-20b-1": {
+    inputPerMTok: 0.1,
+    outputPerMTok: 0.4,
+    contextWindow: 131_072,
+    provider: "OpenAI",
+    tier: "mid",
+  },
+  "gpt-oss-20b": {
+    inputPerMTok: 0.1,
+    outputPerMTok: 0.4,
+    contextWindow: 131_072,
+    provider: "OpenAI",
+    tier: "mid",
+  },
 
   // Google
   "gemini-2-5-pro": {
@@ -158,10 +214,97 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "Google",
     tier: "mid",
   },
+  "gemini-2-0-flash": {
+    inputPerMTok: 0.1,
+    outputPerMTok: 0.4,
+    contextWindow: 1_048_576,
+    provider: "Google",
+    tier: "mid",
+  },
+  "gemini-1-5-pro": {
+    inputPerMTok: 1.25,
+    outputPerMTok: 5,
+    contextWindow: 2_097_152,
+    provider: "Google",
+    tier: "high",
+  },
+  "gemini-1-5-flash": {
+    inputPerMTok: 0.075,
+    outputPerMTok: 0.3,
+    contextWindow: 1_048_576,
+    provider: "Google",
+    tier: "mid",
+  },
+
+  // Meta Llama (served via Bedrock / Ollama)
+  "llama3-1-8b": {
+    inputPerMTok: 0.22,
+    outputPerMTok: 0.22,
+    contextWindow: 131_072,
+    provider: "Meta",
+    tier: "mid",
+  },
+  "llama3-1-405b": {
+    inputPerMTok: 5.32,
+    outputPerMTok: 16,
+    contextWindow: 131_072,
+    provider: "Meta",
+    tier: "frontier",
+  },
+
+  // Mistral
+  "mistral-small-22b": {
+    inputPerMTok: 0.2,
+    outputPerMTok: 0.6,
+    contextWindow: 32_768,
+    provider: "Mistral",
+    tier: "mid",
+  },
+
+  // DeepSeek
+  "deepseek-llm-r1-7b": {
+    inputPerMTok: 0.1,
+    outputPerMTok: 0.4,
+    contextWindow: 65_536,
+    provider: "DeepSeek",
+    tier: "mid",
+  },
+
+  // Small / local demo model (Ollama). Representative hosted-equivalent rates.
+  "orca-mini-3b": {
+    inputPerMTok: 0.1,
+    outputPerMTok: 0.2,
+    contextWindow: 4_096,
+    provider: "Ollama",
+    tier: "low",
+  },
+
+  // Amazon Titan text generation
+  "titan-text-lite": {
+    inputPerMTok: 0.15,
+    outputPerMTok: 0.2,
+    contextWindow: 4_096,
+    provider: "AWS Bedrock",
+    tier: "low",
+  },
+  "titan-text-premier": {
+    inputPerMTok: 0.5,
+    outputPerMTok: 1.5,
+    contextWindow: 32_000,
+    provider: "AWS Bedrock",
+    tier: "mid",
+  },
 
   // Bedrock embeddings & rerank
   "titan-embed-text": {
     inputPerMTok: 0.02,
+    outputPerMTok: 0,
+    contextWindow: 8_192,
+    provider: "AWS Bedrock",
+    tier: "low",
+  },
+  "titan-embed-image": {
+    inputPerMTok: 0.08,
     outputPerMTok: 0,
     contextWindow: 8_192,
     provider: "AWS Bedrock",
@@ -190,6 +333,26 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "OpenAI",
     tier: "low",
   },
+  "text-embedding-ada": {
+    inputPerMTok: 0.1,
+    outputPerMTok: 0,
+    contextWindow: 8_191,
+    provider: "OpenAI",
+    tier: "low",
+  },
+  // Google Vertex AI text embeddings (`textembedding-gecko@001`).
+  "textembedding-gecko": {
+    inputPerMTok: 0.025,
+    outputPerMTok: 0,
+    contextWindow: 3_072,
+    provider: "Google",
+    tier: "low",
+  },
+
+  // NOTE: demolive also emits synthetic placeholder model names ("genai-demo",
+  // "genai-model") that are not real billable models. They are intentionally
+  // omitted — they fall through to UNKNOWN_PRICE (0 cost) rather than being
+  // given a fabricated rate.
 };
 
 /**
@@ -207,9 +370,18 @@ export const normalizeModelKey = (model: string): string => {
   s = s.replace(/^(us|eu|apac|ap|sa|global)\./, "");
   // Strip vendor prefix
   s = s.replace(
-    /^(anthropic|amazon|meta|cohere|mistral|ai21|openai|google)\./,
+    /^(anthropic|amazon|meta|cohere|mistral|ai21|openai|google|deepseek)\./,
     "",
   );
+  // Azure spells GPT-3.5 without the dot (`gpt-35-turbo`); fold it back so it
+  // resolves to the same key as the canonical `gpt-3.5-turbo`.
+  s = s.replace(/^gpt-35(?=-|$)/, "gpt-3-5");
+  // Fold an Ollama-style size tag into the key, keeping the size (it drives
+  // price/tier): `llama3.1:8b` → `llama3.1-8b`, `mistral-small:22b` → `…-22b`.
+  // Runs before the bare `:N` revision strip so the trailing `b` is preserved.
+  s = s.replace(/:(\d+(?:\.\d+)?b)$/, "-$1");
+  // Strip a Vertex AI publisher revision suffix (`@001`).
+  s = s.replace(/@\d+$/, "");
   // Strip trailing Bedrock revision `:N`
   s = s.replace(/:\d+$/, "");
   // Strip trailing version segment `-v1` or `:v1`
@@ -224,6 +396,14 @@ export const normalizeModelKey = (model: string): string => {
   // a display label resolves to the same key as the raw id ("claude-sonnet-4-5").
   s = s.replace(/\s+/g, "-");
   s = s.replace(/-+/g, "-");
+  // Strip Google-style trailing partial dates and preview/experimental tags
+  // (`gemini-2-5-pro-preview-03-25` → `gemini-2-5-pro`).
+  s = s.replace(/-\d{2}-\d{2}$/, "");
+  s = s.replace(/-(preview|exp|latest)$/, "");
+  // Strip a trailing 3-digit stable-revision suffix (`gemini-1-5-flash-002` →
+  // `gemini-1-5-flash`). No canonical key ends in exactly three digits, so this
+  // never collides with a real model name.
+  s = s.replace(/-\d{3}$/, "");
   return s;
 };
 
@@ -302,3 +482,153 @@ export const estimateCost = (
 ): number =>
   (inputTok * pricing.inputPerMTok + outputTok * pricing.outputPerMTok) /
   1_000_000;
+
+/**
+ * Blended fallback rate: the mean input/output price across every priced
+ * *generation* model in the effective table (built-ins + user overrides).
+ * Retrieval models (embeddings/rerank) are excluded — their 0 output price
+ * would drag the blend down and they aren't comparable to generation calls.
+ *
+ * Used so a model that is missing from the table costs a representative
+ * estimate rather than $0 (which reads as "free" and is misleading). The
+ * returned record is flagged `blended: true` so callers can subtly indicate
+ * the number is an estimate and prompt the user to add the model.
+ */
+export const getBlendedPricing = (): ModelPricing => {
+  const gen = Object.entries(getEffectivePricing()).filter(
+    ([key, p]) => !p.blended && !isRetrievalModel(key),
+  );
+  const n = gen.length;
+  if (n === 0) return { ...UNKNOWN_PRICE, blended: true };
+  const inAvg = gen.reduce((s, [, p]) => s + p.inputPerMTok, 0) / n;
+  const outAvg = gen.reduce((s, [, p]) => s + p.outputPerMTok, 0) / n;
+  return {
+    inputPerMTok: inAvg,
+    outputPerMTok: outAvg,
+    contextWindow: null,
+    provider: "Blended",
+    tier: "mid",
+    blended: true,
+  };
+};
+
+/**
+ * Cost-calculation resolver. Unlike `getPricing` (which returns the inert
+ * `UNKNOWN_PRICE` / $0 for unknowns), this returns the blended fallback for any
+ * model — including a missing or unreported one — so cost math is never
+ * silently $0. The `blended` flag on the result tells the UI to show the
+ * "estimated, add the model for accuracy" hint. Prefer this in every cost
+ * computation; keep `getPricing` for places that must distinguish "known" from
+ * "unknown" explicitly.
+ */
+export const resolveModelPricing = (
+  model: string | null | undefined,
+): ModelPricing => {
+  if (model) {
+    const key = normalizeModelKey(model);
+    const found = PRICING_OVERRIDES.get(key) ?? PRICING[key];
+    if (found) return found;
+  }
+  return getBlendedPricing();
+};
+
+// ── Cache-aware cost model (single source of truth for cost & billable tokens) ─
+
+/**
+ * Default cache-tier multipliers, applied when a model omits explicit cache
+ * rates. Cache reads are deeply discounted; cache writes carry a premium.
+ * OpenAI/Azure discount cache reads ~50%; Anthropic and most others ~90%.
+ */
+export const CACHE_WRITE_MULTIPLIER = 1.25;
+const cacheRates = (p: ModelPricing): { read: number; write: number } => ({
+  read:
+    p.cacheReadPerMTok ??
+    p.inputPerMTok * (/openai|azure/i.test(p.provider) ? 0.5 : 0.1),
+  write: p.cacheWritePerMTok ?? p.inputPerMTok * CACHE_WRITE_MULTIPLIER,
+});
+
+/**
+ * Per-tier token counts AFTER provider cache-accounting normalization
+ * (see detection/cacheAccounting.ts). `inputTokens` is UNCACHED input only;
+ * cache-read and cache-write are separate. When a tenant emits no cache
+ * attributes these collapse to (inputTokens, outputTokens) and behaviour is
+ * identical to the old flat model.
+ */
+export interface NormalizedTokens {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+export interface CostBreakdown {
+  /** USD, priced per tier from the (overrideable) rate table. */
+  effectiveCost: number;
+  /**
+   * Tokens the workload is genuinely billed "fresh" for: uncached input +
+   * cache writes + output. EXCLUDES cache reads, so a loop that re-sends a
+   * cached prefix reads as cheap rather than as runaway growth (I.1 depends
+   * on this).
+   */
+  billableTokens: number;
+  /** True when the blended fallback rate was used (model not in the table). */
+  blended: boolean;
+}
+
+/** Zeroed token record — convenience for callers building a NormalizedTokens. */
+export const emptyTokens = (): NormalizedTokens => ({
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+});
+
+/**
+ * THE cost function. Every cost figure and every token-volume detector in the
+ * app must flow through this — never price from raw input_tokens/prompt_tokens
+ * directly. Decomposes a call into its four token tiers and prices each from
+ * the effective rate table, returning both effectiveCost and billableTokens.
+ */
+export const computeCost = (
+  tokens: NormalizedTokens,
+  model: string | null | undefined,
+): CostBreakdown => {
+  const pricing = resolveModelPricing(model);
+  const { read, write } = cacheRates(pricing);
+  const effectiveCost =
+    (tokens.inputTokens * pricing.inputPerMTok +
+      tokens.cacheReadTokens * read +
+      tokens.cacheWriteTokens * write +
+      tokens.outputTokens * pricing.outputPerMTok) /
+    1_000_000;
+  const billableTokens =
+    tokens.inputTokens + tokens.cacheWriteTokens + tokens.outputTokens;
+  return {
+    effectiveCost,
+    billableTokens,
+    blended: pricing.blended === true,
+  };
+};
+
+/**
+ * Convenience: effective USD for a simple (input, output[, cache]) call, routed
+ * through the cache-aware cost model and the blended fallback (so an unknown
+ * model estimates rather than charging $0). Pass `model: null` to price a
+ * fleet-aggregate token bucket at the blended rate. Prefer `computeCost` when
+ * you also need billableTokens or the `blended` flag.
+ */
+export const costOf = (
+  inputTokens: number,
+  outputTokens: number,
+  model: string | null | undefined,
+  cache?: { read?: number; write?: number },
+): number =>
+  computeCost(
+    {
+      inputTokens,
+      outputTokens,
+      cacheReadTokens: cache?.read ?? 0,
+      cacheWriteTokens: cache?.write ?? 0,
+    },
+    model,
+  ).effectiveCost;

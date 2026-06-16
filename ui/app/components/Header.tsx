@@ -6,17 +6,21 @@ import { HeaderTimeframe } from "./HeaderTimeframe";
 import { useTweaks } from "../tweaks/TweaksContext";
 import { ModelPricingButton } from "../pricing/ModelPricingButton";
 
-/** Top-nav tabs, in display order. Pulse is also the index ("/") route. */
+/**
+ * Top-nav tabs, in display order. Pulse is also the index ("/") route.
+ *
+ * Five-tab structure (the redesign): Tools + Topology fold into Agents,
+ * MCP Health folds into Pulse, and FinOps merges into Models ("Models /
+ * FinOps"). The bar stays visible on every route so every tab is reachable
+ * from every other; the Pulse architecture map is a *secondary* router on top
+ * of this bar, never a replacement for it.
+ */
 const NAV_ITEMS: { to: string; label: string }[] = [
   { to: "/pulse", label: "Pulse" },
   { to: "/explorer", label: "Explorer" },
   { to: "/agents", label: "Agents" },
-  { to: "/tools", label: "Tools" },
   { to: "/prompts", label: "Prompts" },
-  { to: "/topology", label: "Topology" },
-  { to: "/mcp-health", label: "MCP Health" },
-  { to: "/models", label: "Models" },
-  { to: "/finops", label: "FinOps" },
+  { to: "/models", label: "Models / FinOps" },
 ];
 
 export const Header = () => {
