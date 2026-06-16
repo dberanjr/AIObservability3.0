@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   ChevronDownIcon,
@@ -238,21 +238,7 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
     );
 
   return (
-    <Surface elevation="raised" padding={0}>
-      <Flex flexDirection="column" gap={0}>
-        <Flex
-          alignItems="center"
-          justifyContent="space-between"
-          style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
-        >
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            All models
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            {models.length} {models.length === 1 ? "model" : "models"}
-          </Text>
-        </Flex>
-
+    <Flex flexDirection="column" gap={0}>
         <Flex
           alignItems="center"
           style={{ padding: "0 10px", borderBottom: "1px solid var(--border)" }}
@@ -430,7 +416,6 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
             80%). Tokens/sec shows "—" for embedding models.
           </Text>
         </Flex>
-      </Flex>
-    </Surface>
+    </Flex>
   );
 };

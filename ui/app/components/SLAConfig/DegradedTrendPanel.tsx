@@ -1,9 +1,10 @@
 import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../charts/Sparkline";
-import { fmtPercent } from "../../data/format";
+import { CollapsibleCard } from "../CollapsibleCard";
+import { fmtMs, fmtPercent } from "../../data/format";
 import type { DegradedTrendItem } from "./types";
 
 const Badge = ({ label, color }: { label: string; color: string }) => (
@@ -62,20 +63,15 @@ export const DegradedTrendPanel = ({
   headerCallout = "rolling 7d baseline",
   emptyMessage = "No entities above the slow threshold in the current scope.",
 }: DegradedTrendPanelProps) => (
-  <Surface elevation="raised" padding={16}>
+  <CollapsibleCard
+    title={title}
+    info="Each card shows an entity's current P90 against its rolling 7-day baseline P90 (a separate 7d query, not the visible window). '+N% vs baseline' is the deviation; a card is flagged DEGRADED when current P90 runs more than 20% above its 7d baseline. The sparkline is the recent 24h P90 response-time trend."
+    subtitle={subtitle}
+    headerRight={<IntelCallout label={headerCallout} />}
+    defaultOpen
+    bodyPadding="0 16px 16px"
+  >
     <Flex flexDirection="column" gap={12}>
-      <Flex alignItems="center" justifyContent="space-between">
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            {title}
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            {subtitle}
-          </Text>
-        </Flex>
-        <IntelCallout label={headerCallout} />
-      </Flex>
-
       {isLoading && items.length === 0 ? (
         <div
           style={{
@@ -145,6 +141,7 @@ export const DegradedTrendPanel = ({
                 {item.trend.length > 1 ? (
                   <Sparkline
                     values={item.trend}
+                    valueFormatter={(n) => `P90 ${fmtMs(n)}`}
                     color={
                       item.isBreached
                         ? "var(--red)"
@@ -177,5 +174,5 @@ export const DegradedTrendPanel = ({
         </div>
       )}
     </Flex>
-  </Surface>
+  </CollapsibleCard>
 );

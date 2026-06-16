@@ -41,12 +41,13 @@ export const useAgentCosts = (): UseAgentCostsResult => {
 
   // Agent spans carry no tokens in this tenant (LLM calls run through the
   // central proxy), so the only way to cost an agent is the trace-join: LLM
-  // token usage that shares a trace.id with the agent. Opts out of the global
-  // filter for the same reason as the Agents-tab join (must keep both span
-  // types). Agents whose LLM calls run in separate traces won't appear.
+  // token usage that shares a trace.id with the agent. Respects the global
+  // filter, which is now trace-scoped — that keeps both agent and LLM spans for
+  // in-scope traces (unlike the old span-attribute filter), so the join still
+  // works. Agents whose LLM calls run in separate traces won't appear.
   const { data, isLoading, error } = useScopedDql<AgentRecord>(
     canQuery ? buildAgentTraceJoinQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
+    { enabled: canQuery, staleTime: 60_000 },
   );
 
   return useMemo<UseAgentCostsResult>(() => {

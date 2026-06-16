@@ -322,6 +322,53 @@ ${globalFilterClauses(filters)}
 `.trim();
 
 /**
+ * Rolling 7d P90 baseline per agent for the DegradedTrendPanel. This is the
+ * REAL baseline (a separate 7-day window) the panel compares the current-scope
+ * P90 against — replacing the old "first half of the 24h trend" placeholder
+ * that made every agent read "+0% vs baseline". Honors the toolbar scan limit
+ * via injection; scoped to the top slow agents only so the 7d scan stays small.
+ */
+export const buildAgentBaselineQuery = (
+  serviceIds: string[] | null,
+  topAgents: string[],
+): string => {
+  if (topAgents.length === 0) {
+    return `
+fetch spans, samplingRatio: 1, from: now()-7d
+| filter false
+| summarize baseline_ns = percentile(duration, 90)
+`.trim();
+  }
+  const agentArray = topAgents.map((n) => `"${dqlEscape(n)}"`).join(", ");
+  // Global filters are injected centrally by useScopedDql.
+  return `
+fetch spans, samplingRatio: 1, from: now()-7d, to: now()
+${scopeFilterClause(serviceIds)}
+| filter in(gen_ai.agent.name, array(${agentArray}))
+| dedup {span.id}
+| summarize baseline_ns = percentile(duration, 90), by: { agent = gen_ai.agent.name }
+`.trim();
+};
+
+/**
+ * LangGraph node-execution volume over the scope timeframe — the raw signal
+ * loop detection is built on. Surfaced as a time series in the Looping Agents
+ * tile popup (honest: it's the real per-bucket node-execution count, not a
+ * reconstructed loop-rate series). A rising line = more graph activity / deeper
+ * iteration.
+ */
+export const buildAgentLoopsSeriesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  intervalSec: number,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(traceloop.association.properties.langgraph_node)
+| makeTimeseries node_execs = count(), interval: ${intervalSec}s
+`.trim();
+
+/**
  * Per-agent 24h trend + 7d baseline used by the DegradedTrendPanel.
  * Returns one row per agent with two parallel arrays.
  */

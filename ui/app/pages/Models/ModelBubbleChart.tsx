@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtTokens, fmtUSD } from "../../data/format";
 import {
@@ -155,15 +155,10 @@ export const ModelBubbleChart = ({
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Models · tokens vs latency
-            </Heading>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Log-log axes · bubble size = requests · color = provider
-            </Text>
-          </Flex>
+        <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            Models · tokens vs latency · log-log axes · bubble size = requests
+          </Text>
           <ProviderLegend models={models} />
         </Flex>
 

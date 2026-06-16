@@ -136,11 +136,12 @@ export const useAgents = (): UseAgentsResult => {
   );
 
   // Secondary query: attribute LLM cost/operations to agents via trace.id.
-  // Opts out of global-filter injection: its first stage must keep BOTH agent
-  // and LLM (null-agent) spans, which a span-level filter would break.
+  // Respects the global filter, which is now trace-scoped (in(trace.id, …)):
+  // that keeps BOTH agent and LLM (null-agent) spans for in-scope traces, so it
+  // no longer breaks the join the way the old span-attribute filter did.
   const { data: joinData } = useScopedDql<TraceJoinRecord>(
     canQuery ? buildAgentTraceJoinQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
+    { enabled: canQuery, staleTime: 60_000 },
   );
 
   return useMemo<UseAgentsResult>(() => {

@@ -117,7 +117,7 @@ export const TopologyNodePanel = ({ node, onClose, onIsolate, isolated }: Topolo
         ) : (
           <Flex flexDirection="column" gap={4}>
             <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-              Call volume (area) &amp; p90 latency (line) · {detail.series.intervalLabel} buckets · drag to zoom the timeframe
+              Call volume (area) &amp; p90 latency (line) · per {detail.series.intervalLabel} · drag to zoom the timeframe
             </Text>
             <AreaChart
               height={200}

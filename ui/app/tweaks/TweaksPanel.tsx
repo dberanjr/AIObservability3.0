@@ -12,6 +12,7 @@ import {
   type Theme,
   type TileStyle,
   type ToolsMode,
+  type TraceMatchCap,
 } from "./TweaksContext";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
@@ -299,6 +300,12 @@ const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
   { value: "on", label: "On" },
 ];
 
+const TRACE_CAP_OPTIONS: SegmentOption<TraceMatchCap>[] = [
+  { value: "fast", label: "Fast · 5k" },
+  { value: "balanced", label: "Balanced · 25k" },
+  { value: "exact", label: "Exact" },
+];
+
 /**
  * Accent options render as colour swatches so users can preview the
  * mapping. Hex pulled from `theme/tokens.ts` brand palette.
@@ -545,6 +552,23 @@ export const TweaksPanel = () => {
                 On shows the RAW model string (e.g.{" "}
                 <code>us.anthropic.claude-…-v1:0</code>); off shows the
                 normalized label (version suffixes folded).
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Global filter · trace cap</FieldLabel>
+              <Segmented
+                ariaLabel="Global filter trace cap"
+                options={TRACE_CAP_OPTIONS}
+                value={t.pageConfig.traceMatchCap}
+                onChange={t.setTraceMatchCap}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                The global filter resolves matching <code>trace.id</code>s once
+                and scopes every query to them. This caps how many traces are
+                injected — <strong>Fast</strong> (5k) is snappiest,{" "}
+                <strong>Balanced</strong> (25k) is the default, and{" "}
+                <strong>Exact</strong> never truncates (but a very broad filter
+                can fail). Truncated results are flagged as approximate.
               </Text>
             </Flex>
           </Flex>

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Histogram } from "../../components/charts/Histogram";
 import type { ChartTimeDomain } from "../../components/charts/AreaChart";
@@ -8,10 +8,10 @@ import {
   ChartModal,
   useChartExpander,
 } from "../../components/charts/ChartExpander";
-import { InfoTooltip } from "../../components/InfoTooltip";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCount } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
-import type { UseActivityHistogramResult } from "./useActivityHistogram";
+import { useActivityHistogram } from "./useActivityHistogram";
 
 const formatHour = (h: number): string => {
   if (h === 0) return "12a";
@@ -19,11 +19,8 @@ const formatHour = (h: number): string => {
   return h > 12 ? `${h - 12}p` : `${h}a`;
 };
 
-export interface ActivityHistogramPanelProps {
-  result: UseActivityHistogramResult;
-}
-
-export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) => {
+const ActivityHistogramBody = () => {
+  const result = useActivityHistogram();
   const { setTimeframe } = useScope();
   const bars = result.buckets.map((b) => ({
     label: formatHour(b.hour),
@@ -73,29 +70,15 @@ export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) 
   );
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Flex flexDirection="column" gap={2}>
-            <Flex alignItems="center" gap={6}>
-              <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-                24h activity
-              </Heading>
-              <InfoTooltip text="Hourly request counts across all GenAI spans in the last 24 hours, regardless of the active scope timeframe. Always scans 5 TB so the rollup stays accurate even when the toolbar's scan limit is lowered. Click-and-drag to brush a narrower range; the peak hour is highlighted in purple." />
-            </Flex>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Requests per hour, last 24 hours · 1h buckets
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
+        <Flex alignItems="center" justifyContent="flex-end" gap={8}>
+          {result.peakHour != null && (
+            <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+              Peak {formatHour(result.peakHour)} ·{" "}
+              <strong>{fmtCount(result.peakRequests)}</strong> req
             </Text>
-          </Flex>
-          <Flex alignItems="center" gap={8}>
-            {result.peakHour != null && (
-              <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                Peak {formatHour(result.peakHour)} ·{" "}
-                <strong>{fmtCount(result.peakRequests)}</strong> req
-              </Text>
-            )}
-            {expander.expandButton("Expand 24h activity chart")}
-          </Flex>
+          )}
+          {expander.expandButton("Expand 24h activity chart")}
         </Flex>
 
         {result.isLoading ? (
@@ -103,16 +86,26 @@ export const ActivityHistogramPanel = ({ result }: ActivityHistogramPanelProps) 
         ) : (
           renderChart(180)
         )}
+        <ChartModal
+          open={expander.open}
+          onClose={() => expander.setOpen(false)}
+          title="24h activity"
+          subtitle="Requests per hour, last 24 hours"
+          stats={stats}
+        >
+          {renderChart(440)}
+        </ChartModal>
       </Flex>
-      <ChartModal
-        open={expander.open}
-        onClose={() => expander.setOpen(false)}
-        title="24h activity"
-        subtitle="Requests per hour, last 24 hours"
-        stats={stats}
-      >
-        {renderChart(440)}
-      </ChartModal>
-    </Surface>
   );
 };
+
+export const ActivityHistogramPanel = () => (
+  <CollapsibleCard
+    title="24h activity"
+    info="Hourly request counts across all GenAI spans in the last 24 hours, regardless of the active scope timeframe. Always scans 5 TB so the rollup stays accurate even when the toolbar's scan limit is lowered. Click-and-drag to brush a narrower range; the peak hour is highlighted in purple."
+    subtitle="Requests per hour, last 24 hours · per 1 hour"
+    defaultOpen
+  >
+    <ActivityHistogramBody />
+  </CollapsibleCard>
+);

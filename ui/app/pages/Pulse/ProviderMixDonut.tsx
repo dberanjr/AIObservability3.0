@@ -1,17 +1,15 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Donut } from "../../components/charts/Donut";
 import type { DonutSlice } from "../../components/charts/Donut";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCountCompact } from "../../data/format";
-import type { UseProviderMixResult } from "./useProviderMix";
+import { useProviderMix } from "./useProviderMix";
 
-export interface ProviderMixDonutProps {
-  result: UseProviderMixResult;
-}
-
-export const ProviderMixDonut = ({ result }: ProviderMixDonutProps) => {
+const ProviderMixBody = () => {
+  const result = useProviderMix();
   const slices: DonutSlice[] = result.shares.map((s) => ({
     key: s.provider,
     label: s.displayName,
@@ -32,17 +30,7 @@ export const ProviderMixDonut = ({ result }: ProviderMixDonutProps) => {
   }));
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Provider mix
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            by request count
-          </Text>
-        </Flex>
-
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         {result.isLoading ? (
           <Skeleton style={{ height: 160 }} />
         ) : slices.length === 0 ? (
@@ -63,6 +51,11 @@ export const ProviderMixDonut = ({ result }: ProviderMixDonutProps) => {
             : "Provider attribution reads gen_ai.provider.name and unwraps Bedrock vendor prefixes server-side."}
         </Text>
       </Flex>
-    </Surface>
   );
 };
+
+export const ProviderMixDonut = () => (
+  <CollapsibleCard title="Provider mix" subtitle="by request count" defaultOpen>
+    <ProviderMixBody />
+  </CollapsibleCard>
+);

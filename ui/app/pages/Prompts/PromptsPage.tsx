@@ -15,8 +15,6 @@ import { PromptsTable, type PromptView } from "./PromptsTable";
 import { PromptsTilesRow } from "./PromptsTilesRow";
 import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
-import { usePromptQuality } from "./usePromptQuality";
-import { usePromptSummary } from "./usePromptSummary";
 import { decodePromptsFilter } from "./findingFilter";
 
 export const PromptsPage = () => {
@@ -73,8 +71,6 @@ export const PromptsPage = () => {
     "mask",
   );
 
-  const summary = usePromptSummary();
-  const quality = usePromptQuality();
   const {
     prompts,
     filtered,
@@ -86,8 +82,7 @@ export const PromptsPage = () => {
     hasEval,
   } = usePrompts(filter);
 
-  const firstError =
-    summary.error ?? quality.error ?? promptsError ?? null;
+  const firstError = promptsError ?? null;
 
   // Only warn once data has loaded and genuinely lacks content/eval, so the
   // notice self-hides for properly instrumented tenants.
@@ -214,7 +209,6 @@ export const PromptsPage = () => {
           </Flex>
         )}
         <PromptsTilesRow
-          summary={summary}
           filter={filter}
           onFilterChange={setFilter}
         />
@@ -226,7 +220,7 @@ export const PromptsPage = () => {
           href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
           hrefLabel="OTel GenAI spans"
         />
-        <PromptQualityAnalytics quality={quality} />
+        <PromptQualityAnalytics />
 
         <PromptsTable
           view={view}

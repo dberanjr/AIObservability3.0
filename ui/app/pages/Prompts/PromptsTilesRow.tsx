@@ -3,7 +3,8 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtTokens } from "../../data/format";
-import type { PromptSummary } from "./usePromptSummary";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { usePromptSummary } from "./usePromptSummary";
 import type { PromptsFilter } from "./usePrompts";
 
 interface TileProps {
@@ -81,16 +82,14 @@ const Tile = ({ label, value, sub, emphasis = "default", onClick, active }: Tile
 };
 
 export interface PromptsTilesRowProps {
-  summary: PromptSummary;
   filter?: PromptsFilter;
   onFilterChange?: (next: PromptsFilter) => void;
 }
 
-export const PromptsTilesRow = ({
-  summary,
-  filter,
-  onFilterChange,
-}: PromptsTilesRowProps) => {
+// Body owns the query (usePromptSummary) so it only runs while the section is
+// expanded — CollapsibleCard renders children solely when open.
+const PromptsTilesBody = ({ filter, onFilterChange }: PromptsTilesRowProps) => {
+  const summary = usePromptSummary();
   if (summary.isLoading && summary.total === 0) {
     return (
       <div
@@ -98,6 +97,7 @@ export const PromptsTilesRow = ({
           display: "grid",
           gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
           gap: 10,
+          padding: 16,
         }}
       >
         {Array.from({ length: 7 }).map((_, i) => (
@@ -118,6 +118,7 @@ export const PromptsTilesRow = ({
         display: "grid",
         gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
         gap: 10,
+        padding: 16,
       }}
     >
       <Tile
@@ -212,3 +213,9 @@ export const PromptsTilesRow = ({
     </div>
   );
 };
+
+export const PromptsTilesRow = (props: PromptsTilesRowProps) => (
+  <CollapsibleCard title="Prompt overview" defaultOpen>
+    <PromptsTilesBody {...props} />
+  </CollapsibleCard>
+);

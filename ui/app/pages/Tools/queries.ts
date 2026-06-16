@@ -65,6 +65,37 @@ ${agentName ? `| filter gen_ai.agent.name == "${dqlEscape(agentName)}"` : ""}
  * the null-service entity duplication). Same record shape as buildToolsQuery
  * so the hook/table are mode-agnostic.
  */
+/**
+ * Per-tool time series (calls volume + p90 latency) for a single agent's tool,
+ * powering the tool-drilldown chart in the Agents "Tools" sub-view. The tool
+ * key is gen_ai.tool.name in strict mode, span.name in discovered mode — the
+ * same keys the two aggregate builders group by. Global filters inject
+ * centrally via useScopedDql.
+ */
+export const buildAgentToolDetailQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  agentName: string,
+  toolName: string,
+  intervalSec: number,
+  strict: boolean,
+): string => {
+  const toolKey = strict ? "gen_ai.tool.name" : "span.name";
+  const modeFilter = strict
+    ? `| filter isNotNull(gen_ai.tool.name)`
+    : `| filter span.kind == "internal" or span.kind == "client"
+| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)`;
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name)
+| filter gen_ai.agent.name == "${dqlEscape(agentName)}"
+${modeFilter}
+| filter ${toolKey} == "${dqlEscape(toolName)}"
+| makeTimeseries calls = count(), p90_ns = percentile(duration, 90), interval: ${intervalSec}s
+`.trim();
+};
+
 export const buildDiscoveredToolsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,

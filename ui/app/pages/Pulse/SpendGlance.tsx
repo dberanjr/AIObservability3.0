@@ -5,8 +5,9 @@
  * Models / FinOps tab.
  */
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { useDailySpend } from "./useDailySpend";
 import { fmtUSD, fmtUSDCompact } from "../../data/format";
 
@@ -91,15 +92,11 @@ const Cell = ({
   </Flex>
 );
 
-export const SpendGlance = () => {
+const SpendGlanceBody = () => {
   const { spend24h, spend7d, projected30d, delta24h, bars, barLabels } = useDailySpend();
 
   return (
-    <Surface elevation="raised">
       <Flex flexDirection="column" gap={12} style={{ padding: "14px 18px" }}>
-        <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-          Spend glance
-        </Heading>
         <Flex gap={20}>
           <Cell label="Last 24h" value={fmtUSD(spend24h)} delta={delta24h} />
           <Cell label="Last 7d" value={fmtUSD(spend7d)} />
@@ -122,6 +119,11 @@ export const SpendGlance = () => {
           </Flex>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const SpendGlance = () => (
+  <CollapsibleCard title="Spend glance" defaultOpen>
+    <SpendGlanceBody />
+  </CollapsibleCard>
+);

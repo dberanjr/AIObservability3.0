@@ -4,7 +4,6 @@ import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
-import { useModels } from "../Models/useModels";
 import { LatencyTierPanel } from "../Agents/LatencyTierPanel";
 import { ArchitectureMap } from "./ArchitectureMap";
 import { SpendGlance } from "./SpendGlance";
@@ -19,45 +18,17 @@ import { CapabilityGate } from "../../components/CapabilityGate";
 import { TokenEfficiencyTiles } from "./TokenEfficiencyTiles";
 import { TokenConsumptionChart } from "./TokenConsumptionChart";
 import { TopFindingsStrip } from "./TopFindingsStrip";
-import { TopModelsPanel } from "./TopModelsPanel";
-import { useActivityHistogram } from "./useActivityHistogram";
-import { useAgentCosts } from "./useAgentCosts";
-import { useAnomalies } from "./anomalies/useAnomalies";
-import { useProviderMix } from "./useProviderMix";
-import { usePulseHealth } from "./usePulseHealth";
+import { TopModelsCard } from "./TopModelsPanel";
 import { usePulseSummary } from "./usePulseSummary";
-import { useTokenConsumption } from "./useTokenConsumption";
-import { useTokenForecast } from "./useTokenForecast";
-import { usePersistedState } from "../../state/usePersistedState";
 
 export const PulsePage = () => {
-  const health = usePulseHealth();
   const summary = usePulseSummary();
-  const agentCosts = useAgentCosts();
-  const tokenSeries = useTokenConsumption();
-  const [forecastEnabled, setForecastEnabled] = usePersistedState<boolean>(
-    "ai-obs.pulse.forecast-enabled",
-    false,
-  );
-  const tokenForecast = useTokenForecast(forecastEnabled);
-  const histogram = useActivityHistogram();
-  const providerMix = useProviderMix();
-  const { anomalies, isLoading: anomaliesLoading, error: anomaliesError } =
-    useAnomalies();
-  const { models, isLoading: modelsLoading } = useModels();
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
 
-  // Page-level error surface — collapses partial data only when the first
-  // panel hook itself can't load. Other panels still render whatever they have.
-  const firstError =
-    health.error ??
-    summary.error ??
-    anomaliesError ??
-    tokenSeries.error ??
-    histogram.error ??
-    providerMix.error ??
-    agentCosts.error ??
-    null;
+  // Page-level error surface — only the always-mounted hero summary hook is
+  // hoisted here; every collapsible section owns (and surfaces) its own load
+  // state inside its body, so a collapsed section issues no query at all.
+  const firstError = summary.error ?? null;
 
   return (
     <>
@@ -88,23 +59,14 @@ export const PulsePage = () => {
             gap: 16,
           }}
         >
-          <TokenConsumptionChart
-            result={tokenSeries}
-            forecast={tokenForecast}
-            forecastEnabled={forecastEnabled}
-            onToggleForecast={setForecastEnabled}
-          />
-          <ActivityHistogramPanel result={histogram} />
+          <TokenConsumptionChart />
+          <ActivityHistogramPanel />
         </div>
         <SpendGlance />
         <TokenEfficiencyTiles />
         <LatencyTierPanel />
-        <TopFindingsStrip
-          findings={anomalies}
-          isLoading={anomaliesLoading}
-          onSelect={setSelectedFinding}
-        />
-        <PlatformHealthCard health={health} />
+        <TopFindingsStrip onSelect={setSelectedFinding} />
+        <PlatformHealthCard />
         <CapabilityGate id={["guardrails", "piiCategories"]}>
           <SafetyPanel />
         </CapabilityGate>
@@ -120,9 +82,9 @@ export const PulsePage = () => {
             alignItems: "start",
           }}
         >
-          <AgentCostBarList result={agentCosts} />
-          <TopModelsPanel models={models} isLoading={modelsLoading} />
-          <ProviderMixDonut result={providerMix} />
+          <AgentCostBarList />
+          <TopModelsCard />
+          <ProviderMixDonut />
         </div>
       </Flex>
       <FindingDrawer

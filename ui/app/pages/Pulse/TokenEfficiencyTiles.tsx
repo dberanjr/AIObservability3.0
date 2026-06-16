@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
 import { InfoTooltip } from "../../components/InfoTooltip";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { useTokenEfficiency } from "./useTokenEfficiency";
 import { usePulseSeries } from "./archMap/usePulseSeries";
 import { useSpendBreakdown } from "./useSpendBreakdown";
@@ -123,7 +124,7 @@ const Driver = ({
 const scoreColor = (score: number): string =>
   score >= 70 ? "var(--green-2)" : score >= 40 ? "var(--amber)" : "var(--red)";
 
-export const TokenEfficiencyTiles = () => {
+const TokenEfficiencyBody = () => {
   const eff = useTokenEfficiency();
   const series = usePulseSeries();
   const spend = useSpendBreakdown();
@@ -249,3 +250,9 @@ export const TokenEfficiencyTiles = () => {
     </div>
   );
 };
+
+export const TokenEfficiencyTiles = () => (
+  <CollapsibleCard title="Token efficiency" defaultOpen bodyPadding={16}>
+    <TokenEfficiencyBody />
+  </CollapsibleCard>
+);

@@ -12,14 +12,17 @@ export interface LatencyFilter {
 
 /** Sidebar facet selections applied server-side so the 200-row cap is taken
  *  AFTER filtering (not before). Service + kind + search + provider + operation
- *  + status (errors/pii/warnings) + latency are pushed into DQL; model/agent
- *  stay client-side (canonical label / trace-backfilled). */
+ *  + status (errors/pii/warnings/truncated) + latency + agent are pushed into
+ *  DQL; only model stays client-side (it needs canonical-label mapping). */
 export interface PromptsSidebarFilter {
   services?: string[];
   kinds?: string[];
   search?: string;
   providers?: string[];
   operations?: string[];
+  /** Agent names. LLM spans carry no gen_ai.agent.name, so this filters by the
+   *  agent's trace.ids via a server-side join (see buildPromptsListQuery). */
+  agents?: string[];
   onlyErrors?: boolean;
   onlyPii?: boolean;
   onlyWarnings?: boolean;
@@ -123,6 +126,29 @@ export const buildPromptsListQuery = (
     ? `| filter contains(lower(prompt_text), "${dqlEscape(q)}") or contains(lower(response_text), "${dqlEscape(q)}") or contains(lower(coalesce(system_prompt, "")), "${dqlEscape(q)}")`
     : "";
   const extraClauses = sidebarClauses(sidebar);
+  // Agent filter: gen_ai.agent.name is null on LLM/prompt spans, so we can't
+  // filter them directly. Instead inner-join to the trace.ids that carry the
+  // selected agent(s) — keeping only prompt spans from those agents' traces.
+  // Server-side (before the 200-row cap), so it doesn't depend on the sample.
+  const agentClause = sidebar?.agents?.length
+    ? `| join [
+    fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+    | filter in(gen_ai.agent.name, array(${dqlIdArray(sidebar.agents)}))
+    | summarize ag_keep = count(), by: { trace.id }
+  ], on: { trace.id }, kind: inner, prefix: "ag_"`
+    : "";
+  // The content filter (drop tokens-only proxy spans) is relaxed when a status
+  // tile is active: truncated / PII / warning spans in this tenant are proxy
+  // spans with NO captured content, so requiring content would hide every one.
+  const statusFilterActive = Boolean(
+    sidebar?.onlyTruncated ||
+      sidebar?.onlyPii ||
+      sidebar?.onlyWarnings ||
+      sidebar?.onlyErrors,
+  );
+  const contentClause = statusFilterActive
+    ? ""
+    : `| filter prompt_text != "" or response_text != "" or span.status_code == "error"`;
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
@@ -135,6 +161,7 @@ ${globalFilterClauses(filters)}
 ${svcClause}
 ${kindClause}
 ${extraClauses}
+${agentClause}
 // Collapse duplicate span records (this tenant double-emits some spans).
 | dedup {span.id}
 | fieldsAdd
@@ -176,8 +203,10 @@ ${extraClauses}
     eval_relevance = toDouble(gen_ai.evaluation.relevance)
 | fieldsAdd kind = if(isNotNull(gen_ai.agent.name), "Agent", else: "LLM")
 // Keep only rows that carry a prompt or response (or are errors). This drops
-// the central-proxy spans, which have tokens but no content.
-| filter prompt_text != "" or response_text != "" or span.status_code == "error"
+// the central-proxy spans, which have tokens but no content. Relaxed when a
+// status tile (truncated/pii/warning/error) is active — those target the
+// content-less proxy spans, so the requirement is dropped there.
+${contentClause}
 ${searchClause}
 | fields
     timestamp = start_time,

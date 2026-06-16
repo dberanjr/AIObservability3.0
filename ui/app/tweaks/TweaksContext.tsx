@@ -56,6 +56,25 @@ export type ColorBlindFilter =
 export type ToolsMode = "strict" | "discovered";
 
 /**
+ * How aggressively to cap the global filter's resolved trace-id set. The global
+ * filter is trace-scoped: it resolves the matching trace.ids once and injects
+ * them into every query. A very broad filter can match more traces than fit in
+ * a DQL array literal, so the set is capped:
+ *   - fast     — 5k traces (snappiest; truncates sooner)
+ *   - balanced — 25k traces (default; best correctness/reliability balance)
+ *   - exact    — no cap (always precise; can fail loud on very broad filters)
+ * Truncated results are flagged in the filter strip ("approximate").
+ */
+export type TraceMatchCap = "fast" | "balanced" | "exact";
+
+/** Trace-id cap for each TraceMatchCap option. `Infinity` = no cap. */
+export const TRACE_MATCH_CAPS: Record<TraceMatchCap, number> = {
+  fast: 5000,
+  balanced: 25000,
+  exact: Infinity,
+};
+
+/**
  * Per-tab custom configuration. Extensible: add a key here and a control in
  * the Tweaks panel's "Page configuration" section for any future per-tab knob.
  */
@@ -78,6 +97,8 @@ export interface PageConfig {
    * instead of the normalized label. Off by default (normalized everywhere).
    */
   showRawModels: boolean;
+  /** App-wide: how aggressively to cap the global filter's trace-id set. */
+  traceMatchCap: TraceMatchCap;
 }
 
 export interface TweaksState {
@@ -112,6 +133,7 @@ export const DEFAULT_TWEAKS: TweaksState = {
     agentsShowTtft: false,
     showExampleData: false,
     showRawModels: false,
+    traceMatchCap: "balanced",
   },
 };
 
@@ -129,6 +151,7 @@ export interface TweaksContextValue extends TweaksState {
   setAgentsShowTtft: (v: boolean) => void;
   setShowExampleData: (v: boolean) => void;
   setShowRawModels: (v: boolean) => void;
+  setTraceMatchCap: (v: TraceMatchCap) => void;
   resetTweaks: () => void;
   isPanelOpen: boolean;
   openPanel: () => void;
@@ -212,6 +235,7 @@ export const TweaksProvider = ({
       setAgentsShowTtft: mergePage("agentsShowTtft"),
       setShowExampleData: mergePage("showExampleData"),
       setShowRawModels: mergePage("showRawModels"),
+      setTraceMatchCap: mergePage("traceMatchCap"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),
       isPanelOpen,
       openPanel: () => setPanelOpen(true),

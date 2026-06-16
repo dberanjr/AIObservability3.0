@@ -16,6 +16,7 @@ import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
 import { ScopeProvider } from "./scope/ScopeContext";
 import { GlobalFilterProvider } from "./scope/GlobalFilterContext";
+import { TraceScopeProvider } from "./scope/TraceScopeContext";
 import { CapabilityProvider } from "./scope/CapabilityContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
@@ -33,6 +34,7 @@ export const App = () => {
     <ScanLimitProvider>
     <ScopeProvider>
     <GlobalFilterProvider>
+    <TraceScopeProvider>
     <CapabilityProvider>
       <ThemeStyles />
       <Page>
@@ -86,6 +88,7 @@ export const App = () => {
       <ModelPricingPanel />
       <ColorBlindFilters />
     </CapabilityProvider>
+    </TraceScopeProvider>
     </GlobalFilterProvider>
     </ScopeProvider>
     </ScanLimitProvider>

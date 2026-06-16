@@ -649,7 +649,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
 
     return {
       title,
-      subtitle: `${info} · ${summary.spark.intervalLabel} buckets`,
+      subtitle: `${info} · per ${summary.spark.intervalLabel}`,
       body: (
         <AreaChart
           height={420}
@@ -827,7 +827,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         expanded={() =>
           sparklineExpanded(
             "Tokens",
-            "Per-bucket sum of input + output tokens across the active timeframe.",
+            "Per-interval sum of input + output tokens across the active timeframe.",
             summary.spark.tokens,
             fmtTokens,
           )
@@ -842,7 +842,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         expanded={() =>
           sparklineExpanded(
             "Spend",
-            "Per-bucket blended cost derived from token usage and default pricing.",
+            "Per-interval blended cost derived from token usage and default pricing.",
             summary.spark.spend,
             fmtUSDCompact,
           )
@@ -856,7 +856,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         expanded={() =>
           sparklineExpanded(
             "P95 latency",
-            "Per-bucket 95th percentile of span duration.",
+            "Per-interval 95th percentile of span duration.",
             summary.spark.p95Ms,
             fmtMs,
           )
@@ -874,7 +874,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         expanded={() =>
           sparklineExpanded(
             "Error rate",
-            "Per-bucket fraction of spans with an exception.type set.",
+            "Per-interval fraction of spans with an exception.type set.",
             summary.spark.errorRatePct,
             (n) => fmtPercent(n, 1),
           )

@@ -9,8 +9,8 @@ import { useSegments } from "@dynatrace/strato-components/filters";
 import type { ResultRecord } from "@dynatrace-sdk/client-query";
 import { useScanLimit } from "./ScanLimitContext";
 import { useSampling } from "./SamplingContext";
-import { useGlobalFilters } from "./GlobalFilterContext";
-import { injectGlobalFilters } from "./queries";
+import { useTraceScope } from "./TraceScopeContext";
+import { injectTraceScope } from "./queries";
 import { injectScanLimit } from "./dqlScanLimit";
 
 const SAMPLING_RE = /samplingRatio:\s*\d+/g;
@@ -64,19 +64,19 @@ export function useScopedDql<T = ResultRecord>(
   const { scanLimitGb } = useScanLimit();
   const { samplingRatio } = useSampling();
   const { segments } = useSegments();
-  const { filters } = useGlobalFilters();
+  const { traceIds, isLoading: scopeLoading } = useTraceScope();
   const ignoreGlobalFilter = Boolean(options?.ignoreGlobalFilter);
 
   const queryInput = useMemo<string | DqlQueryParams>(() => {
     // Sampling first (may inject samplingRatio, adding the comma the scan-limit
-    // injector keys on), then the scan limit, then the global filter.
+    // injector keys on), then the scan limit, then the global trace scope.
     const sampled = applySampling(query, samplingRatio);
     const scanned = injectScanLimit(sampled, scanLimitGb);
-    // Inject the global attribute filter into every fetch query (unless the
-    // caller opted out) so the toolbar filter is truly app-wide.
+    // Scope every fetch to the trace ids resolved from the active global filter
+    // (unless the caller opted out), so the toolbar filter is truly app-wide.
     const rewritten = ignoreGlobalFilter
       ? scanned
-      : injectGlobalFilters(scanned, filters);
+      : injectTraceScope(scanned, traceIds);
     if (!rewritten) return rewritten;
     if (!segments || segments.length === 0) return rewritten;
     return {
@@ -91,9 +91,15 @@ export function useScopedDql<T = ResultRecord>(
     samplingRatio,
     segments,
     ignoreGlobalFilter,
-    filters,
+    traceIds,
   ]);
 
+  // While the global filter is resolving its trace set, hold page queries so
+  // they don't fire unscoped (and flash unfiltered data) then refetch. Queries
+  // that opt out of the global filter are never gated.
+  const gated = scopeLoading && !ignoreGlobalFilter;
+  const enabled = (options?.enabled ?? true) && !gated;
+
   // `ignoreGlobalFilter` is an extra key useDql ignores; forward options as-is.
-  return useDql<T>(queryInput, options);
+  return useDql<T>(queryInput, { ...options, enabled });
 }

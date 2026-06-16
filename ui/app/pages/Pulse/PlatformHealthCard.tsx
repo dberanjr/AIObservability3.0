@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
@@ -10,8 +10,10 @@ import {
   MoneyIcon,
   TargetFilledIcon,
 } from "@dynatrace/strato-icons";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
-import type { Pillar, PillarStatus, PulseHealth } from "./types";
+import type { Pillar, PillarStatus } from "./types";
+import { usePulseHealth } from "./usePulseHealth";
 import {
   useHealthContributors,
   type Contributor,
@@ -268,25 +270,12 @@ const HealthDrilldown = () => {
   );
 };
 
-export interface PlatformHealthCardProps {
-  health: PulseHealth;
-}
-
-export const PlatformHealthCard = ({ health }: PlatformHealthCardProps) => {
+const PlatformHealthBody = () => {
+  const health = usePulseHealth();
   // Expanded by default — the contributor tables are the actionable detail.
   const [open, setOpen] = useState(true);
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between">
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Platform health
-          </Heading>
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            Surfaced by Dynatrace Intelligence
-          </Text>
-        </Flex>
-
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         {health.isLoading ? (
           <Flex gap={24}>
             {[0, 1, 2].map((i) => (
@@ -343,6 +332,19 @@ export const PlatformHealthCard = ({ health }: PlatformHealthCardProps) => {
           </>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const PlatformHealthCard = () => (
+  <CollapsibleCard
+    title="Platform health"
+    headerRight={
+      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+        Surfaced by Dynatrace Intelligence
+      </Text>
+    }
+    defaultOpen
+  >
+    <PlatformHealthBody />
+  </CollapsibleCard>
+);

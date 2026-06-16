@@ -1,66 +1,53 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { FindingCard } from "../../components/FindingCard";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import type { Finding } from "../../components/drawers/types";
+import { useAnomalies } from "./anomalies/useAnomalies";
 
 const MAX_CARDS = 5;
 
 export interface TopFindingsStripProps {
-  findings: Finding[];
-  isLoading: boolean;
   onSelect: (finding: Finding) => void;
 }
 
-/**
- * Top-issues strip on Pulse — up to 5 finding cards laid out across the row.
- * Renders nothing when there are no findings and nothing is loading (per the
- * "hide when empty" UX rule). Inherits the Dynatrace Intelligence framing
- * since this absorbed the role of the legacy AnomalyPanel.
- */
-export const TopFindingsStrip = ({
-  findings,
-  isLoading,
-  onSelect,
-}: TopFindingsStripProps) => {
-  const cards = findings.slice(0, MAX_CARDS);
+const IntelBadge = () => (
+  <span
+    style={{
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      color: "var(--purple-2)",
+      background: "var(--intel-soft)",
+      border: "1px solid var(--purple-2)",
+      borderRadius: 999,
+      padding: "3px 10px",
+      whiteSpace: "nowrap",
+    }}
+  >
+    Dynatrace Intelligence
+  </span>
+);
 
-  // Hide the entire surface when there's nothing to show — empty-state copy
-  // here was visually noisy when the platform is healthy.
-  if (!isLoading && cards.length === 0) return null;
+/**
+ * Top-issues strip body — self-fetches anomalies so the query only runs while
+ * the section is expanded. Inherits the Dynatrace Intelligence framing since
+ * this absorbed the role of the legacy AnomalyPanel.
+ */
+const TopFindingsBody = ({ onSelect }: TopFindingsStripProps) => {
+  const { anomalies, isLoading } = useAnomalies();
+  const cards = anomalies.slice(0, MAX_CARDS);
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
-          <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Top issues requiring attention
-            </Heading>
-            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-              Threshold-based detection · click any card to investigate
-            </Text>
-          </Flex>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "var(--purple-2)",
-              background: "var(--intel-soft)",
-              border: "1px solid var(--purple-2)",
-              borderRadius: 999,
-              padding: "3px 10px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Dynatrace Intelligence
-          </span>
-        </Flex>
-
-        {isLoading && cards.length === 0 ? (
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
+        {!isLoading && cards.length === 0 ? (
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+            No issues detected in the current scope.
+          </Text>
+        ) : isLoading && cards.length === 0 ? (
           <div
             style={{
               display: "grid",
@@ -86,6 +73,16 @@ export const TopFindingsStrip = ({
           </div>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const TopFindingsStrip = ({ onSelect }: TopFindingsStripProps) => (
+  <CollapsibleCard
+    title="Top issues requiring attention"
+    subtitle="Threshold-based detection · click any card to investigate"
+    headerRight={<IntelBadge />}
+    defaultOpen
+  >
+    <TopFindingsBody onSelect={onSelect} />
+  </CollapsibleCard>
+);

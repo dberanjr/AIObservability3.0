@@ -1,8 +1,9 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import {
   useLatencyDecomposition,
   type LatencyTier,
@@ -15,36 +16,23 @@ const TIER_COLOR: Record<LatencyTier, string> = {
   Orchestration: "var(--text-4)",
 };
 
-export const LatencyTierPanel = () => {
+// Body is a separate component so the query (useLatencyDecomposition) only runs
+// when the section is expanded — CollapsibleCard renders children solely while
+// open, so a collapsed section issues no DQL.
+const LatencyTierBody = () => {
   const { tiers, totalMs, dominant, isLoading } = useLatencyDecomposition();
 
   return (
-    <Surface elevation="raised" padding={0}>
       <Flex flexDirection="column" gap={0}>
-        <Flex
-          flexDirection="column"
-          gap={2}
-          style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
-        >
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Latency by execution tier
-          </Heading>
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            Where wall-clock time goes across the AI stack — model inference,
-            retrieval/DB, tools, and orchestration.
-            {dominant && totalMs > 0 && (
-              <>
-                {" "}
-                <strong style={{ color: "var(--text)" }}>
-                  {dominant.tier}
-                </strong>{" "}
-                accounts for {fmtPercent(dominant.sharePct, 0)} of total
-                execution time.
-              </>
-            )}
+        {dominant && totalMs > 0 && (
+          <Text
+            style={{ fontSize: 11, color: "var(--text-3)", padding: "10px 16px 0" }}
+          >
+            <strong style={{ color: "var(--text)" }}>{dominant.tier}</strong>{" "}
+            accounts for {fmtPercent(dominant.sharePct, 0)} of total execution
+            time across the AI stack.
           </Text>
-        </Flex>
-
+        )}
         {isLoading && tiers.length === 0 ? (
           <Flex flexDirection="column" gap={6} style={{ padding: 16 }}>
             <Skeleton style={{ height: 16 }} />
@@ -179,6 +167,16 @@ export const LatencyTierPanel = () => {
           </Flex>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const LatencyTierPanel = () => (
+  <CollapsibleCard
+    title="Latency by execution tier"
+    info="Where wall-clock time is spent across the AI stack, by classifying every span into a tier (LLM / Retrieval-DB / Tool / Orchestration). Share = the tier's summed span duration ÷ the total across tiers. LLM spans run on the central proxy, so this is a fleet-level view of time, not per-trace self-time."
+    subtitle="Where wall-clock time goes across the AI stack — model inference, retrieval/DB, tools, and orchestration."
+    defaultOpen
+  >
+    <LatencyTierBody />
+  </CollapsibleCard>
+);

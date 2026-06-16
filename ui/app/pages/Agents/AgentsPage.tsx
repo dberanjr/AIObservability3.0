@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
-import { AgentLoopPanel } from "./AgentLoopPanel";
 import {
   DegradedTrendPanel,
   IntelligenceDetectorDrawer,
@@ -15,7 +14,7 @@ import { AgentsHero } from "./AgentsHero";
 import { AgentsTable } from "./AgentsTable";
 import { AgentsTilesRow } from "./AgentsTilesRow";
 import {
-  AgentsViewRow,
+  AgentsActionsRow,
   type AgentOperation,
   type AgentView,
 } from "./AgentsViewRow";
@@ -97,11 +96,7 @@ const AgentsPageBody = () => {
         {firstError && <ErrorBanner error={firstError} />}
         {hasActive && <SLAOverrideBanner onEdit={() => setSlaOpen(true)} />}
 
-        <AgentsViewRow
-          view={view}
-          operation={operation}
-          onViewChange={setView}
-          onOperationChange={setOperation}
+        <AgentsActionsRow
           onSetupDetector={() => setDetectorOpen(true)}
           onConfigureSLA={() => setSlaOpen(true)}
         />
@@ -120,12 +115,6 @@ const AgentsPageBody = () => {
           hrefLabel="OTel GenAI spans"
         />
 
-        <EvaluationBanner
-          snapshot={evalSnap}
-          previewMode={previewEval}
-          onPreviewToggle={setPreviewEval}
-        />
-
         <DegradedTrendPanel
           items={degraded.items}
           isLoading={degraded.isLoading}
@@ -138,26 +127,31 @@ const AgentsPageBody = () => {
           isLoading={agentsResult.isLoading}
         />
 
-        <LatencyTierPanel />
+        {/* Agents table — full width, directly above the execution-tier
+            breakdown so the per-agent detail and the where-time-goes view
+            read together. */}
+        <AgentsTable
+          rows={filteredSubstantive}
+          isLoading={agentsResult.isLoading}
+          view={view}
+          operation={operation}
+          onViewChange={setView}
+          onOperationChange={setOperation}
+        />
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr)",
-            gap: 16,
-            alignItems: "start",
-          }}
-        >
-          <UpstreamServicesTable result={upstream} />
-          <AgentsTable
-            rows={filteredSubstantive}
-            isLoading={agentsResult.isLoading}
-          />
-        </div>
+        <LatencyTierPanel />
 
         <OrchestrationSection rows={orchestrationNodes.nodes} />
 
-        <AgentLoopPanel />
+        {/* Lower-priority context, parked at the bottom. Upstream services
+            collapses to a single row when there are no monitored callers. */}
+        <UpstreamServicesTable result={upstream} />
+
+        <EvaluationBanner
+          snapshot={evalSnap}
+          previewMode={previewEval}
+          onPreviewToggle={setPreviewEval}
+        />
       </Flex>
 
       <SLAConfigDrawer

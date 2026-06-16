@@ -4,15 +4,16 @@
  */
 
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { MiniStat } from "../../components/MiniStat";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCount } from "../../data/format";
 import { useFeedback } from "./useFeedback";
 
-export const FeedbackPanel = () => {
+const FeedbackBody = () => {
   const r = useFeedback();
 
   const items: BarListItem[] = r.labels.map((l) => ({
@@ -28,19 +29,7 @@ export const FeedbackPanel = () => {
   }));
 
   return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={12}>
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Feedback &amp; prompt versions
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            From <code>gen_ai.feedback.*</code> and{" "}
-            <code>gen_ai.prompt_hub.*</code> — surfaced because your telemetry
-            now emits them.
-          </Text>
-        </Flex>
-
+      <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         {r.isLoading ? (
           <Skeleton style={{ height: 84, borderRadius: 6 }} />
         ) : (
@@ -78,6 +67,21 @@ export const FeedbackPanel = () => {
           </Flex>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const FeedbackPanel = () => (
+  <CollapsibleCard
+    title="Feedback & prompt versions"
+    subtitle={
+      <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+        From <code>gen_ai.feedback.*</code> and{" "}
+        <code>gen_ai.prompt_hub.*</code> — surfaced because your telemetry now
+        emits them.
+      </Text>
+    }
+    defaultOpen
+  >
+    <FeedbackBody />
+  </CollapsibleCard>
+);

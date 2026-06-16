@@ -203,6 +203,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     search: filter.search,
     providers: filter.providers,
     operations: filter.operations,
+    agents: filter.agents,
     onlyErrors: filter.onlyErrors,
     onlyPii: filter.onlyPii,
     onlyWarnings: filter.onlyWarnings,
@@ -230,6 +231,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       filter.search,
       filter.providers?.join(","),
       filter.operations?.join(","),
+      filter.agents?.join(","),
       filter.onlyErrors,
       filter.onlyPii,
       filter.onlyWarnings,
@@ -387,13 +389,13 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     const kinds = filter.kinds ?? [];
     const services = filter.services ?? [];
     const models = filter.models ?? [];
-    const agents = filter.agents ?? [];
 
     const filtered = prompts.filter((p) => {
       if (kinds.length > 0 && !kinds.includes(p.kind)) return false;
       if (services.length > 0 && !services.includes(p.service)) return false;
       if (models.length > 0 && (!p.model || !models.includes(p.model))) return false;
-      if (agents.length > 0 && (!p.agent || !agents.includes(p.agent))) return false;
+      // Agent is filtered SERVER-SIDE (trace join in buildPromptsListQuery) so
+      // it works against the full population, not just the 200-row sample.
       // Cost filters are in dollars; PromptRow stores cents.
       if (!matchRange(p.inCost / 100, filter.inCost)) return false;
       if (!matchRange(p.outCost / 100, filter.outCost)) return false;

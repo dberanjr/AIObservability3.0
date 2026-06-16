@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
@@ -9,6 +9,7 @@ import {
   RefreshIcon,
   SettingIcon,
 } from "@dynatrace/strato-icons";
+import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtMs, fmtTokens } from "../../data/format";
 import { costOf } from "../../data/pricing";
 import type { PromptRow } from "./usePrompts";
@@ -929,9 +930,8 @@ export interface PromptsTableProps {
   onRefresh: () => void;
 }
 
-export const PromptsTable = ({
+const PromptsTableBody = ({
   view,
-  onViewChange,
   prompts,
   isLoading,
   privacy,
@@ -994,10 +994,6 @@ export const PromptsTable = ({
   // Anomaly thresholds derived from the rows currently in view.
   const anomalyStats = useMemo(() => computeAnomalyStats(filtered), [filtered]);
 
-  const selectedPrompt = useMemo(
-    () => sorted.find((p) => p.id === selectedId) ?? null,
-    [sorted, selectedId],
-  );
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -1010,24 +1006,7 @@ export const PromptsTable = ({
   }, [selectedId]);
 
   return (
-    <Surface elevation="raised" padding={0}>
       <Flex flexDirection="column" gap={0}>
-        <Flex
-          alignItems="center"
-          justifyContent="space-between"
-          style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}
-        >
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Prompts
-          </Heading>
-          <Flex alignItems="center" gap={12}>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              {sorted.length} shown
-            </Text>
-            <ViewSegmented value={view} onChange={onViewChange} />
-          </Flex>
-        </Flex>
-
         {view === "evaluations" ? (
           <EvaluationsEmptyState />
         ) : (
@@ -1040,6 +1019,9 @@ export const PromptsTable = ({
                 gap: 12,
               }}
             >
+              <Text style={{ fontSize: 11.5, color: "var(--text-3)", flex: "0 0 auto" }}>
+                {sorted.length} shown
+              </Text>
               <input
                 type="text"
                 placeholder="Search prompts..."
@@ -1137,6 +1119,17 @@ export const PromptsTable = ({
           </>
         )}
       </Flex>
-    </Surface>
   );
 };
+
+export const PromptsTable = (props: PromptsTableProps) => (
+  <CollapsibleCard
+    title="Prompts"
+    headerRight={
+      <ViewSegmented value={props.view} onChange={props.onViewChange} />
+    }
+    defaultOpen
+  >
+    <PromptsTableBody {...props} />
+  </CollapsibleCard>
+);
