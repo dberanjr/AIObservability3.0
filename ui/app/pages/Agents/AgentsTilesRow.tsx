@@ -221,7 +221,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         <Tile
           label="TTFT"
           value="—"
-          sub={<MissingDataHint note="not emitted" attribute="gen_ai.usage.time_to_first_token" />}
+          sub={<MissingDataHint note="not emitted" attribute="gen_ai.response.ttft" />}
           info="Time to first token — responsiveness of streamed responses. Not emitted by any agent in this scope. Click for instrumentation guidance (and an example view via Tweaks → Show example data)."
           onClick={() => setOpen("ttft")}
         />

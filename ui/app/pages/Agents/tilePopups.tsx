@@ -486,18 +486,18 @@ export const TtftBody = () => {
         in this scope emits it, so there is nothing to chart.
       </Text>
       {showExample ? (
-        <ExampleDataFrame attribute="gen_ai.usage.time_to_first_token">
+        <ExampleDataFrame attribute="gen_ai.response.ttft">
           {exampleChart}
         </ExampleDataFrame>
       ) : (
         <MissingDataHint
           note="Enable 'Show example data' in Tweaks to preview what this panel would look like once TTFT is emitted"
-          attribute="gen_ai.usage.time_to_first_token"
+          attribute="gen_ai.response.ttft"
         />
       )}
       <DataGapNote
         message="TTFT is not emitted on any LLM/agent span in this scope. It must be recorded on streamed responses (the elapsed time from request start to the first streamed token)."
-        attributes={["gen_ai.usage.time_to_first_token"]}
+        attributes={["gen_ai.response.ttft"]}
         bestPractice="Emit a time-to-first-token attribute on streamed responses. See INSTRUMENTATION-REQUIREMENTS.md P1.5."
         href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
         hrefLabel="OTel GenAI spans"

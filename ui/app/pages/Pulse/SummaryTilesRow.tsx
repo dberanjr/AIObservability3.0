@@ -894,7 +894,19 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
               labels={hasToolErrors ? toolErrorSlices.map((s) => s.label) : ["No errors"]}
               colors={hasToolErrors ? undefined : ["var(--green-2)"]}
               valueFormatter={(n) => `${fmtCount(n)} err`}
-              centerValue={fmtPercent(mcpErr, 1)}
+              centerValue={(() => {
+                // Render the trailing "%" smaller than the number so the
+                // glyph doesn't crowd the donut ring (leaves breathing room).
+                const s = fmtPercent(mcpErr, 1);
+                return s.endsWith("%") ? (
+                  <>
+                    {s.slice(0, -1)}
+                    <span style={{ fontSize: "0.6em" }}>%</span>
+                  </>
+                ) : (
+                  s
+                );
+              })()}
             />
           }
           visualCaption="errored calls"

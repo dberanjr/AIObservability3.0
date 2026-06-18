@@ -521,7 +521,7 @@ export const TweaksPanel = () => {
               />
               <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
                 Off by default —{" "}
-                <code>gen_ai.usage.time_to_first_token</code> is not
+                <code>gen_ai.response.ttft</code> is not
                 instrumented in this environment.
               </Text>
             </Flex>

@@ -1,6 +1,6 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://your-tenant.apps.dynatrace.com/",
+  "environmentUrl": "https://ual.apps.dynatrace.com/",
   "app": {
     "name": "AI Observability 3.0 App",
     "version": "0.1.77",

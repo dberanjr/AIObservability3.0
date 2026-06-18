@@ -109,7 +109,7 @@ const AgentsPageBody = () => {
         <DataGapNote
           tone="warn"
           message="TTFT is blank and per-agent cost is often unattributed (—) in this scope: no time-to-first-token attribute is emitted, and LLM calls run on a separate proxy trace so tokens can't be joined to the agent. Error rate now also includes logical failures (refusals / content-filter)."
-          attributes={["gen_ai.usage.time_to_first_token", "gen_ai.usage.cost", "gen_ai.agent.name (on LLM spans)"]}
+          attributes={["gen_ai.response.ttft", "gen_ai.usage.cost", "gen_ai.agent.name (on LLM spans)"]}
           bestPractice="Propagate W3C trace context across the LLM proxy so agent and LLM spans share a trace (enables cost attribution), and emit a TTFT attribute on streamed responses. See INSTRUMENTATION-REQUIREMENTS.md P0.1 and P1.5."
           href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
           hrefLabel="OTel GenAI spans"

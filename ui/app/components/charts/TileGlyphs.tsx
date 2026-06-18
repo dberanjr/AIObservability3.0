@@ -49,8 +49,9 @@ export interface MiniDonutProps {
   valueFormatter?: (n: number) => string;
   /** Per-slice color. Cycled if fewer colors than values. */
   colors?: string[];
-  /** Big number rendered in the center. */
-  centerValue?: string;
+  /** Big number rendered in the center. Accepts a node so callers can style
+   * parts of it (e.g. a smaller "%" suffix). */
+  centerValue?: React.ReactNode;
   centerLabel?: string;
 }
 

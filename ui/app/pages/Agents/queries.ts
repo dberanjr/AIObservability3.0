@@ -31,7 +31,7 @@ ${globalFilterClauses(filters)}
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     ${logicalErrorField()},
     lname = lower(span.name),
-    ttft_ms = if(isNotNull(gen_ai.usage.time_to_first_token), toDouble(gen_ai.usage.time_to_first_token), else: null)
+    ttft_ms = if(isNotNull(gen_ai.response.ttft) or isNotNull(gen_ai.usage.time_to_first_token) or isNotNull(gen_ai.response.time_to_first_chunk), toDouble(coalesce(gen_ai.response.ttft, gen_ai.usage.time_to_first_token, gen_ai.response.time_to_first_chunk)), else: null)
 | fieldsAdd
     // Classify each span in the agent's (single-service) trace into a stage.
     // LLM is usually ~0 here because model calls run on the shared proxy in a

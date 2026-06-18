@@ -83,7 +83,7 @@ export interface PageConfig {
   toolsMode: ToolsMode;
   /**
    * Agents tab: show the TTFT column. Off by default because
-   * gen_ai.usage.time_to_first_token is not instrumented in BOS (0 rows).
+   * gen_ai.response.ttft is not instrumented in BOS (0 rows).
    */
   agentsShowTtft: boolean;
   /**

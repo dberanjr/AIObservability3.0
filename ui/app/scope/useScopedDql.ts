@@ -45,6 +45,16 @@ export interface UseScopedDqlExtra {
    * trace-join, whose first stage must keep both agent and LLM spans).
    */
   ignoreGlobalFilter?: boolean;
+  /**
+   * Force this query's sampling ratio instead of the toolbar selection. Used by
+   * heavy multi-window background estimates (e.g. the 8-day spend glance) that
+   * scan multiple TB per window and cannot complete within the platform's query
+   * execution-time limit at full fidelity on high-volume tenants. The caller is
+   * responsible for extrapolating its sum/count aggregates by the same ratio.
+   * Sum-aggregate estimates extrapolate cleanly; never use this for queries the
+   * user expects at the exact fidelity they selected.
+   */
+  samplingRatioOverride?: number;
 }
 
 /**
@@ -66,11 +76,14 @@ export function useScopedDql<T = ResultRecord>(
   const { segments } = useSegments();
   const { traceIds, isLoading: scopeLoading } = useTraceScope();
   const ignoreGlobalFilter = Boolean(options?.ignoreGlobalFilter);
+  // A per-query override wins over the toolbar ratio (used by heavy background
+  // estimates that can't run at full fidelity — see UseScopedDqlExtra).
+  const effectiveSampling = options?.samplingRatioOverride ?? samplingRatio;
 
   const queryInput = useMemo<string | DqlQueryParams>(() => {
     // Sampling first (may inject samplingRatio, adding the comma the scan-limit
     // injector keys on), then the scan limit, then the global trace scope.
-    const sampled = applySampling(query, samplingRatio);
+    const sampled = applySampling(query, effectiveSampling);
     const scanned = injectScanLimit(sampled, scanLimitGb);
     // Scope every fetch to the trace ids resolved from the active global filter
     // (unless the caller opted out), so the toolbar filter is truly app-wide.
@@ -88,7 +101,7 @@ export function useScopedDql<T = ResultRecord>(
   }, [
     query,
     scanLimitGb,
-    samplingRatio,
+    effectiveSampling,
     segments,
     ignoreGlobalFilter,
     traceIds,

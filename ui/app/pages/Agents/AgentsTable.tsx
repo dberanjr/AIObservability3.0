@@ -134,7 +134,7 @@ const TTFTValue = ({ value }: { value: number | null }) =>
   value == null ? (
     <Text
       style={{ fontFamily: "var(--mono, monospace)", fontSize: 12.5, color: "var(--text-4)" }}
-      title="Requires gen_ai.usage.time_to_first_token"
+      title="Requires gen_ai.response.ttft"
     >
       —
     </Text>

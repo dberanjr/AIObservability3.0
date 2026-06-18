@@ -43,7 +43,7 @@ export const SLA_METRIC_ATTRS: Record<SLAMetric, string> = {
   maxErrorRatePct: "exception.type OR http.response.status_code ≥ 400 / total spans",
   maxCostPerInvocation:
     "gen_ai.usage.{input,output}_tokens × pricing.ts per model",
-  maxTtftMs: "gen_ai.usage.time_to_first_token (not yet instrumented)",
+  maxTtftMs: "gen_ai.response.ttft (not yet instrumented)",
 };
 
 /** Number of thresholds currently set in the object. */

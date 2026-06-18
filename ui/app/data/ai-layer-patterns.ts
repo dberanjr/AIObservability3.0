@@ -229,7 +229,7 @@ export const AI_LAYERS: AiLayer[] = [
       {
         title: "TTFT degradation",
         detail:
-          "Streaming time-to-first-token regresses against its rolling baseline. Capability-gated on gen_ai.usage.time_to_first_token.",
+          "Streaming time-to-first-token regresses against its rolling baseline. Capability-gated on gen_ai.response.ttft.",
         tier: "live",
       },
       {
@@ -251,7 +251,7 @@ export const AI_LAYERS: AiLayer[] = [
         tier: "enrichment",
       },
     ],
-    otel: "gen_ai.request/response.model, gen_ai.usage.* (input/output/cache tokens, cost, ttft), gen_ai.response.finish_reasons.",
+    otel: "gen_ai.request/response.model, gen_ai.usage.* (input/output/cache tokens, cost), gen_ai.response.ttft, gen_ai.response.finish_reasons.",
     otelGap: false,
     relatedSpanKinds: ["llm"],
     relatedDbSystems: [],

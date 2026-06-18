@@ -47,7 +47,7 @@ export const PulsePage = () => {
         </div>
         <DataGapNote
           message="Error rate now includes logical failures (refusals / content-filter), not just HTTP/exception errors. Quality scoring and TTFT are still unavailable — no evaluation scores or time-to-first-token attributes are emitted — and spend per session/user can't be computed without identity + proxy trace propagation."
-          attributes={["gen_ai.evaluation.score", "gen_ai.usage.time_to_first_token", "session.id", "gen_ai.user"]}
+          attributes={["gen_ai.evaluation.score", "gen_ai.response.ttft", "session.id", "gen_ai.user"]}
           bestPractice="Emit evaluation scores (P1.2), a TTFT attribute (P1.5), session/user identity (P1.1), and propagate trace context across the LLM proxy (P0.1). See INSTRUMENTATION-REQUIREMENTS.md."
           href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/"
           hrefLabel="OTel GenAI"
