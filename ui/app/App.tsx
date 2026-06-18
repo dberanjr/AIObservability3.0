@@ -11,6 +11,7 @@ import { ExplorerPage } from "./pages/Explorer/ExplorerPage";
 import { ModelsPage } from "./pages/Models/ModelsPage";
 import { PromptsPage } from "./pages/Prompts/PromptsPage";
 import { PulsePage } from "./pages/Pulse/PulsePage";
+import { AttributeAuditPage } from "./pages/AttributeAudit/AttributeAuditPage";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
 import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
@@ -58,6 +59,7 @@ export const App = () => {
                 <Route path="/agents" element={<AgentsPage />} />
                 <Route path="/prompts" element={<PromptsPage />} />
                 <Route path="/models" element={<ModelsPage />} />
+                <Route path="/attributes" element={<AttributeAuditPage />} />
                 {/* Folded tabs — redirect old deep-links to their new homes.
                     Tools + Topology → Agents, MCP Health → Pulse, FinOps →
                     Models / FinOps. Query string (timeframe, focus) carries. */}

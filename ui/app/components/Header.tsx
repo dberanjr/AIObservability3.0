@@ -21,6 +21,7 @@ const NAV_ITEMS: { to: string; label: string }[] = [
   { to: "/agents", label: "Agents" },
   { to: "/prompts", label: "Prompts" },
   { to: "/models", label: "Models / FinOps" },
+  { to: "/attributes", label: "Attributes" },
 ];
 
 export const Header = () => {
