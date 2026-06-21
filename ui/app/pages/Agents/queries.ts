@@ -38,7 +38,7 @@ ${globalFilterClauses(filters)}
     // separate trace — see "Latency by execution tier" for the LLM share.
     span_tier = if(isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.system), "llm",
       else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "retrieval",
-      else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and mcp.method.name != "tools/list" and mcp.method.name != "initialize", "tool", else: "orch")))
+      else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and mcp.method.name != "tools/list" and mcp.method.name != "initialize" and mcp.method.name != "notifications/initialized" and mcp.method.name != "ping", "tool", else: "orch")))
 | summarize
     invocations = count(),
     p50_ns = percentile(duration, 50),
@@ -186,7 +186,7 @@ ${globalFilterClauses(filters)}
 | fieldsAdd lname = lower(span.name)
 | fieldsAdd tier = if(isNotNull(gen_ai.provider.name), "LLM",
     else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "Retrieval/DB",
-    else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and mcp.method.name != "tools/list" and mcp.method.name != "initialize", "Tool",
+    else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and mcp.method.name != "tools/list" and mcp.method.name != "initialize" and mcp.method.name != "notifications/initialized" and mcp.method.name != "ping", "Tool",
     else: "Orchestration")))
 | summarize
     spans = count(),

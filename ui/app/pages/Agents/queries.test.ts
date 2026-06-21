@@ -20,6 +20,8 @@ describe("buildAgentsQuery — authoritative tool classification", () => {
   it("excludes MCP lifecycle methods from tools", () => {
     expect(q).toContain('mcp.method.name != "tools/list"');
     expect(q).toContain('mcp.method.name != "initialize"');
+    expect(q).toContain('mcp.method.name != "notifications/initialized"');
+    expect(q).toContain('mcp.method.name != "ping"');
   });
 });
 
@@ -28,5 +30,13 @@ describe("buildLatencyDecompositionQuery — tool tier", () => {
     const q = buildLatencyDecompositionQuery(null, TF);
     expect(q).toContain('traceloop.span.kind == "tool"');
     expect(q).not.toContain('span.kind == "client" or contains(lname,"_tool")');
+  });
+
+  it("excludes MCP lifecycle methods from tools", () => {
+    const q = buildLatencyDecompositionQuery(null, TF);
+    expect(q).toContain('mcp.method.name != "tools/list"');
+    expect(q).toContain('mcp.method.name != "initialize"');
+    expect(q).toContain('mcp.method.name != "notifications/initialized"');
+    expect(q).toContain('mcp.method.name != "ping"');
   });
 });
