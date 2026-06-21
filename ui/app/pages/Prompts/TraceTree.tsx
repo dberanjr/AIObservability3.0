@@ -9,6 +9,7 @@ import {
   MinimizeIcon,
 } from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
+import { MCP_LIFECYCLE_METHODS } from "../../scope/queries";
 import type { TraceSpan } from "./useTraceSpans";
 
 interface TraceNode {
@@ -22,12 +23,11 @@ export type SpanCategory = "agent" | "llm" | "tool" | "other";
 export const spanCategory = (s: TraceSpan): SpanCategory => {
   if (s.provider) return "llm";
   if (s.agentName || s.tlKind === "workflow") return "agent";
-  // MCP protocol lifecycle is never a tool call.
+  // MCP protocol lifecycle is never a tool call. Derived from the shared
+  // single-source-of-truth list (mirrors the DQL tool classifiers).
   const isLifecycle =
-    s.mcpMethod === "tools/list" ||
-    s.mcpMethod === "initialize" ||
-    s.mcpMethod === "notifications/initialized" ||
-    s.mcpMethod === "ping";
+    !!s.mcpMethod &&
+    (MCP_LIFECYCLE_METHODS as readonly string[]).includes(s.mcpMethod);
   // Authoritative tool signals only — LangGraph `task` spans and `.task`
   // names are orchestration, not tool calls, so they're deliberately excluded.
   const isTool =

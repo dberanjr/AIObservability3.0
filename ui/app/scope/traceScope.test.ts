@@ -5,6 +5,8 @@ import {
   frameworkPredicate,
   hasActiveFilter,
   injectTraceScope,
+  mcpNotLifecycleClause,
+  MCP_LIFECYCLE_METHODS,
   validConditions,
 } from "./queries";
 import type { GlobalFilters } from "./queries";
@@ -78,6 +80,31 @@ describe("buildTraceScopeQuery", () => {
     const q = buildTraceScopeQuery(TF, f, 5000);
     // Condition is c0, frameworks is c1 — both must be positive.
     expect(q).toContain("| filter c0 > 0 and c1 > 0");
+  });
+});
+
+describe("mcpNotLifecycleClause", () => {
+  const clause = mcpNotLifecycleClause();
+
+  it("is null-tolerant: leads with isNull(mcp.method.name) or so non-MCP spans pass", () => {
+    expect(clause).toContain("isNull(mcp.method.name) or");
+  });
+
+  it("excludes all four MCP lifecycle methods", () => {
+    for (const m of MCP_LIFECYCLE_METHODS) {
+      expect(clause).toContain(`mcp.method.name != "${m}"`);
+    }
+  });
+
+  it("wraps the predicate in parentheses (safe to AND into a larger condition)", () => {
+    expect(clause.startsWith("(")).toBe(true);
+    expect(clause.endsWith(")")).toBe(true);
+  });
+
+  it("emits the exact expected DQL", () => {
+    expect(clause).toBe(
+      '(isNull(mcp.method.name) or (mcp.method.name != "tools/list" and mcp.method.name != "initialize" and mcp.method.name != "notifications/initialized" and mcp.method.name != "ping"))',
+    );
   });
 });
 

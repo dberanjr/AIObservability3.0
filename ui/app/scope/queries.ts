@@ -32,6 +32,21 @@ export const dqlTimeArg = (s: string): string => {
 export const dqlIdArray = (ids: string[]): string =>
   ids.map((id) => `"${dqlEscape(id)}"`).join(", ");
 
+/** MCP protocol lifecycle methods — these are NOT tool calls. Single source of
+ *  truth; mirror any change across every tool classifier. */
+export const MCP_LIFECYCLE_METHODS = ["tools/list", "initialize", "notifications/initialized", "ping"] as const;
+
+/** DQL predicate (string) that is TRUE for spans that are NOT an MCP lifecycle
+ *  call. Null-tolerant: a span with no mcp.method.name (every non-MCP span)
+ *  passes. Use inside tool-classification branches.
+ *
+ * CRITICAL: the null guard is load-bearing. A bare `mcp.method.name != "x"` AND
+ * chain evaluates to NULL (falsy) for every span where mcp.method.name is NULL
+ * (i.e. every non-MCP tool span), which misclassifies genuine tool spans as
+ * orchestration. The leading isNull(...) makes those spans pass. */
+export const mcpNotLifecycleClause = (): string =>
+  `(isNull(mcp.method.name) or (${MCP_LIFECYCLE_METHODS.map((m) => `mcp.method.name != "${m}"`).join(" and ")}))`;
+
 /**
  * Format a list of ids as `uid`-typed DQL array elements:
  * `toUid("id1"), toUid("id2"), ...`. `trace.id` / `span.id` are uid columns —
