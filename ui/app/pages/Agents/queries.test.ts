@@ -1,0 +1,32 @@
+import { describe, expect, it } from "vitest";
+import { buildAgentsQuery, buildLatencyDecompositionQuery } from "./queries";
+import type { Timeframe } from "../../scope/types";
+
+const TF: Timeframe = { from: "now()-2h" };
+
+describe("buildAgentsQuery — authoritative tool classification", () => {
+  const q = buildAgentsQuery(null, TF);
+
+  it("classifies tools by traceloop.span.kind / gen_ai.tool.name / mcp tools-call", () => {
+    expect(q).toContain('traceloop.span.kind == "tool"');
+    expect(q).toContain("isNotNull(gen_ai.tool.name)");
+    expect(q).toContain('mcp.method.name == "tools/call"');
+  });
+
+  it("does NOT use span.kind==client or _tool name inference as a tool signal", () => {
+    expect(q).not.toContain('span.kind == "client" or contains(lname,"_tool")');
+  });
+
+  it("excludes MCP lifecycle methods from tools", () => {
+    expect(q).toContain('mcp.method.name != "tools/list"');
+    expect(q).toContain('mcp.method.name != "initialize"');
+  });
+});
+
+describe("buildLatencyDecompositionQuery — tool tier", () => {
+  it("uses the same authoritative tool signal", () => {
+    const q = buildLatencyDecompositionQuery(null, TF);
+    expect(q).toContain('traceloop.span.kind == "tool"');
+    expect(q).not.toContain('span.kind == "client" or contains(lname,"_tool")');
+  });
+});
