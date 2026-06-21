@@ -314,9 +314,9 @@ export const useArchitectureData = (): ArchData => {
       // ── orchestrator ─────────────────────────────────────
       // The orchestrator tier no longer carries a throughput headline — its
       // runtime (workflow) spans are folded into the Agent tier below, and this
-      // tier instead surfaces the detected frameworks as filter chips (rendered
-      // by NodeMap from useFrameworkBreakdown). We still keep p90 + error count
-      // for the health dot, and the loop-rate badge / cells.
+      // tier instead surfaces the detected frameworks as separate nodes (driven
+      // by useFrameworkNodes). We still keep p90 + error count for the health
+      // dot, and the loop-rate badge / cells.
       const wf = num(rec.workflowSpans);
       const wfErr = pct(num(rec.workflowErr), wf);
       const wfP90 = ms(num(rec.workflowP90Ns));
