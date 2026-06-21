@@ -10,20 +10,21 @@ import {
   buildDownstreamEdgesQuery,
   buildAffectedServiceIdsQuery,
 } from "./aggregateQueries";
+import {
+  mergeServiceAgentNodes,
+  nid,
+  type AggTier,
+  type AggNode,
+  type AggEdge,
+} from "./mergeNodes";
+
+export type { AggTier, AggNode, AggEdge } from "./mergeNodes";
+export { mergeServiceAgentNodes } from "./mergeNodes";
 
 const num = (v: unknown): number => {
   const n = toNum(v);
   return Number.isFinite(n) ? n : 0;
 };
-
-export type AggTier =
-  | "upstream"
-  | "service"
-  | "agent"
-  | "tool"
-  | "model"
-  | "provider"
-  | "downstream";
 
 /** Left-to-right / top-to-bottom tier order for the layered layouts. */
 export const TIER_ORDER: AggTier[] = [
@@ -55,22 +56,6 @@ export const TIER_COLOR: Record<AggTier, string> = {
   provider: "var(--amber)",
   downstream: "var(--text-4)",
 };
-
-export interface AggNode {
-  id: string;
-  tier: AggTier;
-  label: string;
-  calls: number;
-  errors: number;
-  errorRatePct: number;
-}
-
-export interface AggEdge {
-  id: string;
-  source: string;
-  target: string;
-  calls: number;
-}
 
 export interface AggTopologyResult {
   nodes: AggNode[];
@@ -107,8 +92,6 @@ interface EdgeRecord {
 interface AffectedRecord {
   eid?: string;
 }
-
-const nid = (tier: AggTier, label: string): string => `${tier}:${label}`;
 
 /** Per-tier node caps to keep the SVG render tractable. */
 const TIER_CAP: Record<AggTier, number> = {
@@ -240,13 +223,25 @@ export const useAggregateTopology = (
       n.errorRatePct = n.calls > 0 ? (n.errors / n.calls) * 100 : 0;
     }
 
+    // Collapse duplicate service+agent bubbles (same display name) into one
+    // agent node and re-point edges, before capping/keep-filtering so the caps
+    // and problem rings operate on the merged graph.
+    const merged = mergeServiceAgentNodes(
+      Array.from(nodeMap.values()),
+      Array.from(edgeMap.values()),
+    );
+    // service node id → surviving agent node id, for problem-ring remapping.
+    const mergedAgentLabels = new Set(
+      merged.nodes.filter((n) => n.tier === "agent").map((n) => n.label),
+    );
+
     // Per-tier cap: keep the top-N by calls in each tier; track totals.
     const tierCounts = Object.fromEntries(
       TIER_ORDER.map((t) => [t, { shown: 0, total: 0 }]),
     ) as Record<AggTier, { shown: number; total: number }>;
     const keep = new Set<string>();
     for (const tier of TIER_ORDER) {
-      const inTier = Array.from(nodeMap.values())
+      const inTier = merged.nodes
         .filter((n) => n.tier === tier)
         .sort((a, b) => b.calls - a.calls);
       tierCounts[tier].total = inTier.length;
@@ -255,17 +250,22 @@ export const useAggregateTopology = (
       for (const n of kept) keep.add(n.id);
     }
 
-    const nodes = Array.from(nodeMap.values()).filter((n) => keep.has(n.id));
-    const edges = Array.from(edgeMap.values()).filter(
+    const nodes = merged.nodes.filter((n) => keep.has(n.id));
+    const edges = merged.edges.filter(
       (e) => keep.has(e.source) && keep.has(e.target),
     );
     const maxCalls = nodes.reduce((m, n) => Math.max(m, n.calls), 0);
 
-    // Problem rings: map affected service entity ids → their node ids.
+    // Problem rings: map affected service entity ids → their node ids. When a
+    // service was collapsed into an agent, the ring follows to the agent node.
     const affectedNodeIds = new Set<string>();
     for (const r of affectedRes.data?.records ?? []) {
       const name = r.eid ? idToName.get(r.eid) : undefined;
-      if (name && keep.has(nid("service", name))) affectedNodeIds.add(nid("service", name));
+      if (!name) continue;
+      const ringId = mergedAgentLabels.has(name)
+        ? nid("agent", name)
+        : nid("service", name);
+      if (keep.has(ringId)) affectedNodeIds.add(ringId);
     }
 
     const isLoading =
