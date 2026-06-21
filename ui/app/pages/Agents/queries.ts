@@ -54,7 +54,10 @@ ${globalFilterClauses(filters)}
     orch_spans = countIf(span_tier == "orch"),
     avg_ttft_ms = avg(ttft_ms),
     models = collectDistinct(gen_ai.request.model),
-    framework = takeFirst(gen_ai.framework),
+    fw_workflow = takeFirst(traceloop.workflow.name),
+    fw_entity = takeFirst(traceloop.entity.name),
+    fw_system = takeFirst(gen_ai.system),
+    fw_span = takeFirst(span.name),
     // Group by agent NAME only. The same agent is double-instrumented across
     // two dt.entity.service entities (one named, one with service.name=null),
     // which previously split each agent into duplicate rows. Collect both so

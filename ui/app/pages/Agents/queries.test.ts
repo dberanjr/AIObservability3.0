@@ -25,6 +25,17 @@ describe("buildAgentsQuery — authoritative tool classification", () => {
   });
 });
 
+describe("buildAgentsQuery — framework signals", () => {
+  it("collects traceloop workflow/entity + gen_ai.system instead of the empty gen_ai.framework", () => {
+    const q = buildAgentsQuery(null, TF);
+    expect(q).toContain("fw_workflow = takeFirst(traceloop.workflow.name)");
+    expect(q).toContain("fw_entity = takeFirst(traceloop.entity.name)");
+    expect(q).toContain("fw_system = takeFirst(gen_ai.system)");
+    expect(q).toContain("fw_span = takeFirst(span.name)");
+    expect(q).not.toContain("framework = takeFirst(gen_ai.framework)");
+  });
+});
+
 describe("buildLatencyDecompositionQuery — tool tier", () => {
   it("uses the same authoritative tool signal", () => {
     const q = buildLatencyDecompositionQuery(null, TF);

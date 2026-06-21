@@ -442,6 +442,22 @@ export const AgentsTable = ({
                     <FilterTrigger attribute="gen_ai.agent.name" value={r.agent} label="agent">
                       {r.agent}
                     </FilterTrigger>
+                    {r.framework && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 10.5,
+                          padding: "1px 6px",
+                          borderRadius: 6,
+                          background: "var(--surface-3)",
+                          color: "var(--text-2)",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={`Orchestration framework: ${r.framework}`}
+                      >
+                        {r.framework}
+                      </span>
+                    )}
                     {highFreqAgents.has(r.agent) && (
                       <span
                         title="A single tool was called above the high-frequency threshold for this agent (possible N+1 / tool loop). See the Tools sub-view."
