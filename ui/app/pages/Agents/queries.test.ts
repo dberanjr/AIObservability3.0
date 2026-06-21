@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildAgentsQuery, buildLatencyDecompositionQuery } from "./queries";
+import {
+  buildAgentLatestTraceQuery,
+  buildAgentsQuery,
+  buildLatencyDecompositionQuery,
+} from "./queries";
 import type { Timeframe } from "../../scope/types";
 
 const TF: Timeframe = { from: "now()-2h" };
@@ -49,5 +53,26 @@ describe("buildLatencyDecompositionQuery — tool tier", () => {
     expect(q).toContain('mcp.method.name != "initialize"');
     expect(q).toContain('mcp.method.name != "notifications/initialized"');
     expect(q).toContain('mcp.method.name != "ping"');
+  });
+});
+
+describe("buildAgentLatestTraceQuery — trace-topology seed", () => {
+  const q = buildAgentLatestTraceQuery(null, TF, "my-agent");
+
+  it("stringifies the trace.id uid column for the trace_id column", () => {
+    expect(q).toContain("toString(trace.id)");
+  });
+
+  it("converts the ns start_time to epoch ms", () => {
+    expect(q).toContain("toLong(ts) / 1000000");
+  });
+
+  it("filters on the escaped agent name", () => {
+    expect(q).toContain('gen_ai.agent.name == "my-agent"');
+  });
+
+  it("summarizes the latest start_time and takes a single trace", () => {
+    expect(q).toContain("ts = max(start_time)");
+    expect(q).toContain("| limit 1");
   });
 });

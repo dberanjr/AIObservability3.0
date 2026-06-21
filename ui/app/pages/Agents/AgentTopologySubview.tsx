@@ -1,20 +1,29 @@
 /**
  * Per-agent call topology (Agents-tab "Topology" sub-view, absorbed from the
- * retired Topology tab). Reuses the EXISTING aggregate-topology renderer scoped
- * to the selected agent, in a fixed-height frame so the whole graph fits
- * without page scroll, with larger nodes/labels (scoped mode). Selecting a node
- * scrolls its detail panel into view and briefly highlights it.
+ * retired Topology tab). Shows a single-agent, trace-level topology by reusing
+ * the EXISTING Prompts `TraceTopology` renderer seeded with the agent's
+ * most-recent trace (resolved via `buildAgentLatestTraceQuery`). This gives the
+ * true parent→child call graph for one representative execution, rather than a
+ * fleet-style aggregate. The rendered `TraceTopology` sizes itself; `height`
+ * only sizes the loading skeleton shown while the trace and its spans resolve.
  */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { EmptyState } from "../../components/EmptyState";
+import { useScopedDql } from "../../scope/useScopedDql";
+import { useScope } from "../../scope/ScopeContext";
 import {
-  useAggregateTopology,
-  type AggNode,
-  type AggTier,
-} from "../Topology/useAggregateTopology";
-import { AggregateTopologyGraph } from "../Topology/AggregateTopologyGraph";
-import { TopologyNodePanel } from "../Topology/TopologyNodePanel";
+  canQueryScope,
+  useResolvedServices,
+} from "../../scope/useResolvedServices";
+import { buildAgentLatestTraceQuery } from "./queries";
+import { useTraceSpans } from "../Prompts/useTraceSpans";
+import { TraceTopology } from "../Prompts/TraceTopology";
+
+interface LatestTraceRecord {
+  trace_id?: string;
+  start_ms?: number | string;
+}
 
 export const AgentTopologySubview = ({
   agentName,
@@ -23,73 +32,44 @@ export const AgentTopologySubview = ({
   agentName: string;
   height?: number;
 }) => {
-  const topo = useAggregateTopology(agentName);
-  const [selected, setSelected] = useState<AggNode | null>(null);
-  const [flash, setFlash] = useState(false);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  // No tier hiding in the scoped view — show the agent's full call graph.
-  const hiddenTiers = useMemo(() => new Set<AggTier>(), []);
+  const { scope } = useScope();
+  const resolution = useResolvedServices();
+  const canQuery = canQueryScope(resolution);
 
-  // When a node is selected, scroll its detail panel into view and pulse a
-  // highlight ring so the user notices it (the panel opens below the fold).
-  useEffect(() => {
-    if (!selected) return;
-    const el = panelRef.current;
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    setFlash(true);
-    const t = setTimeout(() => setFlash(false), 1400);
-    return () => clearTimeout(t);
-  }, [selected]);
+  const traceQ = useScopedDql<LatestTraceRecord>(
+    canQuery
+      ? buildAgentLatestTraceQuery(
+          resolution.serviceIds,
+          scope.timeframe,
+          agentName,
+        )
+      : "",
+    { enabled: canQuery, staleTime: 60_000 },
+  );
 
-  if (topo.isLoading && topo.nodes.length === 0)
+  const rec = traceQ.data?.records?.[0];
+  const traceId = rec?.trace_id ?? null;
+  const startMsNum =
+    rec?.start_ms == null ? NaN : Number(rec.start_ms);
+  const startMs = Number.isFinite(startMsNum) ? startMsNum : undefined;
+
+  const spans = useTraceSpans(traceId, startMs);
+
+  if (traceQ.isLoading || (traceId !== null && spans.isLoading))
     return <Skeleton style={{ height, borderRadius: 10 }} />;
 
-  if (topo.nodes.length === 0)
+  if (traceId === null || spans.spans.length === 0)
     return (
       <EmptyState
         bare
         title="No call topology for this agent"
-        description="No agent/tool/model spans carry this agent's name in the current scope, so there's nothing to graph."
+        description="No recent trace carries this agent's name in the current scope, so there's nothing to graph."
       />
     );
 
   return (
-    <>
-      <div style={{ height, width: "100%" }}>
-        <AggregateTopologyGraph
-          nodes={topo.nodes}
-          edges={topo.edges}
-          maxCalls={topo.maxCalls}
-          layout="vertical"
-          search=""
-          hiddenTiers={hiddenTiers}
-          onSelectNode={setSelected}
-          selectedId={selected?.id ?? null}
-          affectedNodeIds={topo.affectedNodeIds}
-          scoped
-        />
-      </div>
-      {selected && (
-        <div
-          ref={panelRef}
-          style={{
-            marginTop: 12,
-            borderRadius: 12,
-            transition: "box-shadow 300ms ease",
-            boxShadow: flash
-              ? "0 0 0 3px color-mix(in oklab, var(--blue) 60%, transparent)"
-              : "0 0 0 0 transparent",
-          }}
-        >
-          <TopologyNodePanel
-            node={selected}
-            isolated={false}
-            onIsolate={() => undefined}
-            onClose={() => setSelected(null)}
-          />
-        </div>
-      )}
-    </>
+    <div style={{ width: "100%" }}>
+      <TraceTopology spans={spans.spans} isLoading={spans.isLoading} />
+    </div>
   );
 };

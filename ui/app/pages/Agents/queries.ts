@@ -310,6 +310,27 @@ smartscapeEdges type:"calls"
 `.trim();
 };
 
+/**
+ * Most-recent trace id that carries this agent's name — used to seed the
+ * Agents-tab trace-level topology (reuses the Prompts TraceTopology renderer).
+ * `trace.id` is a uid column, so we surface it as a hex string via toString();
+ * start_ms (epoch ms) lets the trace-spans fetch bracket a tight time window.
+ */
+export const buildAgentLatestTraceQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  agentName: string,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter gen_ai.agent.name == "${dqlEscape(agentName)}"
+| summarize ts = max(start_time), by: { trace.id }
+| sort ts desc
+| limit 1
+| fieldsAdd trace_id = toString(trace.id), start_ms = toLong(ts) / 1000000
+| fields trace_id, start_ms
+`.trim();
+
 /** Per-agent invocations timeseries for the hero chart. */
 export const buildInvocationsSeriesQuery = (
   serviceIds: string[] | null,
