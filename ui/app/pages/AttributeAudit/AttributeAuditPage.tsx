@@ -233,6 +233,14 @@ export const AttributeAuditPage = () => {
   const toggleSection = (id: string) =>
     setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
 
+  // Expand all → clear the collapse map (default state is expanded).
+  // Collapse all → mark every section id collapsed.
+  const expandAll = () => setCollapsed({});
+  const collapseAll = () =>
+    setCollapsed(
+      Object.fromEntries(audit.sections.map((s) => [s.section.id, true])),
+    );
+
   // Jump from the hero TOC: expand the target section, then scroll to it.
   const jumpToSection = (id: string) => {
     setCollapsed((prev) => ({ ...prev, [id]: false }));
@@ -382,6 +390,58 @@ export const AttributeAuditPage = () => {
                 Show all
               </button>
             )}
+
+            {/* Expand / collapse every section. Disabled while a search or tier
+                filter is active, since those force matching sections open. */}
+            {(() => {
+              const isFiltering = !!searchQuery.trim() || activeTiers.size < 4;
+              const linkStyle = (disabled: boolean) => ({
+                appearance: "none" as const,
+                background: "transparent",
+                border: "none",
+                cursor: disabled ? "default" : "pointer",
+                font: "inherit",
+                fontSize: 10.5,
+                fontWeight: 600,
+                color: disabled ? "var(--text-4)" : "var(--blue)",
+                padding: "3px 4px",
+              });
+              return (
+                <Flex
+                  alignItems="center"
+                  gap={2}
+                  style={{ marginLeft: "auto", flexShrink: 0 }}
+                >
+                  <button
+                    type="button"
+                    onClick={expandAll}
+                    disabled={isFiltering}
+                    title={
+                      isFiltering
+                        ? "Clear the search / tier filter to control section expansion"
+                        : "Expand all sections"
+                    }
+                    style={linkStyle(isFiltering)}
+                  >
+                    Expand all
+                  </button>
+                  <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>·</Text>
+                  <button
+                    type="button"
+                    onClick={collapseAll}
+                    disabled={isFiltering}
+                    title={
+                      isFiltering
+                        ? "Clear the search / tier filter to control section expansion"
+                        : "Collapse all sections"
+                    }
+                    style={linkStyle(isFiltering)}
+                  >
+                    Collapse all
+                  </button>
+                </Flex>
+              );
+            })()}
           </Flex>
         </Flex>
 
