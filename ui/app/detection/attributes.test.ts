@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   ALL_PROVIDER_IDS,
   detectFramework,
+  detectFrameworkFromSignals,
+  FRAMEWORK_LABEL,
+  type FrameworkId,
   normalizeProvider,
   stripModelVersion,
 } from "./attributes";
@@ -121,5 +124,52 @@ describe("detectFramework", () => {
 
   it("falls back to Custom when a name is present but doesn't match", () => {
     expect(detectFramework("MyCustomSpan", null)).toBe("Custom");
+  });
+});
+
+describe("detectFrameworkFromSignals", () => {
+  it("maps traceloop.workflow.name to the framework", () => {
+    expect(detectFrameworkFromSignals({ workflowName: "LangGraph" })).toBe("langgraph");
+    expect(detectFrameworkFromSignals({ workflowName: "RunnableSequence" })).toBe("langchain");
+    expect(detectFrameworkFromSignals({ workflowName: "AgentExecutor" })).toBe("langchain");
+    expect(detectFrameworkFromSignals({ workflowName: "Agent Workflow" })).toBe("openai-agents");
+    expect(detectFrameworkFromSignals({ workflowName: "llama_index_query_pipeline" })).toBe("llamaindex");
+  });
+
+  it("maps traceloop.entity.name for haystack/llamaindex", () => {
+    expect(detectFrameworkFromSignals({ entityName: "haystack_pipeline" })).toBe("haystack");
+  });
+
+  it("treats gen_ai.system as a framework ONLY for known framework values", () => {
+    expect(detectFrameworkFromSignals({ genAiSystem: "crewai" })).toBe("crewai");
+    expect(detectFrameworkFromSignals({ genAiSystem: "agno" })).toBe("agno");
+    expect(detectFrameworkFromSignals({ genAiSystem: "openai" })).toBe("unknown");
+    expect(detectFrameworkFromSignals({ genAiSystem: "anthropic" })).toBe("unknown");
+  });
+
+  it("detects Google ADK from invoke_agent span + gen_ai.workflow.name", () => {
+    expect(
+      detectFrameworkFromSignals({ spanName: "invoke_agent triage", genAiWorkflowName: "root" }),
+    ).toBe("google-adk");
+  });
+
+  it("detects Pydantic AI from instrumentation scope", () => {
+    expect(detectFrameworkFromSignals({ scope: "pydantic_ai.models.instrumented" })).toBe("pydantic-ai");
+  });
+
+  it("returns custom when an agent signal exists but no framework matches", () => {
+    expect(detectFrameworkFromSignals({ spanName: "my_custom_chain" })).toBe("custom");
+  });
+
+  it("returns unknown when nothing is present", () => {
+    expect(detectFrameworkFromSignals({})).toBe("unknown");
+  });
+
+  it("has a human label for every framework id", () => {
+    const ids: FrameworkId[] = [
+      "langgraph", "langchain", "crewai", "llamaindex", "haystack",
+      "openai-agents", "google-adk", "agno", "pydantic-ai", "custom", "unknown",
+    ];
+    for (const id of ids) expect(FRAMEWORK_LABEL[id]).toBeTruthy();
   });
 });
