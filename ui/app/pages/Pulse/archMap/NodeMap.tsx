@@ -11,9 +11,6 @@
  */
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MapNode } from "./MapNode";
-import { FrameworkChips } from "./FrameworkChips";
-import { useFrameworkBreakdown } from "./useFrameworkBreakdown";
-import { useGlobalFilters } from "../../../scope/GlobalFilterContext";
 import {
   ARCH_NODES,
   EDGES,
@@ -88,15 +85,6 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
   const [geo, setGeo] = useState<Geo | null>(null);
   const [hoverNode, setHoverNode] = useState<LayerKey | null>(null);
   const [hoverEdge, setHoverEdge] = useState<{ key: string; x: number; y: number; rate: string } | null>(null);
-
-  // Orchestrator-tier framework chips: detected frameworks become click-to-filter
-  // chips wired to the global filter's `frameworks` dimension (trace-scoped).
-  const { frameworks } = useFrameworkBreakdown();
-  const { filters, toggleFramework } = useGlobalFilters();
-  const selectedFrameworks = useMemo(
-    () => new Set(filters.frameworks ?? []),
-    [filters.frameworks],
-  );
 
   const measure = useCallback(() => {
     const wrap = wrapRef.current;
@@ -328,15 +316,6 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
         {SPINE_ROWS.map((k) => (
           <div className="am-row" key={k}>
             {renderNode(k)}
-            {k === "orchestrator" && (
-              <div className="am-fw-chips" style={{ marginTop: 8 }}>
-                <FrameworkChips
-                  frameworks={frameworks}
-                  selected={selectedFrameworks}
-                  onToggle={toggleFramework}
-                />
-              </div>
-            )}
           </div>
         ))}
         <div className="am-leaves-grid">{LEAF_GRID.map(renderNode)}</div>

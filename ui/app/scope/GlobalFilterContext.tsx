@@ -14,11 +14,6 @@ interface GlobalFilterContextValue {
   /** Replace the values of an existing condition; removes it if empty. */
   setConditionValues: (attribute: string, values: string[]) => void;
   removeCondition: (attribute: string) => void;
-  /**
-   * Toggle a framework LABEL on/off in the `frameworks` dimension (selecting a
-   * chip filters the whole page; clicking it again clears it).
-   */
-  toggleFramework: (label: string) => void;
   clearAll: () => void;
   hasFilters: boolean;
 }
@@ -42,22 +37,13 @@ export const GlobalFilterProvider = ({
   );
 
   const conditions = filters.conditions ?? [];
-  const frameworks = filters.frameworks ?? [];
 
   const setConditionValues = (attribute: string, values: string[]) => {
     const others = conditions.filter((c) => c.attribute !== attribute);
     setFilters({
-      ...filters,
       conditions:
         values.length > 0 ? [...others, { attribute, values }] : others,
     });
-  };
-
-  const toggleFramework = (label: string) => {
-    const next = frameworks.includes(label)
-      ? frameworks.filter((l) => l !== label)
-      : [...frameworks, label];
-    setFilters({ ...filters, frameworks: next });
   };
 
   const upsertCondition = (attribute: string, values: string[]) => {
@@ -70,13 +56,12 @@ export const GlobalFilterProvider = ({
 
   const removeCondition = (attribute: string) =>
     setFilters({
-      ...filters,
       conditions: conditions.filter((c) => c.attribute !== attribute),
     });
 
   const clearAll = () => setFilters(EMPTY);
 
-  const normalized: GlobalFilters = { conditions, frameworks };
+  const normalized: GlobalFilters = { conditions };
   const hasFilters = hasActiveFilter(normalized);
 
   return (
@@ -86,7 +71,6 @@ export const GlobalFilterProvider = ({
         upsertCondition,
         setConditionValues,
         removeCondition,
-        toggleFramework,
         clearAll,
         hasFilters,
       }}
