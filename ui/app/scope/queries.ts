@@ -153,6 +153,7 @@ export interface GlobalFilters {
   frameworks?: string[];
 }
 
+// eslint-disable-next-line noSecrets/no-secrets
 /**
  * Map a framework display LABEL (as shown on the chips and stored in
  * `GlobalFilters.frameworks`) to the raw signal values that identify it. `wf`
