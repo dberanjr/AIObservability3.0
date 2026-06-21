@@ -11,6 +11,9 @@
  */
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MapNode } from "./MapNode";
+import { FrameworkNode } from "./FrameworkNode";
+import { useFrameworkNodes } from "./useFrameworkNodes";
+import { TIER_ICONS } from "./icons";
 import {
   ARCH_NODES,
   EDGES,
@@ -80,6 +83,7 @@ interface Props {
 }
 
 export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) => {
+  const { frameworks, isLoading: fwLoading } = useFrameworkNodes();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const nodeEls = useRef<Partial<Record<LayerKey, HTMLDivElement | null>>>({});
   const [geo, setGeo] = useState<Geo | null>(null);
@@ -122,7 +126,9 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [measure, lensId]);
+    // Re-measure when the framework row's contents (and thus its size) change,
+    // so the orchestrator edges re-anchor to the updated row geometry.
+  }, [measure, lensId, frameworks, fwLoading]);
 
   const focus = useMemo(() => {
     if (hoverEdge) {
@@ -313,11 +319,57 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
         </div>
       )}
       <div className="am-grid">
-        {SPINE_ROWS.map((k) => (
-          <div className="am-row" key={k}>
-            {renderNode(k)}
-          </div>
-        ))}
+        {SPINE_ROWS.map((k) =>
+          k === "orchestrator" ? (
+            <div className="am-row" key={k}>
+              {/* The orchestrator tier is split into one node per framework. The
+                  whole row registers as nodeEls["orchestrator"] so ALL existing
+                  orchestrator edges (gateway→orchestrator, orchestrator→agent,
+                  llm→orchestrator loop) still anchor to it as a group. It always
+                  renders a measurable element (a tile during load, a fallback
+                  when empty) so edges never break. */}
+              <div
+                className="am-fw-row"
+                ref={(el) => {
+                  nodeEls.current.orchestrator = el;
+                }}
+              >
+                {frameworks.length > 0 ? (
+                  frameworks.map((fw) => (
+                    <FrameworkNode
+                      key={fw.id}
+                      framework={fw}
+                      dim={nodeDim("orchestrator")}
+                      onPick={(f) => onOpenSpec({ kind: "framework", id: f.id })}
+                    />
+                  ))
+                ) : fwLoading ? (
+                  <div className="am-fw-node am-fw-muted" data-cat="core" aria-hidden>
+                    <div className="am-node-shimmer">
+                      <span className="am-shimmer-bar am-shimmer-num" />
+                      <span className="am-shimmer-bar am-shimmer-sub" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="am-fw-node am-fw-muted" data-cat="core" data-status="muted">
+                    <div className="am-fw-head">
+                      <span className="am-fw-icon">
+                        {TIER_ICONS.orchestrator}
+                        <span className="am-fw-dot" />
+                      </span>
+                      <span className="am-fw-title">Orchestrator</span>
+                    </div>
+                    <div className="am-fw-sub">no framework spans in scope</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="am-row" key={k}>
+              {renderNode(k)}
+            </div>
+          ),
+        )}
         <div className="am-leaves-grid">{LEAF_GRID.map(renderNode)}</div>
       </div>
     </div>

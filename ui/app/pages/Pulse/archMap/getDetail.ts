@@ -7,11 +7,12 @@
 import type { Finding } from "../../../components/drawers/types";
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import { layerByKey } from "../../../data/ai-layer-patterns";
-import { fmtTokens } from "../../../data/format";
+import { fmtCount, fmtMs, fmtPercent, fmtTokens } from "../../../data/format";
 import { HIGH_FREQUENCY_TOOL_THRESHOLD } from "../../Agents/constants";
 import { encodePromptsFilter, promptsFilterForFinding } from "../../Prompts/findingFilter";
 import { seriesForFinding, seriesLabelForFinding, type PulseSeries } from "./usePulseSeries";
 import type { EdgeSignals } from "./useArchitectureData";
+import { frameworkDetail, type FrameworkNode } from "./frameworkNodes";
 import { ARCH_NODES, type DetailSpec } from "./model";
 
 export type { DetailSpec };
@@ -50,6 +51,7 @@ export interface DetailCtx {
   loopEntity: string | null;
   series: PulseSeries;
   edgeSignals: EdgeSignals;
+  frameworks: FrameworkNode[];
 }
 
 const PATH_LABEL: Record<string, string> = {
@@ -114,6 +116,8 @@ const pickSeries = (
   }
   if (spec.kind === "enrich") return { series: tp[spec.layer], label: cap("Span volume") };
   if (spec.kind === "loop") return { series: tp.orchestrator, label: cap("Workflow spans") };
+  // No per-framework series is available — the modal renders without a chart.
+  if (spec.kind === "framework") return {};
   if (spec.kind === "n1") return { series: tp.tools, label: cap("Tool calls") };
   if (spec.kind === "ctx") return { series: ctx.series.truncation, label: cap("Truncated responses") };
   if (spec.kind === "recall") return { series: tp.tools, label: cap("Tool calls") };
@@ -149,6 +153,26 @@ const resolveBase = (spec: DetailSpec, ctx: DetailCtx): ModalDetail | null => {
           : "Workflows re-enter the same steps; each pass spawns fresh agent and tool spans and repeats LLM calls.",
       why: "Cost and latency compound with every iteration, so an unbounded loop inflates spend and end-to-end time downstream.",
       metrics: pct != null ? [{ k: "Loop rate", v: `${pct.toFixed(0)}%` }] : [],
+      drill: { path: "/agents", focus: "orchestrator", label: "Agents" },
+    };
+  }
+
+  if (spec.kind === "framework") {
+    const fw = frameworkDetail(spec.id, ctx.frameworks);
+    if (!fw) return null;
+    const share = Math.round(fw.share);
+    return {
+      title: fw.label,
+      severity: fw.severity,
+      scope: "Orchestration framework",
+      what: `${fmtCount(fw.count)} workflow spans · ${share}% of orchestration`,
+      why: "Orchestration spans drive the plan → act → reflect loop; this framework's share, error rate, and p90 set the pace and cost of the workflows it runs.",
+      metrics: [
+        { k: "Workflow spans", v: fmtCount(fw.count) },
+        { k: "Error rate", v: fmtPercent(fw.errorRate * 100) },
+        { k: "p90 latency", v: fmtMs(fw.p90Ms) },
+        { k: "Share", v: `${share}%` },
+      ],
       drill: { path: "/agents", focus: "orchestrator", label: "Agents" },
     };
   }

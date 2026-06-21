@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildFrameworkNodesQuery, rowsToFrameworkNodes } from "./frameworkNodes";
+import {
+  buildFrameworkNodesQuery,
+  frameworkDetail,
+  frameworkStatus,
+  rowsToFrameworkNodes,
+  type FrameworkNode,
+} from "./frameworkNodes";
 import type { Timeframe } from "../../../scope/types";
 
 const TF: Timeframe = { from: "now()-2h" };
@@ -74,5 +80,54 @@ describe("rowsToFrameworkNodes", () => {
     ]);
     expect(nodes).toHaveLength(1);
     expect(nodes[0]).toMatchObject({ count: 20, errorRate: 0.2, p90Ms: 3 });
+  });
+});
+
+describe("frameworkStatus", () => {
+  it("is healthy when error rate and p90 are both low", () => {
+    expect(frameworkStatus({ errorRate: 0.0, p90Ms: 100 })).toBe("healthy");
+  });
+  it("warns at the error-rate warning threshold", () => {
+    expect(frameworkStatus({ errorRate: 0.05, p90Ms: 100 })).toBe("warning");
+  });
+  it("goes critical at the error-rate critical threshold", () => {
+    expect(frameworkStatus({ errorRate: 0.2, p90Ms: 100 })).toBe("critical");
+  });
+  it("takes the worse of error and latency status", () => {
+    // low error, but p90 over the critical latency threshold → critical
+    expect(frameworkStatus({ errorRate: 0.0, p90Ms: 6000 })).toBe("critical");
+    expect(frameworkStatus({ errorRate: 0.0, p90Ms: 3000 })).toBe("warning");
+  });
+});
+
+describe("frameworkDetail", () => {
+  const fws: FrameworkNode[] = [
+    { id: "langgraph", label: "LangGraph", count: 75, errorRate: 0.12, p90Ms: 2500 },
+    { id: "langchain", label: "LangChain", count: 25, errorRate: 0.0, p90Ms: 100 },
+  ];
+
+  it("computes share over the total and derives severity from error rate", () => {
+    const d = frameworkDetail("langgraph", fws);
+    expect(d).not.toBeNull();
+    expect(d!.label).toBe("LangGraph");
+    expect(d!.count).toBe(75);
+    expect(d!.share).toBeCloseTo(75, 5);
+    expect(d!.severity).toBe("critical"); // 0.12 ≥ crit
+  });
+
+  it("returns info severity for a healthy framework", () => {
+    expect(frameworkDetail("langchain", fws)!.severity).toBe("info");
+    expect(frameworkDetail("langchain", fws)!.share).toBeCloseTo(25, 5);
+  });
+
+  it("returns null when the id is not found", () => {
+    expect(frameworkDetail("crewai", fws)).toBeNull();
+  });
+
+  it("treats a zero total as 0% share without dividing by zero", () => {
+    const d = frameworkDetail("langgraph", [
+      { id: "langgraph", label: "LangGraph", count: 0, errorRate: 0, p90Ms: 0 },
+    ]);
+    expect(d!.share).toBe(0);
   });
 });

@@ -16,6 +16,7 @@ import { NodeMap } from "./archMap/NodeMap";
 import { NodeDrawer } from "./archMap/NodeDrawer";
 import { DetailModal } from "./archMap/DetailModal";
 import { useArchitectureData } from "./archMap/useArchitectureData";
+import { useFrameworkNodes } from "./archMap/useFrameworkNodes";
 import { resolveDetail, type DetailDrill, type ModalDetail } from "./archMap/getDetail";
 import { USE_CASE_LENSES, type ArchNodeMeta, type DetailSpec, type LensId } from "./archMap/model";
 import { SEVERITY_RANK } from "./anomalies/types";
@@ -74,6 +75,7 @@ const Chip = ({ n, label, onClick }: { n: number | null; label: string; onClick:
 
 export const ArchitectureMap = () => {
   const data = useArchitectureData();
+  const { frameworks } = useFrameworkNodes();
   const spend = useSpendBreakdown();
   const goToTab = useTabNav();
   const [lensId, setLensId] = useState<LensId | null>(null);
@@ -106,6 +108,7 @@ export const ArchitectureMap = () => {
       loopEntity: data.loopEntity,
       series: data.series,
       edgeSignals: data.edgeSignals,
+      frameworks,
     });
     if (resolved) setDetail(resolved);
   };

@@ -14,6 +14,7 @@
  */
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import { layerByKey } from "../../../data/ai-layer-patterns";
+import type { FrameworkId } from "../../../detection/attributes";
 import type { FocusParam } from "../../../lib/nav";
 import { USE_CASE_LENSES, type LensId, type UseCaseLens } from "../architectureLenses";
 
@@ -41,6 +42,8 @@ export type DetailSpec =
   | { kind: "enrich"; layer: LayerKey }
   | { kind: "scope"; which: "services" | "agents" | "tools" | "findings" }
   | { kind: "loop" }
+  // One orchestration framework (the split orchestrator tier).
+  | { kind: "framework"; id: FrameworkId | "other" }
   // Inter-tier health signals shown as edge pills.
   | { kind: "n1" } // Agent → Tools: N+1 / high-frequency tool calls
   | { kind: "ctx" } // Agent → LLM: oversized prompts / context exhaustion

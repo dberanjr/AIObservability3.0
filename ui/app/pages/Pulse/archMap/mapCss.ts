@@ -98,6 +98,35 @@ export const ARCH_MAP_CSS = `
 .am-node-unit { font-size: 11px; color: var(--text-3); }
 .am-node-sub { margin-top: 7px; font-size: 11px; color: var(--text-3); line-height: 1.4; }
 
+/* ── framework row (orchestrator tier, split per framework) ─ */
+.am-fw-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 12px; width: 100%; }
+.am-fw-node {
+  position: relative; box-sizing: border-box; flex: 0 1 150px; min-width: 132px; max-width: 180px;
+  background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--am-core);
+  border-radius: 10px; padding: 9px 11px 10px; box-shadow: var(--shadow);
+  cursor: pointer; transition: opacity .25s ease, transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.am-fw-node:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.am-fw-node:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.am-fw-node[data-dim="true"] { opacity: .32; }
+.am-fw-node[data-dim="true"]:hover { opacity: .6; }
+.am-fw-node.am-fw-muted { border-top-color: var(--am-muted); border-style: dashed; opacity: .75; }
+
+.am-fw-head { display: flex; align-items: center; gap: 7px; }
+.am-fw-icon { position: relative; display: inline-flex; color: var(--am-core); flex: 0 0 auto; }
+.am-fw-dot { position: absolute; right: -3px; bottom: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--am-muted); border: 1.5px solid var(--surface); }
+.am-fw-node[data-status="healthy"] .am-fw-dot { background: var(--am-health); }
+.am-fw-node[data-status="warning"] .am-fw-dot { background: var(--am-warning); }
+.am-fw-node[data-status="critical"] .am-fw-dot { background: var(--am-critical); }
+.am-fw-title { font-size: 12px; font-weight: 600; color: var(--text); flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-fw-metric { display: flex; align-items: baseline; gap: 5px; margin-top: 7px; }
+.am-fw-num { font-size: 19px; font-weight: 700; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.am-fw-node[data-status="critical"] .am-fw-num { color: var(--am-critical); }
+.am-fw-node[data-status="warning"] .am-fw-num { color: var(--am-warning); }
+.am-fw-unit { font-size: 10px; color: var(--text-3); }
+.am-fw-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.am-fw-sub { margin-top: 7px; font-size: 11px; color: var(--text-3); line-height: 1.4; }
+
 /* loading shimmer (gradual paint while the summarize is pending) */
 .am-node-shimmer { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; }
 .am-shimmer-bar { display: block; border-radius: 5px; background: var(--surface-3); }

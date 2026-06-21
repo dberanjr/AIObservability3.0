@@ -153,3 +153,66 @@ export const rowsToFrameworkNodes = (rows: FrameworkNodeRow[]): FrameworkNode[] 
     return b.count - a.count;
   });
 };
+
+/* ── framework-node health + detail (pure) ─────────────────────────────
+ * Health thresholds MIRROR useArchitectureData's rateStatus / latStatus so a
+ * framework node's dot tracks the same palette as the spine tiers. Kept here
+ * (not imported from the hook) to keep this module React-free and unit-testable.
+ */
+export type FrameworkStatus = "healthy" | "warning" | "critical" | "muted";
+
+const FW_WARN_ERR = 0.03;
+const FW_CRIT_ERR = 0.1;
+const FW_WARN_MS = 2000;
+const FW_CRIT_MS = 5000;
+
+/** Error-rate-only status — drives the error badge tone so it tracks the same
+ *  thresholds as the dot without re-hardcoding FW_WARN_ERR / FW_CRIT_ERR. */
+export const fwRateStatus = (r: number): FrameworkStatus =>
+  r >= FW_CRIT_ERR ? "critical" : r >= FW_WARN_ERR ? "warning" : "healthy";
+const fwLatStatus = (msVal: number): FrameworkStatus =>
+  msVal >= FW_CRIT_MS ? "critical" : msVal >= FW_WARN_MS ? "warning" : "healthy";
+const FW_ORDER: Record<FrameworkStatus, number> = { muted: 0, healthy: 1, warning: 2, critical: 3 };
+
+/** Combined node status — worst of the error-rate and latency dots. */
+export const frameworkStatus = (node: Pick<FrameworkNode, "errorRate" | "p90Ms">): FrameworkStatus => {
+  const a = fwRateStatus(node.errorRate);
+  const b = fwLatStatus(node.p90Ms);
+  return FW_ORDER[a] >= FW_ORDER[b] ? a : b;
+};
+
+/** Detail severity for a framework node (modal accent). Driven by error rate,
+ *  matching the spine-tier severity convention (crit/warn/info). */
+export type FrameworkSeverity = "critical" | "warning" | "info";
+const fwSeverity = (errorRate: number): FrameworkSeverity =>
+  errorRate >= FW_CRIT_ERR ? "critical" : errorRate >= FW_WARN_ERR ? "warning" : "info";
+
+export interface FrameworkDetailData {
+  label: string;
+  severity: FrameworkSeverity;
+  count: number;
+  errorRate: number;
+  p90Ms: number;
+  /** This framework's count as a % of all framework spans (0–100). */
+  share: number;
+}
+
+/** Pure: resolve a framework id against the node list into the values the modal
+ *  needs (severity + share over the total). Returns null if the id isn't found. */
+export const frameworkDetail = (
+  id: FrameworkId | "other",
+  frameworks: FrameworkNode[],
+): FrameworkDetailData | null => {
+  const node = frameworks.find((f) => f.id === id);
+  if (!node) return null;
+  const total = frameworks.reduce((sum, f) => sum + f.count, 0);
+  const share = total > 0 ? (node.count / total) * 100 : 0;
+  return {
+    label: node.label,
+    severity: fwSeverity(node.errorRate),
+    count: node.count,
+    errorRate: node.errorRate,
+    p90Ms: node.p90Ms,
+    share,
+  };
+};
