@@ -16,6 +16,7 @@ import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
 import { useTraceSpans } from "./useTraceSpans";
+import { TRACE_SPANS_LIMIT } from "./queries";
 import { useTraceLogs } from "./useTraceLogs";
 import { usePromptSpanDetail } from "./usePromptSpanDetail";
 import { TraceTree } from "./TraceTree";
@@ -182,6 +183,14 @@ const PIIBanner = () => (
   </Flex>
 );
 
+const TruncationNote = ({ truncated }: { truncated: boolean }) =>
+  truncated ? (
+    <Text style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 8 }}>
+      Showing the first {TRACE_SPANS_LIMIT} AI spans of a larger trace — non-AI
+      infrastructure spans are filtered out.
+    </Text>
+  ) : null;
+
 const ScoreCard = ({
   label,
   value,
@@ -231,7 +240,7 @@ export const PromptDetailPanel = ({
   const [traceModalOpen, setTraceModalOpen] = useState(false);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-  const { spans, isLoading, error } = useTraceSpans(
+  const { spans, isLoading, error, isTruncated } = useTraceSpans(
     prompt.traceId,
     prompt.timestampMs,
   );
@@ -337,6 +346,7 @@ export const PromptDetailPanel = ({
 
         {activeTab === "trace" && (
           <Flex flexDirection="column" gap={8}>
+            <TruncationNote truncated={isTruncated} />
             <TraceTree
               spans={spans}
               isLoading={isLoading}
@@ -385,7 +395,10 @@ export const PromptDetailPanel = ({
         )}
 
         {activeTab === "topology" && (
-          <TraceTopology spans={spans} isLoading={isLoading} />
+          <Flex flexDirection="column" gap={8}>
+            <TruncationNote truncated={isTruncated} />
+            <TraceTopology spans={spans} isLoading={isLoading} />
+          </Flex>
         )}
 
         {activeTab === "prompts" && (

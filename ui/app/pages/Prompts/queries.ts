@@ -366,6 +366,10 @@ const traceWindow = (
  * — comparing it to a bare string literal silently matches nothing (this was
  * the bug that left the Trace tab perpetually empty).
  */
+/** Max AI spans returned per trace. Raised from 100 — real traces reach 1M+
+ *  total spans, but only the AI-relevant subset matters here. */
+export const TRACE_SPANS_LIMIT = 500;
+
 export const buildTraceSpansQuery = (
   traceId: string,
   startMs?: number,
@@ -374,6 +378,7 @@ export const buildTraceSpansQuery = (
   return `
 fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
 | filter trace.id == toUid("${dqlEscape(traceId)}")
+| filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.request.model) or isNotNull(gen_ai.tool.name) or isNotNull(traceloop.span.kind) or isNotNull(mcp.method.name)
 | dedup {span.id}
 | fieldsAdd
     duration_ms = duration / 1000000,
@@ -412,7 +417,7 @@ fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
     session_id = dt.rum.session.id,
     mcp_method = mcp.method.name
 | sort timestamp asc
-| limit 100
+| limit ${TRACE_SPANS_LIMIT}
 `.trim();
 };
 

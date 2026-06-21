@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
-import { buildTraceSpansQuery } from "./queries";
+import { buildTraceSpansQuery, TRACE_SPANS_LIMIT } from "./queries";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -93,6 +93,9 @@ export interface UseTraceSpansResult {
   spans: TraceSpan[];
   isLoading: boolean;
   error?: Error;
+  /** True when the fetch hit the AI-span ceiling — the trace has more AI spans
+   *  than TRACE_SPANS_LIMIT, so the waterfall shows only the first slice. */
+  isTruncated: boolean;
 }
 
 export const useTraceSpans = (
@@ -109,7 +112,7 @@ export const useTraceSpans = (
 
   return useMemo<UseTraceSpansResult>(() => {
     if (!traceId) {
-      return { spans: [], isLoading: false };
+      return { spans: [], isLoading: false, isTruncated: false };
     }
 
     const spans: TraceSpan[] = [];
@@ -152,6 +155,11 @@ export const useTraceSpans = (
       });
     }
 
-    return { spans, isLoading, error: error ?? undefined };
+    return {
+      spans,
+      isLoading,
+      error: error ?? undefined,
+      isTruncated: spans.length >= TRACE_SPANS_LIMIT,
+    };
   }, [data, isLoading, error, traceId]);
 };
