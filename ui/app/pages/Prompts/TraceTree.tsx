@@ -22,7 +22,18 @@ export type SpanCategory = "agent" | "llm" | "tool" | "other";
 export const spanCategory = (s: TraceSpan): SpanCategory => {
   if (s.provider) return "llm";
   if (s.agentName || s.tlKind === "workflow") return "agent";
-  if (s.toolName || s.tlKind === "task" || s.name.endsWith(".task")) return "tool";
+  // MCP protocol lifecycle is never a tool call.
+  const isLifecycle =
+    s.mcpMethod === "tools/list" ||
+    s.mcpMethod === "initialize" ||
+    s.mcpMethod === "notifications/initialized" ||
+    s.mcpMethod === "ping";
+  // Authoritative tool signals only — LangGraph `task` spans and `.task`
+  // names are orchestration, not tool calls, so they're deliberately excluded.
+  const isTool =
+    !isLifecycle &&
+    (s.tlKind === "tool" || !!s.toolName || s.mcpMethod === "tools/call");
+  if (isTool) return "tool";
   return "other";
 };
 

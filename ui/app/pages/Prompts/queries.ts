@@ -409,7 +409,8 @@ fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
     tl_entity = traceloop.entity.name,
     tl_entity_path = traceloop.entity.path,
     tl_kind = traceloop.span.kind,
-    session_id = dt.rum.session.id
+    session_id = dt.rum.session.id,
+    mcp_method = mcp.method.name
 | sort timestamp asc
 | limit 100
 `.trim();

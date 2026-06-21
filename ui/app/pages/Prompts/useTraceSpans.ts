@@ -43,6 +43,7 @@ export interface TraceSpan {
   tlEntityPath: string | null;
   tlKind: string | null;
   sessionId: string | null;
+  mcpMethod: string | null;
 }
 
 interface TraceSpanRecord {
@@ -76,6 +77,7 @@ interface TraceSpanRecord {
   tl_entity_path?: string | null;
   tl_kind?: string | null;
   session_id?: string | null;
+  mcp_method?: string | null;
 }
 
 const parseTimestamp = (v: unknown): number => {
@@ -146,6 +148,7 @@ export const useTraceSpans = (
         tlEntityPath: r.tl_entity_path ?? null,
         tlKind: r.tl_kind ?? null,
         sessionId: r.session_id ?? null,
+        mcpMethod: r.mcp_method ?? null,
       });
     }
 

@@ -42,6 +42,7 @@ const mk = (over: Partial<TraceSpan>): TraceSpan => ({
   tlEntityPath: null,
   tlKind: null,
   sessionId: null,
+  mcpMethod: null,
   ...over,
 });
 
