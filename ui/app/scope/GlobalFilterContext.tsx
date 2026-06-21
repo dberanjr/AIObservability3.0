@@ -1,19 +1,11 @@
 import React, { createContext, useContext } from "react";
 import { usePersistedState } from "../state/usePersistedState";
+import { hasActiveFilter, type GlobalFilters } from "./queries";
 
-/**
- * A single free-form filter condition: a span attribute and the set of values
- * to match (OR within a condition; AND across conditions). The attribute can
- * be ANY span field — gen_ai.*, langchain.*, service.name, k8s.*, span.*, etc.
- */
-export interface FilterCondition {
-  attribute: string;
-  values: string[];
-}
-
-export interface GlobalFilters {
-  conditions: FilterCondition[];
-}
+// `FilterCondition` / `GlobalFilters` are defined once in `queries.ts` (the DQL
+// resolver owns the shape); re-export the condition type for existing importers
+// of this module.
+export type { FilterCondition, GlobalFilters } from "./queries";
 
 interface GlobalFilterContextValue {
   filters: GlobalFilters;
@@ -22,6 +14,11 @@ interface GlobalFilterContextValue {
   /** Replace the values of an existing condition; removes it if empty. */
   setConditionValues: (attribute: string, values: string[]) => void;
   removeCondition: (attribute: string) => void;
+  /**
+   * Toggle a framework LABEL on/off in the `frameworks` dimension (selecting a
+   * chip filters the whole page; clicking it again clears it).
+   */
+  toggleFramework: (label: string) => void;
   clearAll: () => void;
   hasFilters: boolean;
 }
@@ -45,13 +42,22 @@ export const GlobalFilterProvider = ({
   );
 
   const conditions = filters.conditions ?? [];
+  const frameworks = filters.frameworks ?? [];
 
   const setConditionValues = (attribute: string, values: string[]) => {
     const others = conditions.filter((c) => c.attribute !== attribute);
     setFilters({
+      ...filters,
       conditions:
         values.length > 0 ? [...others, { attribute, values }] : others,
     });
+  };
+
+  const toggleFramework = (label: string) => {
+    const next = frameworks.includes(label)
+      ? frameworks.filter((l) => l !== label)
+      : [...frameworks, label];
+    setFilters({ ...filters, frameworks: next });
   };
 
   const upsertCondition = (attribute: string, values: string[]) => {
@@ -64,20 +70,23 @@ export const GlobalFilterProvider = ({
 
   const removeCondition = (attribute: string) =>
     setFilters({
+      ...filters,
       conditions: conditions.filter((c) => c.attribute !== attribute),
     });
 
   const clearAll = () => setFilters(EMPTY);
 
-  const hasFilters = conditions.length > 0;
+  const normalized: GlobalFilters = { conditions, frameworks };
+  const hasFilters = hasActiveFilter(normalized);
 
   return (
     <GlobalFilterContext.Provider
       value={{
-        filters: { conditions },
+        filters: normalized,
         upsertCondition,
         setConditionValues,
         removeCondition,
+        toggleFramework,
         clearAll,
         hasFilters,
       }}

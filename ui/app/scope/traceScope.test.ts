@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTraceScopeQuery,
+  FRAMEWORK_FILTER_VALUES,
+  frameworkPredicate,
+  hasActiveFilter,
   injectTraceScope,
   validConditions,
 } from "./queries";
 import type { GlobalFilters } from "./queries";
+import { FRAMEWORK_LABEL } from "../detection/attributes";
 
 const TF = { from: "now()-24h" };
 
@@ -51,6 +55,96 @@ describe("buildTraceScopeQuery", () => {
     };
     const q = buildTraceScopeQuery(TF, f, Infinity);
     expect(q).not.toContain("| limit");
+  });
+
+  it("resolves the frameworks dimension as its own predicate arm", () => {
+    const f: GlobalFilters = {
+      conditions: [],
+      frameworks: ["LangGraph", "CrewAI"],
+    };
+    const q = buildTraceScopeQuery(TF, f, 5000);
+    // wf-arm OR system-arm, both inside one parenthesised predicate.
+    expect(q).toContain(
+      'c0 = countIf((in(toString(traceloop.workflow.name), array("LangGraph")) or in(toString(gen_ai.system), array("crewai"))))',
+    );
+    expect(q).toContain("| filter c0 > 0");
+  });
+
+  it("ANDs the frameworks dimension with attribute conditions across the trace", () => {
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.request.model", values: ["gpt-4o"] }],
+      frameworks: ["LangGraph"],
+    };
+    const q = buildTraceScopeQuery(TF, f, 5000);
+    // Condition is c0, frameworks is c1 — both must be positive.
+    expect(q).toContain("| filter c0 > 0 and c1 > 0");
+  });
+});
+
+describe("frameworkPredicate", () => {
+  it("returns '' for no labels or only unmappable labels", () => {
+    expect(frameworkPredicate(undefined)).toBe("");
+    expect(frameworkPredicate([])).toBe("");
+    expect(frameworkPredicate(["Nonexistent"])).toBe("");
+  });
+
+  it("emits a workflow-name arm for a wf-only framework", () => {
+    expect(frameworkPredicate(["LangGraph"])).toBe(
+      '(in(toString(traceloop.workflow.name), array("LangGraph")))',
+    );
+  });
+
+  it("emits a system arm for a system-only framework", () => {
+    expect(frameworkPredicate(["CrewAI"])).toBe(
+      '(in(toString(gen_ai.system), array("crewai")))',
+    );
+  });
+
+  it("ORs the two arms for a framework spanning both attributes", () => {
+    expect(frameworkPredicate(["LangChain"])).toBe(
+      '(in(toString(traceloop.workflow.name), array("RunnableSequence", "AgentExecutor")) or in(toString(gen_ai.system), array("langchain")))',
+    );
+  });
+
+  it("merges signal values across multiple selected labels", () => {
+    expect(frameworkPredicate(["LangGraph", "CrewAI"])).toBe(
+      '(in(toString(traceloop.workflow.name), array("LangGraph")) or in(toString(gen_ai.system), array("crewai")))',
+    );
+  });
+
+  it("keys FRAMEWORK_FILTER_VALUES only by valid framework labels", () => {
+    // A typo'd key would silently never match a chip (chips carry FRAMEWORK_LABEL
+    // values), so every key must be a known label.
+    Object.keys(FRAMEWORK_FILTER_VALUES).forEach((k) =>
+      expect(Object.values(FRAMEWORK_LABEL)).toContain(k),
+    );
+  });
+});
+
+describe("hasActiveFilter", () => {
+  it("is false for an empty filter", () => {
+    expect(hasActiveFilter({ conditions: [] })).toBe(false);
+    expect(hasActiveFilter(undefined)).toBe(false);
+  });
+
+  it("is true when a valid attribute condition is present", () => {
+    expect(
+      hasActiveFilter({
+        conditions: [{ attribute: "gen_ai.agent.name", values: ["a"] }],
+      }),
+    ).toBe(true);
+  });
+
+  it("is true when a mappable framework is selected", () => {
+    expect(hasActiveFilter({ conditions: [], frameworks: ["LangGraph"] })).toBe(
+      true,
+    );
+  });
+
+  it("ignores unmappable framework labels", () => {
+    expect(hasActiveFilter({ conditions: [], frameworks: ["Nope"] })).toBe(
+      false,
+    );
   });
 });
 

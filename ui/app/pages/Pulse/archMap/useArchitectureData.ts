@@ -312,12 +312,22 @@ export const useArchitectureData = (): ArchData => {
       };
 
       // ── orchestrator ─────────────────────────────────────
+      // The orchestrator tier no longer carries a throughput headline — its
+      // runtime (workflow) spans are folded into the Agent tier below, and this
+      // tier instead surfaces the detected frameworks as filter chips (rendered
+      // by NodeMap from useFrameworkBreakdown). We still keep p90 + error count
+      // for the health dot, and the loop-rate badge / cells.
       const wf = num(rec.workflowSpans);
       const wfErr = pct(num(rec.workflowErr), wf);
       const wfP90 = ms(num(rec.workflowP90Ns));
-      count.orchestrator = wf;
       p90.orchestrator = wfP90;
       errCount.orchestrator = num(rec.workflowErr);
+      // The orchestrator no longer shows a throughput headline, but its inbound
+      // workflow-span volume is still the correct weight for the gateway →
+      // orchestrator edge (the edge loop reads count[e.to]). Keep this count-map
+      // entry for edge weighting only — it does NOT drive the suppressed headline,
+      // and the `empty` check below intentionally ignores count.orchestrator.
+      count.orchestrator = wf;
       if (wf > 0 || !loops.isEmpty) {
         const loopBadge: Badge[] =
           loopPct != null
@@ -332,14 +342,12 @@ export const useArchitectureData = (): ArchData => {
         nodes.orchestrator = {
           status: loops.isEmpty ? "muted" : loopStatus,
           state: "live",
-          headline: fmtCount(ex(wf)),
-          sub: "workflow spans",
+          sub: "frameworks detected",
           badges: loopBadge,
           findings: findingBadge("orchestrator").n,
           findingTone: findingBadge("orchestrator").tone,
           reason: loops.isEmpty ? "No LangGraph runs in scope" : `Loop rate ${loopPct?.toFixed(0)}%`,
           cells: {
-            throughput: { status: "healthy", headline: fmtCount(ex(wf)), sub: "workflow spans", badges: [] },
             latency: { status: latStatus(wfP90), headline: fmtMs(wfP90), sub: "p90 wall-clock", badges: [] },
             errors: { status: rateStatus(wfErr), headline: fmtPercent(wfErr * 100), sub: "workflow errors", badges: [] },
             loop:
@@ -354,13 +362,19 @@ export const useArchitectureData = (): ArchData => {
       }
 
       // ── agent ────────────────────────────────────────────
+      // The orchestrator's runtime (workflow) spans fold into this tier's
+      // headline: the orchestrator tier now shows frameworks instead of a
+      // throughput number, so its runtime volume is counted here as part of the
+      // agent runtime. Error rate / p90 stay agent-span metrics (the workflow
+      // p90/errors remain on the orchestrator health dot).
       const aS = num(rec.agentSpans);
+      const agentRuntime = aS + wf;
       const aErr = pct(num(rec.agentErr), aS);
       const aP90 = ms(num(rec.agentP90Ns));
-      count.agent = aS;
+      count.agent = agentRuntime;
       p90.agent = aP90;
       errCount.agent = num(rec.agentErr);
-      if (aS > 0) {
+      if (agentRuntime > 0) {
         const baseBadges: Badge[] = [
           { text: `${fmtPercent(aErr * 100)} err`, tone: aErr >= WARN_ERR ? "warning" : "neutral" },
           { text: `p90 ${fmtMs(aP90)}`, tone: "neutral" },
@@ -370,14 +384,14 @@ export const useArchitectureData = (): ArchData => {
         nodes.agent = {
           status: worse(rateStatus(aErr), loops.isEmpty ? "healthy" : loopStatus),
           state: "live",
-          headline: fmtCount(ex(aS)),
-          sub: "agent spans",
+          headline: fmtCount(ex(agentRuntime)),
+          sub: "agent + workflow spans",
           badges: baseBadges,
           findings: findingBadge("agent").n,
           findingTone: findingBadge("agent").tone,
           reason: `Error ${fmtPercent(aErr * 100)}`,
           cells: {
-            throughput: { status: "healthy", headline: fmtCount(ex(aS)), sub: "agent spans", badges: [] },
+            throughput: { status: "healthy", headline: fmtCount(ex(agentRuntime)), sub: "agent + workflow spans", badges: [] },
             latency: { status: latStatus(aP90), headline: fmtMs(aP90), sub: "p90 self-time", badges: [] },
             errors: { status: rateStatus(aErr), headline: fmtPercent(aErr * 100), sub: "agent error rate", badges: [] },
             loop: muted("amplified by orchestrator loops"),
@@ -632,7 +646,7 @@ export const useArchitectureData = (): ArchData => {
 
     const empty =
       !!rec &&
-      [count.orchestrator, count.agent, count.tools, count.llm, count.vectordb, count.memory].every(
+      [count.agent, count.tools, count.llm, count.vectordb, count.memory].every(
         (n) => !n,
       );
 

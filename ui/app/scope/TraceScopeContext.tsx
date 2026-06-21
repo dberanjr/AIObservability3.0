@@ -8,7 +8,7 @@ import { useScope } from "./ScopeContext";
 import { useGlobalFilters } from "./GlobalFilterContext";
 import { useScanLimit } from "./ScanLimitContext";
 import { useTweaks, TRACE_MATCH_CAPS } from "../tweaks/TweaksContext";
-import { buildTraceScopeQuery } from "./queries";
+import { buildTraceScopeQuery, hasActiveFilter } from "./queries";
 import { injectScanLimit } from "./dqlScanLimit";
 
 /**
@@ -60,7 +60,7 @@ export const TraceScopeProvider = ({
   const { pageConfig } = useTweaks();
 
   const cap = TRACE_MATCH_CAPS[pageConfig.traceMatchCap];
-  const isActive = filters.conditions.length > 0;
+  const isActive = hasActiveFilter(filters);
 
   const queryInput = useMemo<string | DqlQueryParams>(() => {
     if (!isActive) return "";

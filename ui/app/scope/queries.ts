@@ -138,7 +138,75 @@ export interface FilterCondition {
 
 export interface GlobalFilters {
   conditions: FilterCondition[];
+  /**
+   * Selected orchestration-framework LABELS (e.g. "LangGraph", "CrewAI") chosen
+   * from the Pulse architecture map's Orchestrator-tier chips. A framework is
+   * not a single span attribute — one framework maps to an OR across several
+   * signal values on two different attributes (traceloop.workflow.name and
+   * gen_ai.system), so it cannot be expressed as a per-attribute
+   * `FilterCondition`. It is therefore a first-class dimension here, resolved to
+   * trace.ids by its own arm in `buildTraceScopeQuery`
+   * (see `FRAMEWORK_FILTER_VALUES`). Selected frameworks OR with each other and
+   * AND with the attribute conditions, matching the per-trace condition
+   * semantics (a dimension is satisfied when ANY span in the trace matches it).
+   */
+  frameworks?: string[];
 }
+
+/**
+ * Map a framework display LABEL (as shown on the chips and stored in
+ * `GlobalFilters.frameworks`) to the raw signal values that identify it. `wf`
+ * values match `traceloop.workflow.name`; `system` values match `gen_ai.system`.
+ * Derived from `detectFrameworkFromSignals` — only the value-mapped signals are
+ * usable as a filter (name-regex-only families like LlamaIndex/Haystack match by
+ * their workflow names). Labels absent here contribute no predicate.
+ *
+ * MAINTENANCE: when adding or changing a framework in
+ * `detection/attributes.ts` (`TL_NAME_PATTERNS` / `GENAI_SYSTEM_FRAMEWORKS` /
+ * `FRAMEWORK_LABEL`), mirror its concrete literal signal values here. The
+ * detector matches with *regex* over arbitrary tenant strings, but this filter
+ * needs *exact* values for the DQL `in()` predicate — so the two cannot be
+ * unified, and they must be kept in sync by hand. The key MUST be a value from
+ * `FRAMEWORK_LABEL` (guarded by a test in `traceScope.test.ts`); a typo'd label
+ * would silently never match a chip.
+ */
+export const FRAMEWORK_FILTER_VALUES: Record<
+  string,
+  { wf?: string[]; system?: string[] }
+> = {
+  LangGraph: { wf: ["LangGraph"] },
+  LangChain: { wf: ["RunnableSequence", "AgentExecutor"], system: ["langchain"] },
+  CrewAI: { system: ["crewai"] },
+  Agno: { system: ["agno"] },
+  LlamaIndex: { wf: ["llama_index_query_pipeline"] },
+  Haystack: { wf: ["haystack_pipeline"] },
+  "OpenAI Agents SDK": { wf: ["Agent Workflow"] },
+};
+
+/**
+ * Build a single trace-scope predicate for the selected framework labels: a
+ * `traceloop.workflow.name` arm OR a `gen_ai.system` arm, each an `in(...)` over
+ * every selected label's mapped values. Returns "" when no selected label maps
+ * to any usable signal value (so the frameworks dimension contributes nothing).
+ */
+export const frameworkPredicate = (labels?: string[]): string => {
+  const wf = new Set<string>();
+  const system = new Set<string>();
+  for (const label of labels ?? []) {
+    const map = FRAMEWORK_FILTER_VALUES[label];
+    if (!map) continue;
+    for (const v of map.wf ?? []) wf.add(v);
+    for (const v of map.system ?? []) system.add(v);
+  }
+  const arms: string[] = [];
+  if (wf.size > 0)
+    arms.push(
+      `in(toString(traceloop.workflow.name), array(${dqlIdArray([...wf])}))`,
+    );
+  if (system.size > 0)
+    arms.push(`in(toString(gen_ai.system), array(${dqlIdArray([...system])}))`);
+  return arms.length > 0 ? `(${arms.join(" or ")})` : "";
+};
 
 /** Only allow well-formed attribute paths to be interpolated as a DQL field. */
 const SAFE_ATTR_RE = /^[A-Za-z][A-Za-z0-9_.]*$/;
@@ -211,6 +279,15 @@ export const injectGlobalFilters = (
 const conditionPredicate = (c: FilterCondition): string =>
   `in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`;
 
+/**
+ * True when ANY dimension of the global filter is active (at least one valid
+ * attribute condition, or at least one selected framework label that maps to a
+ * usable signal). Centralises the "is the filter on?" test so the context and
+ * the trace-scope resolver agree.
+ */
+export const hasActiveFilter = (f?: GlobalFilters): boolean =>
+  validConditions(f).length > 0 || frameworkPredicate(f?.frameworks) !== "";
+
 /** Filter conditions that are well-formed and carry at least one value. */
 export const validConditions = (f?: GlobalFilters): FilterCondition[] =>
   (f?.conditions ?? []).filter(
@@ -233,7 +310,14 @@ export const buildTraceScopeQuery = (
   f: GlobalFilters,
   cap: number,
 ): string => {
-  const preds = validConditions(f).map(conditionPredicate);
+  // Each dimension contributes one predicate; conditions plus the frameworks
+  // dimension AND across the trace (every predicate matched by ANY span), while
+  // values within a predicate (incl. the two framework arms) OR.
+  const fwPred = frameworkPredicate(f.frameworks);
+  const preds = [
+    ...validConditions(f).map(conditionPredicate),
+    ...(fwPred ? [fwPred] : []),
+  ];
   const orAll = preds.join(" or ");
   const counters = preds.map((p, i) => `c${i} = countIf(${p})`).join(",\n    ");
   const having = preds.map((_, i) => `c${i} > 0`).join(" and ");
