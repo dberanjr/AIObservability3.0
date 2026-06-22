@@ -34,6 +34,10 @@ const base: TraceSpan = {
   tlKind: null,
   sessionId: null,
   mcpMethod: null,
+  statusMessage: null,
+  httpStatus: null,
+  lgNode: null,
+  lgCheckpoint: null,
 };
 
 describe("spanCategory — tool classification", () => {

@@ -44,6 +44,10 @@ export interface TraceSpan {
   tlKind: string | null;
   sessionId: string | null;
   mcpMethod: string | null;
+  statusMessage: string | null;
+  httpStatus: number | null;
+  lgNode: string | null;
+  lgCheckpoint: string | null;
 }
 
 interface TraceSpanRecord {
@@ -78,6 +82,10 @@ interface TraceSpanRecord {
   tl_kind?: string | null;
   session_id?: string | null;
   mcp_method?: string | null;
+  status_message?: string | null;
+  http_status?: number | string | null;
+  lg_node?: string | null;
+  lg_checkpoint?: string | null;
 }
 
 const parseTimestamp = (v: unknown): number => {
@@ -93,7 +101,7 @@ export interface UseTraceSpansResult {
   spans: TraceSpan[];
   isLoading: boolean;
   error?: Error;
-  /** True when the fetch hit the AI-span ceiling — the trace has more AI spans
+  /** True when the fetch hit the span ceiling — the (full) trace has more spans
    *  than TRACE_SPANS_LIMIT, so the waterfall shows only the first slice. */
   isTruncated: boolean;
 }
@@ -152,6 +160,10 @@ export const useTraceSpans = (
         tlKind: r.tl_kind ?? null,
         sessionId: r.session_id ?? null,
         mcpMethod: r.mcp_method ?? null,
+        statusMessage: r.status_message ?? null,
+        httpStatus: nOrNull(r.http_status),
+        lgNode: r.lg_node ?? null,
+        lgCheckpoint: r.lg_checkpoint ?? null,
       });
     }
 

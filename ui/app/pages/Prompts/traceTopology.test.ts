@@ -43,6 +43,10 @@ const mk = (over: Partial<TraceSpan>): TraceSpan => ({
   tlKind: null,
   sessionId: null,
   mcpMethod: null,
+  statusMessage: null,
+  httpStatus: null,
+  lgNode: null,
+  lgCheckpoint: null,
   ...over,
 });
 

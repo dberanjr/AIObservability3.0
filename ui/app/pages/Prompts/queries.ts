@@ -366,19 +366,25 @@ const traceWindow = (
  * — comparing it to a bare string literal silently matches nothing (this was
  * the bug that left the Trace tab perpetually empty).
  */
-/** Max AI spans returned per trace. Raised from 100 — real traces reach 1M+
- *  total spans, but only the AI-relevant subset matters here. */
-export const TRACE_SPANS_LIMIT = 500;
+/** Max spans returned per trace. We now fetch the FULL trace (not just the
+ *  AI-relevant subset) to match the Dynatrace Distributed Traces app, so this
+ *  ceiling guards only against pathological traces (1M+ spans). Real AI traces
+ *  run ~100 spans; 1500 leaves ample headroom while still bounding the scan. */
+export const TRACE_SPANS_LIMIT = 1500;
 
 export const buildTraceSpansQuery = (
   traceId: string,
   startMs?: number,
 ): string => {
   const { from, to } = traceWindow(startMs);
+  // No AI-only filter here: we fetch the WHOLE trace (every span sharing this
+  // trace.id) so the waterfall matches the Distributed Traces app — including
+  // client HTTP spans and internal wrappers the old AI filter dropped. The
+  // `trace.id` filter scopes to a single trace; TRACE_SPANS_LIMIT caps the
+  // result and isTruncated flags pathological traces that exceed it.
   return `
 fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
 | filter trace.id == toUid("${dqlEscape(traceId)}")
-| filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.request.model) or isNotNull(gen_ai.tool.name) or isNotNull(traceloop.span.kind) or isNotNull(mcp.method.name)
 | dedup {span.id}
 | fieldsAdd
     duration_ms = duration / 1000000,
@@ -415,7 +421,11 @@ fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
     tl_entity_path = traceloop.entity.path,
     tl_kind = traceloop.span.kind,
     session_id = dt.rum.session.id,
-    mcp_method = mcp.method.name
+    mcp_method = mcp.method.name,
+    status_message = span.status_message,
+    http_status = http.response.status_code,
+    lg_node = traceloop.association.properties.langgraph_node,
+    lg_checkpoint = traceloop.association.properties.langgraph_checkpoint_ns
 | sort timestamp asc
 | limit ${TRACE_SPANS_LIMIT}
 `.trim();
