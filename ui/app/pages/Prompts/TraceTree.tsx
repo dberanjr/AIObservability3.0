@@ -7,6 +7,8 @@ import {
   SettingIcon,
   MaximizeIcon,
   MinimizeIcon,
+  CriticalIcon,
+  WarningIcon,
 } from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
 import { MCP_LIFECYCLE_METHODS } from "../../scope/queries";
@@ -16,6 +18,41 @@ interface TraceNode {
   span: TraceSpan;
   children: TraceNode[];
 }
+
+/** A TraceNode annotated with error state for the waterfall. */
+export interface TreeNode {
+  span: TraceSpan;
+  children: TreeNode[];
+  /** This span's own error flag. */
+  isError: boolean;
+  /** Any descendant (not self) is errored — flags ancestors of an error. */
+  hasErrorDescendant: boolean;
+}
+
+/**
+ * Annotate a {span, children} tree with `isError` (the span's own flag) and
+ * `hasErrorDescendant` (bottom-up: any descendant is errored). Pure — returns a
+ * new tree, mutates nothing — so it's unit-testable without a React render.
+ */
+interface SpanNode {
+  span: TraceSpan;
+  children: SpanNode[];
+}
+export const markErrors = (roots: SpanNode[]): TreeNode[] => {
+  const visit = (node: SpanNode): TreeNode => {
+    const children = node.children.map(visit);
+    const hasErrorDescendant = children.some(
+      (c) => c.isError || c.hasErrorDescendant,
+    );
+    return {
+      span: node.span,
+      children,
+      isError: !!node.span.isError,
+      hasErrorDescendant,
+    };
+  };
+  return roots.map(visit);
+};
 
 export type SpanCategory = "agent" | "llm" | "tool" | "other";
 
@@ -86,17 +123,17 @@ export const spanMatchesTerm = (span: TraceSpan, term: string): boolean => {
 };
 
 interface FlatRow {
-  node: TraceNode;
+  node: TreeNode;
   depth: number;
 }
 
 /** DFS flatten, skipping children of collapsed nodes. Order = waterfall order. */
 const flattenTree = (
-  roots: TraceNode[],
+  roots: TreeNode[],
   collapsed: Set<string>,
 ): FlatRow[] => {
   const out: FlatRow[] = [];
-  const walk = (node: TraceNode, depth: number) => {
+  const walk = (node: TreeNode, depth: number) => {
     out.push({ node, depth });
     if (!collapsed.has(node.span.spanId)) {
       node.children.forEach((c) => walk(c, depth + 1));
@@ -193,10 +230,21 @@ const WaterfallRow = ({
   const { node, depth } = row;
   const span = node.span;
   const cat = spanCategory(span);
-  const color = CAT_COLOR[cat];
+  const catColor = CAT_COLOR[cat];
+  // Errored spans override the category color (bar + accent) with critical red.
+  // Ancestors of an error keep their category color but get a subtle marker.
+  const isError = node.isError;
+  const hasErrorDescendant = node.hasErrorDescendant;
+  const color = isError ? "var(--red)" : catColor;
+  // For "other" spans show the span kind (e.g. "client" for HTTP calls,
+  // "internal" for wrappers) so client/internal spans never render a blank
+  // prefix; otherwise the category label.
   const prefix = cat === "other" ? span.spanKind : CAT_LABEL[cat];
   const isMatch = !!highlight && spanMatchesTerm(span, highlight);
   const dimmed = !!highlight && !isMatch;
+  const errorTitle = isError
+    ? `Span errored${span.statusMessage ? `: ${span.statusMessage}` : span.statusCode ? `: ${span.statusCode}` : ""}`
+    : undefined;
 
   const leftPct = Math.max(0, Math.min(100, ((span.timestampMs - t0) / total) * 100));
   const widthPct = Math.max(
@@ -233,16 +281,22 @@ const WaterfallRow = ({
         alignItems: "center",
         minHeight: 26,
         cursor: "pointer",
+        // Selection/match borders take priority; otherwise an errored span
+        // gets a critical red left accent.
         borderLeft: isSelected
           ? "2px solid var(--blue)"
           : isMatch
             ? "2px solid var(--amber)"
-            : "2px solid transparent",
+            : isError
+              ? "2px solid var(--red)"
+              : "2px solid transparent",
         background: isSelected
           ? "color-mix(in oklab, var(--blue) 12%, transparent)"
           : isMatch
             ? "color-mix(in oklab, var(--amber) 16%, transparent)"
-            : undefined,
+            : isError
+              ? "color-mix(in oklab, var(--red) 8%, transparent)"
+              : undefined,
         opacity: dimmed ? 0.5 : 1,
       }}
     >
@@ -304,6 +358,23 @@ const WaterfallRow = ({
             {prefix}
           </Text>
         )}
+        {isError ? (
+          <span
+            title={errorTitle}
+            aria-label={errorTitle}
+            style={{ display: "flex", alignItems: "center", flex: "0 0 auto", color: "var(--red)" }}
+          >
+            <CriticalIcon size={12} />
+          </span>
+        ) : hasErrorDescendant ? (
+          <span
+            title="Contains an errored span"
+            aria-label="Contains an errored span"
+            style={{ display: "flex", alignItems: "center", flex: "0 0 auto", color: "var(--text-3)" }}
+          >
+            <WarningIcon size={12} />
+          </span>
+        ) : null}
         <Text
           style={{
             fontSize: 12,
@@ -859,7 +930,7 @@ export const TraceTree = ({
 
   const { t0, total } = useMemo(() => traceWindow(spans), [spans]);
   const roots = useMemo(
-    () => buildFilteredTree(spans, indicators),
+    () => markErrors(buildFilteredTree(spans, indicators)),
     [spans, indicators],
   );
   const rows = useMemo(() => flattenTree(roots, collapsed), [roots, collapsed]);

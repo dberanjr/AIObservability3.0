@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spanCategory } from "./TraceTree";
+import { spanCategory, markErrors, type TreeNode } from "./TraceTree";
 import type { TraceSpan } from "./useTraceSpans";
 
 const base: TraceSpan = {
@@ -70,5 +70,79 @@ describe("spanCategory — tool classification", () => {
   it("still classifies provider spans as llm and agent/workflow as agent", () => {
     expect(spanCategory({ ...base, provider: "openai" })).toBe("llm");
     expect(spanCategory({ ...base, tlKind: "workflow" })).toBe("agent");
+  });
+});
+
+// Minimal {span, children} tree builder for the error-marking tests.
+const sp = (spanId: string, isError = false): TraceSpan => ({
+  ...base,
+  spanId,
+  isError,
+});
+const tn = (
+  spanId: string,
+  isError: boolean,
+  children: { span: TraceSpan; children: unknown[] }[] = [],
+): { span: TraceSpan; children: unknown[] } => ({
+  span: sp(spanId, isError),
+  children,
+});
+
+const byId = (roots: TreeNode[]): Map<string, TreeNode> => {
+  const m = new Map<string, TreeNode>();
+  const walk = (n: TreeNode) => {
+    m.set(n.span.spanId, n);
+    n.children.forEach(walk);
+  };
+  roots.forEach(walk);
+  return m;
+};
+
+describe("markErrors — error propagation up the tree", () => {
+  it("flags an errored leaf and propagates hasErrorDescendant to ancestors", () => {
+    //  root → mid → leaf(ERROR), with a sibling clean branch
+    const tree = [
+      tn("root", false, [
+        tn("mid", false, [tn("leaf", true)]),
+        tn("clean", false, [tn("cleanLeaf", false)]),
+      ]),
+    ] as unknown as TreeNode[];
+
+    const marked = markErrors(tree);
+    const m = byId(marked);
+
+    // The errored leaf is flagged isError but has no errored descendant.
+    expect(m.get("leaf")!.isError).toBe(true);
+    expect(m.get("leaf")!.hasErrorDescendant).toBe(false);
+
+    // Ancestors of the error get hasErrorDescendant, but are not themselves errored.
+    expect(m.get("mid")!.isError).toBe(false);
+    expect(m.get("mid")!.hasErrorDescendant).toBe(true);
+    expect(m.get("root")!.isError).toBe(false);
+    expect(m.get("root")!.hasErrorDescendant).toBe(true);
+
+    // The unrelated branch stays clean.
+    expect(m.get("clean")!.isError).toBe(false);
+    expect(m.get("clean")!.hasErrorDescendant).toBe(false);
+    expect(m.get("cleanLeaf")!.isError).toBe(false);
+    expect(m.get("cleanLeaf")!.hasErrorDescendant).toBe(false);
+  });
+
+  it("an errored span with an errored descendant gets both flags", () => {
+    const tree = [tn("a", true, [tn("b", true)])] as unknown as TreeNode[];
+    const m = byId(markErrors(tree));
+    expect(m.get("a")!.isError).toBe(true);
+    expect(m.get("a")!.hasErrorDescendant).toBe(true);
+    expect(m.get("b")!.isError).toBe(true);
+    expect(m.get("b")!.hasErrorDescendant).toBe(false);
+  });
+
+  it("leaves an all-clean tree with no flags set", () => {
+    const tree = [tn("x", false, [tn("y", false)])] as unknown as TreeNode[];
+    const m = byId(markErrors(tree));
+    for (const n of m.values()) {
+      expect(n.isError).toBe(false);
+      expect(n.hasErrorDescendant).toBe(false);
+    }
   });
 });
