@@ -9,45 +9,24 @@ import {
   computeServiceModelCost,
   type ServiceModelCost,
 } from "./serviceModelCost";
+import {
+  foldDetailMetrics,
+  type DetailRow,
+  type ServiceModelMetrics,
+} from "./foldDetailMetrics";
 
-/** One summarize row returned by buildServiceModelDetailQuery. */
-export interface DetailRow {
-  requests?: number;
-  in_tok?: number;
-  out_tok?: number;
-  errors?: number;
-  logical_errors?: number;
-  p50_ns?: number;
-  p90_ns?: number;
-  p95_ns?: number;
-}
-
-/** Folded, UI-ready metrics for one service×model pair. */
-export interface ServiceModelMetrics {
-  requests: number;
-  inTok: number;
-  outTok: number;
-  errors: number;
-  logicalErrors: number;
-  errorRatePct: number;
-  p50Ms: number;
-  p90Ms: number;
-  p95Ms: number;
-  tokensPerReq: number;
-}
+// Re-exported so existing call sites keep importing the row/metrics types and
+// the pure folder from this hook module; the implementations live in the
+// React-free ./foldDetailMetrics so they import cleanly under the node test
+// runner (see serviceModelCost.test.ts).
+export { foldDetailMetrics };
+export type { DetailRow, ServiceModelMetrics };
 
 export interface UseServiceModelDetailResult {
   metrics: ServiceModelMetrics | null;
   cost: ServiceModelCost | null;
   isLoading: boolean;
 }
-
-const NS_PER_MS = 1_000_000;
-const nsToMs = (ns: number | undefined): number =>
-  Number.isFinite(ns) ? (ns as number) / NS_PER_MS : 0;
-
-/** Coerce a possibly-undefined numeric field to a finite number. */
-const num = (v: number | undefined): number => (Number.isFinite(v) ? (v as number) : 0);
 
 /**
  * Resolve the metrics + the three cost views for a single service×model cell.
@@ -94,24 +73,8 @@ export const useServiceModelDetail = (
       return { metrics: null, cost: null, isLoading };
     }
 
-    const requests = num(row.requests);
-    const inTok = num(row.in_tok);
-    const outTok = num(row.out_tok);
-    const errors = num(row.errors);
-    const logicalErrors = num(row.logical_errors);
-
-    const metrics: ServiceModelMetrics = {
-      requests,
-      inTok,
-      outTok,
-      errors,
-      logicalErrors,
-      errorRatePct: requests > 0 ? (errors / requests) * 100 : 0,
-      p50Ms: nsToMs(row.p50_ns),
-      p90Ms: nsToMs(row.p90_ns),
-      p95Ms: nsToMs(row.p95_ns),
-      tokensPerReq: requests > 0 ? (inTok + outTok) / requests : 0,
-    };
+    const metrics = foldDetailMetrics(row);
+    const { inTok, outTok } = metrics;
 
     // Toolbar samplingRatio is "1 in N" (1 = no sampling); the cost helper
     // wants the fraction observed.

@@ -167,7 +167,12 @@ export const ServiceModelModal = ({
     onClose();
   };
 
-  const title = `${service} × ${modelLabel}`;
+  // The raw entityName(dt.entity.service) value (which the detail query filters
+  // on, so it must be passed through untouched) can carry trailing separator
+  // cruft like "svc - bos-svc - " — strip leading/trailing " - "/whitespace for
+  // the DISPLAY title only so it doesn't render as "svc - bos-svc - × Model".
+  const serviceLabel = service.replace(/(?:\s*[-–—]\s*)+$/, "").replace(/^(?:\s*[-–—]\s*)+/, "").trim() || service;
+  const title = `${serviceLabel} × ${modelLabel}`;
   const estimated = cost ? isEstimatedCost(cost.pricing) : false;
   // "No data" only after loading settles; while loading we show a skeleton.
   const empty = !isLoading && !metrics;

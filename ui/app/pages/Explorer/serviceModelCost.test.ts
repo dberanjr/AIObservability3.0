@@ -7,6 +7,7 @@ import {
   THIRTY_DAYS_MS,
   type ServiceModelCost,
 } from "./serviceModelCost";
+import { foldDetailMetrics } from "./foldDetailMetrics";
 import {
   costOf,
   getPricing,
@@ -170,6 +171,60 @@ describe("computeServiceModelCost", () => {
     expect(Number.isFinite(c.actual)).toBe(true);
     expect(Number.isFinite(c.extrapolated)).toBe(true);
     expect(Number.isFinite(c.monthlyRunRate)).toBe(true);
+  });
+});
+
+describe("foldDetailMetrics", () => {
+  // The DQL SDK serialises `long` counts and `duration` percentiles as STRINGS
+  // (only `double` token sums arrive as JS numbers). Before the toNum coercion
+  // these string fields silently folded to 0 — the requests/latency/errors=0
+  // golden-signals bug while cost/tokens rendered fine. Lock that in.
+  it("coerces stringified long/duration fields to numbers", () => {
+    const m = foldDetailMetrics({
+      requests: "2309",
+      in_tok: "767226",
+      out_tok: "2133546",
+      errors: "1",
+      logical_errors: "147",
+      p50_ns: "6210000000",
+      p90_ns: "23780000000",
+      p95_ns: "40240000000",
+    });
+    expect(m.requests).toBe(2309);
+    expect(m.inTok).toBe(767226);
+    expect(m.outTok).toBe(2133546);
+    expect(m.errors).toBe(1);
+    expect(m.logicalErrors).toBe(147);
+    // ns → ms
+    expect(m.p50Ms).toBe(6210);
+    expect(m.p90Ms).toBe(23780);
+    expect(m.p95Ms).toBe(40240);
+    // 1 / 2309 * 100 ≈ 0.0433
+    expect(m.errorRatePct).toBeCloseTo(0.0433, 3);
+    // (767226 + 2133546) / 2309 > 0
+    expect(m.tokensPerReq).toBeGreaterThan(0);
+    expect(m.tokensPerReq).toBeCloseTo((767226 + 2133546) / 2309, 6);
+  });
+
+  it("folds missing/undefined fields to zeros (never NaN)", () => {
+    const m = foldDetailMetrics({});
+    for (const v of Object.values(m)) {
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBe(0);
+    }
+  });
+
+  it("treats junk strings as zero rather than propagating NaN", () => {
+    const m = foldDetailMetrics({
+      requests: "not-a-number",
+      in_tok: "",
+      p90_ns: "abc",
+    });
+    expect(m.requests).toBe(0);
+    expect(m.inTok).toBe(0);
+    expect(m.p90Ms).toBe(0);
+    expect(m.errorRatePct).toBe(0); // requests=0 → guarded
+    expect(m.tokensPerReq).toBe(0); // requests=0 → guarded
   });
 });
 
