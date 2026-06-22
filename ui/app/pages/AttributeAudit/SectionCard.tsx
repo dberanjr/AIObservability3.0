@@ -48,10 +48,10 @@ const coverageColor = (present: number, total: number): string => {
 // ─── Tier badge ───────────────────────────────────────────────────────────────
 
 export const TIER_META: Record<string, { label: string; color: string; title: string; longLabel: string }> = {
-  A: { label: "A", longLabel: "Mandatory",    color: "#D97706",        title: "Mandatory — core observability breaks without this" },
-  B: { label: "B", longLabel: "Important",    color: "var(--blue)",    title: "Important — enables key dashboards and analytics" },
-  C: { label: "C", longLabel: "Nice to Have", color: "#7C3AED",        title: "Nice to Have — useful for deep debugging or specialized use cases" },
-  D: { label: "D", longLabel: "Unnecessary",  color: "var(--text-4)",  title: "Unnecessary — deprecated, anti-pattern, or low practical value" },
+  A: { label: "M", longLabel: "Mandatory",    color: "#D97706",        title: "Mandatory — core observability breaks without this" },
+  B: { label: "I", longLabel: "Important",    color: "var(--blue)",    title: "Important — enables key dashboards and analytics" },
+  C: { label: "N", longLabel: "Nice to Have", color: "#7C3AED",        title: "Nice to Have — useful for deep debugging or specialized use cases" },
+  D: { label: "O", longLabel: "Other",        color: "var(--text-4)",  title: "Other — deprecated, anti-pattern, or low practical value" },
 };
 
 export const TierBadge = ({ tier, compact }: { tier: string; compact?: boolean }) => {

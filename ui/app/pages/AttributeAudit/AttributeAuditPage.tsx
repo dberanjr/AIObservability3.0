@@ -318,7 +318,7 @@ export const AttributeAuditPage = () => {
             <span style={{ color: "var(--red)", fontWeight: 600 }}>missing</span> based on
             live span data — honouring the selected timeframe, scan limit, sampling,
             segments, and global filters. Attributes are rated{" "}
-            <strong>A</strong> (Mandatory) through <strong>D</strong> (Unnecessary).
+            <strong>M</strong> (Mandatory) through <strong>O</strong> (Other).
           </Text>
 
           <SearchInput
@@ -341,7 +341,7 @@ export const AttributeAuditPage = () => {
                 <button
                   key={tier}
                   type="button"
-                  title={active ? `Hide tier ${tier}: ${meta.longLabel}` : `Show tier ${tier}: ${meta.longLabel}`}
+                  title={active ? `Hide ${meta.label}: ${meta.longLabel}` : `Show ${meta.label}: ${meta.longLabel}`}
                   onClick={() => toggleTier(tier)}
                   style={{
                     appearance: "none",
@@ -476,7 +476,7 @@ export const AttributeAuditPage = () => {
                       <Flex gap={20} style={{ flexWrap: "wrap" }}>
                         {/* Tier A — Mandatory */}
                         <HeroStat
-                          label="Mandatory (A)"
+                          label="Mandatory (M)"
                           value={
                             loadingCounts
                               ? "—"
@@ -492,7 +492,7 @@ export const AttributeAuditPage = () => {
                         />
                         {/* Tier B — Important */}
                         <HeroStat
-                          label="Important (B)"
+                          label="Important (I)"
                           value={
                             loadingCounts
                               ? "—"
@@ -503,7 +503,7 @@ export const AttributeAuditPage = () => {
                         />
                         {/* Tier C — Nice to Have */}
                         <HeroStat
-                          label="Nice to Have (C)"
+                          label="Nice to Have (N)"
                           value={
                             loadingCounts
                               ? "—"
@@ -514,7 +514,7 @@ export const AttributeAuditPage = () => {
                         />
                         {/* Tier D — Unnecessary */}
                         <HeroStat
-                          label="Unnecessary (D)"
+                          label="Other (O)"
                           value={
                             loadingCounts
                               ? "—"
