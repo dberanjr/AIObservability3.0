@@ -73,8 +73,8 @@ export const useServiceModelDetail = (
     ? buildServiceModelDetailQuery(
         serviceIds,
         scope.timeframe,
-        service as string,
-        models as string[],
+        service,
+        models,
         filters,
       )
     : "";
@@ -122,7 +122,7 @@ export const useServiceModelDetail = (
 
     // All raw variants in `models` canonicalize to the same pricing, so the
     // first one is a correct representative for the single-model cost lookup.
-    const representativeModel = (models as string[])[0];
+    const representativeModel = (models)[0];
 
     const tf = scope.timeframe;
     const cost = computeServiceModelCost({
