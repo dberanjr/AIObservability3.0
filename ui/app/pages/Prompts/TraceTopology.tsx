@@ -45,6 +45,7 @@ interface NodeAgg {
   durationMs: number;
   cost: number; // cents
   isEntry: boolean;
+  isError: boolean;
 }
 interface TopoNode extends NodeAgg {
   key: string;
@@ -106,6 +107,9 @@ interface Layout {
   width: number;
   height: number;
   totals: TraceTotals;
+  /** Keys of the node(s) containing the true trace root (null parent / isRoot).
+   *  Only these display trace-wide totals; every other node shows its own. */
+  rootKeys: Set<string>;
 }
 
 /** Trace-wide totals (all spans, regardless of category filter). Duration is
@@ -158,10 +162,15 @@ export const buildLayout = (
 
   const keyOf = new Map<string, string>();
   const nodes = new Map<string, NodeAgg>();
+  // Keys of nodes containing the trace's true root span (null parent OR
+  // isRoot). Only these show trace-wide totals in the render layer.
+  const rootKeys = new Set<string>();
   for (const s of spans) {
     if (!visible(s)) continue;
     const n = nodeOf(s);
     keyOf.set(s.spanId, n.key);
+    const isRoot = s.parentSpanId == null || s.isRoot === true;
+    if (isRoot) rootKeys.add(n.key);
     const cost =
       (s.inTokens > 0 ? costOf(s.inTokens, 0, s.model) : 0) +
       (s.outTokens > 0 ? costOf(0, s.outTokens, s.model) : 0);
@@ -172,6 +181,7 @@ export const buildLayout = (
       agg.outTok += s.outTokens;
       agg.durationMs += s.durationMs;
       agg.cost += cost;
+      agg.isError = agg.isError || s.isError === true;
     } else {
       nodes.set(n.key, {
         label: n.label,
@@ -182,34 +192,45 @@ export const buildLayout = (
         durationMs: s.durationMs,
         cost,
         isEntry: false,
+        isError: s.isError === true,
       });
     }
   }
 
+  // Build the edge set FIRST. An edge parentKey→childKey is created for every
+  // span whose nearest visible ancestor resolves to a different node (self-
+  // loops skipped). Spans that are genuine data-orphans (parentSpanId doesn't
+  // resolve to a fetched span) contribute no incoming edge for their node.
   const edgeSet = new Set<string>();
   const adj = new Map<string, Set<string>>();
+  const hasIncoming = new Set<string>();
   for (const s of spans) {
     if (!visible(s)) continue;
     const childKey = keyOf.get(s.spanId)!;
     const ancId = nearestVisibleAncestor(s);
-    if (!ancId) {
-      const n = nodes.get(childKey);
-      if (n) n.isEntry = true;
-      continue;
-    }
+    if (!ancId) continue; // orphan span: no edge into its node from here
     const parentKey = keyOf.get(ancId)!;
-    if (parentKey === childKey) continue;
+    if (parentKey === childKey) continue; // self-loop (recursion within a node)
     const id = `${parentKey}__${childKey}`;
     if (!edgeSet.has(id)) {
       edgeSet.add(id);
       if (!adj.has(parentKey)) adj.set(parentKey, new Set());
       adj.get(parentKey)!.add(childKey);
     }
+    hasIncoming.add(childKey);
   }
   const edges: TopoEdge[] = Array.from(edgeSet).map((id) => {
     const [from, to] = id.split("__");
     return { from, to };
   });
+
+  // A node is an ENTRY iff it has no incoming edge. This is the fix: a node
+  // that is reached by some edge (e.g. tools.task → search_aims_issues) is NOT
+  // an entry even if some of its grouped spans are orphans — so it gets a
+  // proper downstream depth instead of being seeded at the far-left tier.
+  for (const [key, n] of nodes) {
+    n.isEntry = !hasIncoming.has(key);
+  }
 
   // Tier each node by its distance from an entry via plain BFS. Each node is
   // assigned a depth exactly once (the first time it's reached) and never
@@ -284,7 +305,7 @@ export const buildLayout = (
       });
     });
   }
-  return { nodes: out, edges, width, height, totals: traceTotals(spans) };
+  return { nodes: out, edges, width, height, totals: traceTotals(spans), rootKeys };
 };
 
 const edgePath = (x1: number, y1: number, x2: number, y2: number): string => {
@@ -354,6 +375,7 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
   const textc = resolveVar("var(--text)");
   const text3 = resolveVar("var(--text-3)");
   const blue = resolveVar("var(--blue)");
+  const red = resolveVar("var(--red)");
   const byKey = new Map(layout.nodes.map((n) => [n.key, n]));
   const W = layout.width;
   const H = layout.height;
@@ -372,8 +394,9 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
   }
   for (const n of layout.nodes) {
     const color = resolveVar(CAT_COLOR[n.category]);
+    const stroke = n.isError ? red : color;
     p.push(
-      `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${surface}" stroke="${color}" stroke-width="${n.isEntry ? 3 : 2}"/>`,
+      `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${surface}" stroke="${stroke}" stroke-width="${n.isEntry || n.isError ? 3 : 2}"/>`,
     );
     // 3-cube cluster glyph
     const s = Math.max(5, n.r * 0.34);
@@ -385,7 +408,7 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
     p.push(
       `<text x="${n.x}" y="${n.y + n.r + 15}" text-anchor="middle" font-size="11" font-weight="600" fill="${textc}">${escapeXml(trunc(n.label, 24))}</text>`,
     );
-    if (n.isEntry) {
+    if (layout.rootKeys.has(n.key)) {
       const t = layout.totals;
       p.push(
         `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" font-weight="600" fill="${textc}">${escapeXml(`${fmtMs(t.durationMs)} · ${fmtCost(t.cost)}`)}</text>`,
@@ -577,10 +600,15 @@ const TopologyGraph = ({
                 const color = CAT_COLOR[n.category];
                 const d = n.r * 2;
                 const NodeIcon = iconForNode(n.label, n.category);
+                const isRoot = layout.rootKeys.has(n.key);
+                // The trace root carries the trace-wide totals; every other
+                // node (including any orphan-only entry) shows its own metrics.
+                const ringColor = n.isError ? "var(--red)" : color;
                 return (
                   <div
                     key={n.key}
-                    title={`${n.label} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCost(n.cost)}`}
+                    title={`${n.label}${n.isError ? " · errored" : ""} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCost(n.cost)}`}
+                    aria-label={n.isError ? `${n.label} (errored)` : n.label}
                     style={{ position: "absolute", left: n.x - n.r, top: n.y - n.r, width: d, height: d }}
                   >
                     <div
@@ -589,10 +617,12 @@ const TopologyGraph = ({
                         height: d,
                         borderRadius: "50%",
                         background: "var(--surface)",
-                        border: `${n.isEntry ? 3 : 2}px solid ${color}`,
-                        boxShadow: n.isEntry
-                          ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
-                          : "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
+                        border: `${n.isEntry || n.isError ? 3 : 2}px solid ${ringColor}`,
+                        boxShadow: n.isError
+                          ? `0 0 0 4px color-mix(in oklab, var(--red) 22%, transparent)`
+                          : n.isEntry
+                            ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
+                            : "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -624,7 +654,7 @@ const TopologyGraph = ({
                       >
                         {n.label}
                       </Text>
-                      {n.isEntry ? (
+                      {isRoot ? (
                         <>
                           <Text
                             style={{ display: "block", fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}
