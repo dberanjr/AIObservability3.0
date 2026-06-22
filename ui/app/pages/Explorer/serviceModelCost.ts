@@ -64,3 +64,51 @@ export const computeServiceModelCost = (args: {
     pricing: getPricing(args.model),
   };
 };
+
+/**
+ * Decide whether the cost figures for this pair should carry an
+ * "≈ estimated / blended rate" badge. True when the pricing was a blended
+ * fallback (model missing from the table) OR the model resolved to the inert
+ * Unknown provider (zero rates) — in both cases the dollar amounts are not a
+ * real billed figure and the UI should say so. Pure so it can be unit-tested
+ * without rendering.
+ */
+export const isEstimatedCost = (pricing: ModelPricing): boolean =>
+  pricing.blended === true || pricing.provider === "Unknown";
+
+/** A single labelled cost figure rendered as a stat in the modal. */
+export interface CostStat {
+  label: string;
+  value: number;
+  /** Optional sublabel under the figure (e.g. the sampling note). */
+  sub?: string;
+}
+
+/**
+ * Build the three labelled cost figures (Actual / Estimated full population /
+ * Monthly run-rate). When sampling is active (ratio < 1, i.e. "1 in N" with
+ * N > 1) the extrapolated figure gets a "scaled ×N" sublabel so users know it
+ * was grossed up. `samplingRatio` is the FRACTION observed, matching
+ * computeServiceModelCost. Pure — unit-tested.
+ */
+export const costTrioStats = (
+  cost: ServiceModelCost,
+  samplingRatio: number,
+): CostStat[] => {
+  const sampled =
+    Number.isFinite(samplingRatio) && samplingRatio > 0 && samplingRatio < 1;
+  const factor = sampled ? Math.round(1 / samplingRatio) : 1;
+  return [
+    { label: "Actual (observed)", value: cost.actual },
+    {
+      label: "Estimated (full population)",
+      value: cost.extrapolated,
+      sub: sampled ? `scaled ×${factor} for sampling` : undefined,
+    },
+    {
+      label: "Monthly run-rate",
+      value: cost.monthlyRunRate,
+      sub: "projected to 30 days",
+    },
+  ];
+};

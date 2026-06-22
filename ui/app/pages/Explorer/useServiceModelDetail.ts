@@ -51,27 +51,30 @@ const num = (v: number | undefined): number => (Number.isFinite(v) ? (v as numbe
 
 /**
  * Resolve the metrics + the three cost views for a single service×model cell.
- * Disabled (returns nulls) until both service and model are selected. The
- * sampling ratio is the toolbar's "1 in N" selector; cost extrapolation needs
- * the FRACTION observed, so we pass `1 / N` to computeServiceModelCost.
+ * Disabled (returns nulls) until a service and at least one raw model variant
+ * are selected. `models` is the FULL list of raw `gen_ai.request.model` variants
+ * that fold into the clicked cell's canonical column — the detail query matches
+ * all of them so the metrics/cost equal the cell's aggregate (no undercount).
+ * The sampling ratio is the toolbar's "1 in N" selector; cost extrapolation
+ * needs the FRACTION observed, so we pass `1 / N` to computeServiceModelCost.
  */
 export const useServiceModelDetail = (
   service: string | null,
-  model: string | null,
+  models: string[] | null,
 ): UseServiceModelDetailResult => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
   const { samplingRatio } = useSampling();
   const { serviceIds } = useResolvedServices();
 
-  const enabled = !!service && !!model;
+  const enabled = !!service && !!models && models.length > 0;
 
   const query = enabled
     ? buildServiceModelDetailQuery(
         serviceIds,
         scope.timeframe,
         service as string,
-        model as string,
+        models as string[],
         filters,
       )
     : "";
@@ -117,17 +120,21 @@ export const useServiceModelDetail = (
         ? 1 / samplingRatio
         : 1;
 
+    // All raw variants in `models` canonicalize to the same pricing, so the
+    // first one is a correct representative for the single-model cost lookup.
+    const representativeModel = (models as string[])[0];
+
     const tf = scope.timeframe;
     const cost = computeServiceModelCost({
       inTok,
       outTok,
-      model: model as string,
+      model: representativeModel,
       samplingRatio: samplingFraction,
       timeframeMs: timeframeDurationMs(tf.from, tf.to),
     });
 
     return { metrics, cost, isLoading };
-  }, [enabled, data, isLoading, samplingRatio, model, scope.timeframe]);
+  }, [enabled, data, isLoading, samplingRatio, models, scope.timeframe]);
 };
 
 /**

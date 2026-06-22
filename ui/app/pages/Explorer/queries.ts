@@ -1,4 +1,4 @@
-import { dqlTimeArg, dqlEscape, scopeFilterClause, globalFilterClauses, logicalErrorField, LOGICAL_ERROR_EXPR, type GlobalFilters } from "../../scope/queries";
+import { dqlTimeArg, dqlEscape, dqlIdArray, scopeFilterClause, globalFilterClauses, logicalErrorField, LOGICAL_ERROR_EXPR, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -101,23 +101,27 @@ const OTEL_LOGICAL_ERROR_EXPR = `(
  * Golden-signal + token metrics for ONE service×model pair, powering the
  * heatmap-cell detail modal. The pair is identified by the SAME fields the
  * heatmap groups by — `entityName(dt.entity.service)` and
- * `gen_ai.request.model` — so the cell the user clicked maps to exactly this
- * row. Values are escaped via dqlEscape. `errors` counts the load-bearing
- * logical-error rule (shared with buildAIServicesQuery's `is_error`);
- * `logical_errors` counts the OTel-marker population.
+ * `gen_ai.request.model`. A heatmap column folds every RAW `gen_ai.request.model`
+ * variant that canonicalizes to one label (`models`), so we match the FULL list
+ * with `in(gen_ai.request.model, array(...))` — matching the cell's aggregate
+ * exactly rather than undercounting to one variant. Values are escaped via
+ * dqlEscape / dqlIdArray. The summarize has no `by:`, so all matched variants
+ * fold into one row. `errors` counts the load-bearing logical-error rule
+ * (shared with buildAIServicesQuery's `is_error`); `logical_errors` counts the
+ * OTel-marker population.
  */
 export const buildServiceModelDetailQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   service: string,
-  model: string,
+  models: string[],
   filters?: GlobalFilters,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.request.model)
-| filter gen_ai.request.model == "${dqlEscape(model)}"
+| filter in(gen_ai.request.model, array(${dqlIdArray(models)}))
 | filter entityName(dt.entity.service) == "${dqlEscape(service)}"
 | dedup {span.id}
 | fieldsAdd

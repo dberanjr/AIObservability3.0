@@ -2,12 +2,20 @@ import { describe, it, expect } from "vitest";
 import { buildServiceModelDetailQuery } from "./queries";
 import {
   computeServiceModelCost,
+  costTrioStats,
+  isEstimatedCost,
   THIRTY_DAYS_MS,
+  type ServiceModelCost,
 } from "./serviceModelCost";
-import { costOf, getPricing } from "../../data/pricing";
+import {
+  costOf,
+  getPricing,
+  UNKNOWN_PRICE,
+  type ModelPricing,
+} from "../../data/pricing";
 
 describe("buildServiceModelDetailQuery", () => {
-  const q = buildServiceModelDetailQuery(null, { from: "now()-2h" }, "svc-a", "gpt-4o");
+  const q = buildServiceModelDetailQuery(null, { from: "now()-2h" }, "svc-a", ["gpt-4o"]);
 
   it("fetches spans over the timeframe", () => {
     expect(q).toContain("fetch spans");
@@ -15,8 +23,19 @@ describe("buildServiceModelDetailQuery", () => {
     expect(q).toContain("to: now()");
   });
 
-  it("filters to the model for this pair", () => {
-    expect(q).toContain('gen_ai.request.model == "gpt-4o"');
+  it("matches the full raw-model list with an in(...) membership filter", () => {
+    expect(q).toContain("in(gen_ai.request.model, array(");
+    expect(q).toContain('"gpt-4o"');
+  });
+
+  it("includes every raw variant when the column folds multiple models", () => {
+    const multi = buildServiceModelDetailQuery(
+      null,
+      { from: "now()-2h" },
+      "svc-a",
+      ["m1", "m2"],
+    );
+    expect(multi).toContain('in(gen_ai.request.model, array("m1", "m2"))');
   });
 
   it("filters to the service for this pair (same field the heatmap groups by)", () => {
@@ -48,10 +67,10 @@ describe("buildServiceModelDetailQuery", () => {
       null,
       { from: "now()-1h" },
       'sv"c',
-      'mo"del',
+      ['mo"del'],
     );
     expect(dirty).toContain('entityName(dt.entity.service) == "sv\\"c"');
-    expect(dirty).toContain('gen_ai.request.model == "mo\\"del"');
+    expect(dirty).toContain('in(gen_ai.request.model, array("mo\\"del"))');
   });
 });
 
@@ -151,5 +170,52 @@ describe("computeServiceModelCost", () => {
     expect(Number.isFinite(c.actual)).toBe(true);
     expect(Number.isFinite(c.extrapolated)).toBe(true);
     expect(Number.isFinite(c.monthlyRunRate)).toBe(true);
+  });
+});
+
+describe("isEstimatedCost", () => {
+  const known: ModelPricing = getPricing("gpt-4o");
+
+  it("false for a known model from the table", () => {
+    expect(isEstimatedCost(known)).toBe(false);
+  });
+
+  it("true for the inert Unknown pricing", () => {
+    expect(isEstimatedCost(UNKNOWN_PRICE)).toBe(true);
+  });
+
+  it("true when the pricing is flagged blended", () => {
+    expect(isEstimatedCost({ ...known, blended: true })).toBe(true);
+  });
+});
+
+describe("costTrioStats", () => {
+  const base: ServiceModelCost = {
+    actual: 10,
+    extrapolated: 1000,
+    monthlyRunRate: 30000,
+    pricing: getPricing("gpt-4o"),
+  };
+
+  it("returns three figures in actual / estimated / monthly order", () => {
+    const stats = costTrioStats(base, 1);
+    expect(stats.map((s) => s.value)).toEqual([10, 1000, 30000]);
+    expect(stats[0].label).toMatch(/actual/i);
+    expect(stats[1].label).toMatch(/full population/i);
+    expect(stats[2].label).toMatch(/run-rate/i);
+  });
+
+  it("omits the sampling sublabel when fraction is 1 (no sampling)", () => {
+    const stats = costTrioStats(base, 1);
+    expect(stats[1].sub).toBeUndefined();
+  });
+
+  it("notes the scale factor when sampled (fraction 0.01 → ×100)", () => {
+    const stats = costTrioStats(base, 0.01);
+    expect(stats[1].sub).toContain("×100");
+  });
+
+  it("always annotates the monthly run-rate projection window", () => {
+    expect(costTrioStats(base, 1)[2].sub).toContain("30 days");
   });
 });

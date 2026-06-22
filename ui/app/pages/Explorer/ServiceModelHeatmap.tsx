@@ -6,6 +6,17 @@ import { fmtTokens } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { useExplorerHeatmap } from "./useExplorerHeatmap";
+import { ServiceModelModal } from "./ServiceModelModal";
+
+/** A picked heatmap cell. `rawModels` is the FULL list of raw
+ *  gen_ai.request.model variants that fold into the cell's canonical column
+ *  (the detail query matches all of them); `modelLabel` is the canonical
+ *  column label shown in the modal header. */
+interface SelectedCell {
+  service: string;
+  rawModels: string[];
+  modelLabel: string;
+}
 
 const CELL_W = 64;
 const CELL_H = 28;
@@ -24,7 +35,9 @@ const cellColor = (tokens: number, max: number, color: string): string => {
 // issues no query.
 const ServiceModelHeatmapBody = () => {
   const result = useExplorerHeatmap();
+  const [selected, setSelected] = React.useState<SelectedCell | null>(null);
   return (
+    <>
     <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
       <Flex alignItems="baseline" justifyContent="flex-end">
         <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
@@ -157,9 +170,31 @@ const ServiceModelHeatmapBody = () => {
                 {result.columns.map((col) => {
                   const cell = row.cells.get(col.model);
                   const tokens = cell?.tokens ?? 0;
+                  const open = () =>
+                    setSelected({
+                      service: row.service,
+                      // FULL list of raw variants folded into this canonical
+                      // column so the modal aggregates exactly the cell (fall
+                      // back to the label when no raw variants were collected).
+                      rawModels:
+                        col.rawModels.length > 0
+                          ? col.rawModels
+                          : [col.model],
+                      modelLabel: col.model,
+                    });
                   return (
                     <div
                       key={col.model}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Details for ${row.service} · ${col.model}`}
+                      onClick={open}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          open();
+                        }
+                      }}
                       title={
                         cell
                           ? `${row.service} · ${col.model}: ${fmtTokens(tokens)} tokens (${cell.requests} req)`
@@ -179,6 +214,7 @@ const ServiceModelHeatmapBody = () => {
                         fontFamily: "var(--mono, monospace)",
                         fontSize: 10.5,
                         color: "var(--text-2)",
+                        cursor: "pointer",
                       }}
                     >
                       {tokens > 0 ? fmtTokens(tokens) : ""}
@@ -191,6 +227,15 @@ const ServiceModelHeatmapBody = () => {
         </div>
       )}
     </Flex>
+    {selected && (
+      <ServiceModelModal
+        service={selected.service}
+        rawModels={selected.rawModels}
+        modelLabel={selected.modelLabel}
+        onClose={() => setSelected(null)}
+      />
+    )}
+    </>
   );
 };
 
