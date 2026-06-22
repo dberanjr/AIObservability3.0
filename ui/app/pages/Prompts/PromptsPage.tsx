@@ -16,6 +16,7 @@ import { PromptsTilesRow } from "./PromptsTilesRow";
 import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
 import { decodePromptsFilter } from "./findingFilter";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 
 export const PromptsPage = () => {
   const { search } = useLocation();
@@ -34,6 +35,20 @@ export const PromptsPage = () => {
       setFilter((prev) => ({ ...prev, ...incoming }));
     }
   }, [search]);
+  // The shared toolbar's global Reset must also clear the Prompts left sidebar
+  // filter (services/agents/models/onlyErrors/…), which lives in this local
+  // state — mirrors Explorer's reset-handler registration. Also clear the
+  // applied-filter ref so a still-present `pf_*` URL param doesn't immediately
+  // re-apply on the next render.
+  const { registerResetHandler } = useGlobalFilters();
+  useEffect(
+    () =>
+      registerResetHandler(() => {
+        appliedFilterRef.current = "";
+        setFilter({});
+      }),
+    [registerResetHandler],
+  );
   const [view, setView] = useState<PromptView>("stream");
   // Sticky sidebar height must equal the space from its (pinned) top to the
   // viewport bottom — a fixed calc() guesses the page-header height wrong and

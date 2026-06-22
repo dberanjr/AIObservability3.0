@@ -201,6 +201,11 @@ const buildFilteredTree = (
 
 // Width of the left Name column within the waterfall (% of the tree column).
 const NAME_FLEX = "0 0 44%";
+// Token columns: header ("In Tok"/"Out Tok") and per-span value cells share
+// these exact width + right-padding constants so the values always sit directly
+// under their headers (previously header/row used separate literals → drift).
+const TOKEN_COL_WIDTH = 56;
+const TOKEN_COL_PR = 8;
 
 /** One waterfall row: indented name on the left, a positioned timing bar on a
  *  shared timeline axis on the right. */
@@ -395,9 +400,9 @@ const WaterfallRow = ({
         <>
           <div
             style={{
-              flex: "0 0 50px",
+              flex: `0 0 ${TOKEN_COL_WIDTH}px`,
               textAlign: "right",
-              paddingRight: 8,
+              paddingRight: TOKEN_COL_PR,
               fontSize: 11,
               fontVariantNumeric: "tabular-nums",
               color: "var(--text-2)",
@@ -407,9 +412,9 @@ const WaterfallRow = ({
           </div>
           <div
             style={{
-              flex: "0 0 50px",
+              flex: `0 0 ${TOKEN_COL_WIDTH}px`,
               textAlign: "right",
-              paddingRight: 8,
+              paddingRight: TOKEN_COL_PR,
               fontSize: 11,
               fontVariantNumeric: "tabular-nums",
               color: "var(--text-2)",
@@ -913,6 +918,57 @@ const IndicatorsMenu = ({
   );
 };
 
+/**
+ * Labeled toggle (left of the gear) for the "All other service spans" indicator
+ * — the most-used filter, promoted out of the gear popover. Toggles the same
+ * `indicators.other` state. Filled (green-tinted) when on, outlined when off;
+ * aria-pressed + keyboard-activatable like a native button.
+ */
+const OtherSpansToggle = ({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    aria-pressed={active}
+    title="Show all other (non-AI / other-service) spans in the waterfall"
+    style={{
+      all: "unset",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
+      padding: "3px 8px",
+      borderRadius: 6,
+      fontSize: 11,
+      fontWeight: 600,
+      lineHeight: 1,
+      whiteSpace: "nowrap",
+      border: `1px solid ${active ? CAT_COLOR.other : "var(--border)"}`,
+      background: active
+        ? "color-mix(in oklab, var(--text-3) 16%, transparent)"
+        : "transparent",
+      color: active ? "var(--text)" : "var(--text-3)",
+    }}
+  >
+    <span
+      aria-hidden
+      style={{
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        background: CAT_COLOR.other,
+        flex: "0 0 auto",
+      }}
+    />
+    Other spans
+  </button>
+);
+
 export const TraceTree = ({
   spans,
   isLoading,
@@ -1008,15 +1064,23 @@ export const TraceTree = ({
             }}
           >
             <Text style={eyebrow}>Name</Text>
-            <IndicatorsMenu value={indicators} onChange={setIndicators} />
+            <Flex alignItems="center" gap={6}>
+              <OtherSpansToggle
+                active={indicators.other}
+                onToggle={() =>
+                  setIndicators((p) => ({ ...p, other: !p.other }))
+                }
+              />
+              <IndicatorsMenu value={indicators} onChange={setIndicators} />
+            </Flex>
           </div>
           {showTokens && (
             <>
-              <div style={{ flex: "0 0 50px", textAlign: "right", paddingRight: 8 }}>
-                <Text style={eyebrow}>In</Text>
+              <div style={{ flex: `0 0 ${TOKEN_COL_WIDTH}px`, textAlign: "right", paddingRight: TOKEN_COL_PR }}>
+                <Text style={eyebrow}>In Tok</Text>
               </div>
-              <div style={{ flex: "0 0 50px", textAlign: "right", paddingRight: 8 }}>
-                <Text style={eyebrow}>Out</Text>
+              <div style={{ flex: `0 0 ${TOKEN_COL_WIDTH}px`, textAlign: "right", paddingRight: TOKEN_COL_PR }}>
+                <Text style={eyebrow}>Out Tok</Text>
               </div>
             </>
           )}
