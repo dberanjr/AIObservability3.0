@@ -23,6 +23,7 @@ import {
 } from "./useAIServices";
 import { useExplorerFindings } from "./useExplorerFindings";
 import { useExplorerSummary } from "./useExplorerSummary";
+import { SECTION_IDS } from "./tileActions";
 
 const PROVIDER_SET = new Set<ProviderId>(ALL_PROVIDER_IDS);
 
@@ -126,10 +127,13 @@ export const ExplorerPage = () => {
             isLoading={aiServices.isLoading}
             onSelect={setSelectedFinding}
           />
-          <ServiceModelHeatmap />
+          <div id={SECTION_IDS.heatmap} style={{ scrollMarginTop: 12 }}>
+            <ServiceModelHeatmap />
+          </div>
           <CapabilityGate id="vectorDb">
             <RagPanel />
           </CapabilityGate>
+          <div id={SECTION_IDS.servicesTable} style={{ scrollMarginTop: 12 }}>
           <AIServicesTable
             rows={aiServices.filtered}
             isLoading={aiServices.isLoading}
@@ -147,6 +151,7 @@ export const ExplorerPage = () => {
               })
             }
           />
+          </div>
         </Flex>
       </div>
       <FindingDrawer

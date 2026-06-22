@@ -287,6 +287,20 @@ ${toBlock(darkSurfaces)}
   outline-offset: 1px;
 }
 
+/* Clickable Explorer overview tile: subtle lift + accent border on hover. */
+.aiobs-clickable-tile {
+  cursor: pointer;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+.aiobs-clickable-tile:hover {
+  box-shadow: inset 0 0 0 1px var(--blue);
+  transform: translateY(-1px);
+}
+.aiobs-clickable-tile:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
 /* Pulse hero: the AI Application Architecture map and the summary tiles sit
    side by side, with the tiles in a fixed-width right column (which the tile
    grid fills as two columns). When the viewport is narrowed, the tiles drop

@@ -8,13 +8,19 @@ import {
   fmtTokens,
 } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import type { ExplorerSummary } from "./useExplorerSummary";
+import { tileAction, type TileAction } from "./tileActions";
 
 interface TileProps {
   label: string;
   value: string;
   sub?: string;
   emphasis?: "default" | "amber" | "red";
+  /** When provided, the tile becomes clickable (filter or scroll). */
+  onActivate?: () => void;
+  /** Accessible description of the click action (required when onActivate set). */
+  actionLabel?: string;
 }
 
 const COLOR: Record<NonNullable<TileProps["emphasis"]>, string> = {
@@ -23,8 +29,35 @@ const COLOR: Record<NonNullable<TileProps["emphasis"]>, string> = {
   red: "var(--red)",
 };
 
-const Tile = ({ label, value, sub, emphasis = "default" }: TileProps) => (
-  <Surface elevation="raised" padding={12}>
+const Tile = ({
+  label,
+  value,
+  sub,
+  emphasis = "default",
+  onActivate,
+  actionLabel,
+}: TileProps) => {
+  const interactive = !!onActivate;
+  return (
+  <Surface
+    elevation="raised"
+    padding={12}
+    {...(interactive
+      ? {
+          role: "button",
+          tabIndex: 0,
+          "aria-label": actionLabel,
+          className: "aiobs-clickable-tile",
+          onClick: onActivate,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onActivate?.();
+            }
+          },
+        }
+      : {})}
+  >
     <Flex flexDirection="column" gap={4}>
       <Text
         style={{
@@ -56,14 +89,44 @@ const Tile = ({ label, value, sub, emphasis = "default" }: TileProps) => (
       )}
     </Flex>
   </Surface>
-);
+  );
+};
 
 export interface ExplorerTilesProps {
   summary: ExplorerSummary;
   isLoading: boolean;
 }
 
+/** Smooth-scroll to a section by element id, expanding nothing (cards manage
+ *  their own collapse state; the wrapper div is always in the DOM). */
+const scrollToSection = (id: string) => {
+  document
+    .getElementById(id)
+    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
 const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
+  const { upsertCondition } = useGlobalFilters();
+
+  /** Convert a tile action into Tile activation props (or none). */
+  const activation = (
+    action: TileAction,
+  ): { onActivate?: () => void; actionLabel?: string } => {
+    if (action.kind === "filter") {
+      return {
+        actionLabel: action.aria,
+        onActivate: () => upsertCondition(action.attribute, action.values),
+      };
+    }
+    if (action.kind === "scroll") {
+      return {
+        actionLabel: action.aria,
+        onActivate: () => scrollToSection(action.section),
+      };
+    }
+    return {};
+  };
+
   if (isLoading && summary.tokens === 0) {
     return (
       <div
@@ -95,26 +158,45 @@ const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
         padding: 12,
       }}
     >
-      <Tile label="AI services" value={fmtCount(summary.aiServiceCount)} />
-      <Tile label="LLM requests" value={fmtCount(summary.llmRequests)} />
-      <Tile label="Tokens" value={fmtTokens(summary.tokens)} />
-      <Tile label="Active models" value={fmtCount(summary.activeModels)} />
+      <Tile
+        label="AI services"
+        value={fmtCount(summary.aiServiceCount)}
+        {...activation(tileAction("aiServices", summary))}
+      />
+      <Tile
+        label="LLM requests"
+        value={fmtCount(summary.llmRequests)}
+        {...activation(tileAction("llmRequests", summary))}
+      />
+      <Tile
+        label="Tokens"
+        value={fmtTokens(summary.tokens)}
+        {...activation(tileAction("tokens", summary))}
+      />
+      <Tile
+        label="Active models"
+        value={fmtCount(summary.activeModels)}
+        {...activation(tileAction("activeModels", summary))}
+      />
       <Tile
         label="Concentration"
         value={fmtPercent(summary.concentrationPct, 0)}
         sub={summary.topServiceShare?.service}
         emphasis={summary.concentrationPct > 50 ? "amber" : "default"}
+        {...activation(tileAction("concentration", summary))}
       />
       <Tile
         label="Errors"
         value={fmtCount(summary.errors)}
         emphasis={summary.errors > 0 ? "amber" : "default"}
+        {...activation(tileAction("errors", summary))}
       />
       <Tile
         label="Logical errors"
         value={fmtCount(summary.logicalErrors)}
         sub="HTTP 200, payload-level"
         emphasis={summary.logicalErrors > 0 ? "amber" : "default"}
+        {...activation(tileAction("logicalErrors", summary))}
       />
     </div>
   );
