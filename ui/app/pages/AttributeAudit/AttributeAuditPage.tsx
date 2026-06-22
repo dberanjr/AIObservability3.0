@@ -289,6 +289,24 @@ export const AttributeAuditPage = () => {
       .filter((s): s is SectionResult => s !== null);
   }, [audit.sections, searchQuery, activeTiers]);
 
+  // Community / emerging attributes also respect the search box (by name, description,
+  // or source), so a query like "token_count" surfaces e.g. llm.token_count.completion.
+  const communityMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return COMMUNITY_ATTRS;
+    return COMMUNITY_ATTRS.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.what.toLowerCase().includes(q) ||
+        a.source.toLowerCase().includes(q),
+    );
+  }, [searchQuery]);
+
+  // While searching, force-open the community section so matches are visible.
+  const communitySearchActive = !!searchQuery.trim();
+  const communityShown =
+    communityOpen || (communitySearchActive && communityMatches.length > 0);
+
   // Force-expand sections that have visible content when search or tier filter is active.
   const isSectionCollapsed = (id: string): boolean => {
     const isFiltering = searchQuery.trim() || activeTiers.size < 4;
@@ -544,7 +562,10 @@ export const AttributeAuditPage = () => {
               <Surface elevation="flat" padding={20}>
                 {searchQuery.trim() ? (
                   <Text style={{ fontSize: 13, color: "var(--text-3)" }}>
-                    No attributes match <strong>&ldquo;{searchQuery}&rdquo;</strong>. Try a shorter or different term.
+                    No audited attributes match <strong>&ldquo;{searchQuery}&rdquo;</strong>.
+                    {communityMatches.length > 0
+                      ? ` ${communityMatches.length} community / emerging attribute${communityMatches.length === 1 ? "" : "s"} match below.`
+                      : " Try a shorter or different term."}
                   </Text>
                 ) : (
                   <Flex alignItems="center" gap={8} style={{ flexWrap: "wrap" }}>
@@ -655,17 +676,19 @@ export const AttributeAuditPage = () => {
                   textAlign: "left",
                 }}
               >
-                {communityOpen ? (
+                {communityShown ? (
                   <ChevronDownIcon size={14} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
                 ) : (
                   <ChevronRightIcon size={14} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
                 )}
                 <Text style={{ fontSize: 12, fontWeight: 600 }}>
-                  {`Community & emerging attributes not yet tracked (${COMMUNITY_ATTRS.length})`}
+                  {communitySearchActive
+                    ? `Community & emerging attributes matching “${searchQuery.trim()}” (${communityMatches.length})`
+                    : `Community & emerging attributes not yet tracked (${COMMUNITY_ATTRS.length})`}
                 </Text>
               </button>
 
-              {communityOpen && (
+              {communityShown && (
                 <Surface elevation="flat" padding={12} style={{ marginTop: 4 }}>
                   <Text style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.5, marginBottom: 12, display: "block" }}>
                     Attributes discovered from the OpenTelemetry GenAI spec, Dynatrace semantic
@@ -680,7 +703,7 @@ export const AttributeAuditPage = () => {
                       gap: 8,
                     }}
                   >
-                    {COMMUNITY_ATTRS.map((a) => (
+                    {communityMatches.map((a) => (
                       <div
                         key={a.name}
                         style={{
