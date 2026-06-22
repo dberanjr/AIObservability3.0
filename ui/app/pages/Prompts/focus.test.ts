@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { FOCUS_PREDICATES, isPromptsFocus } from "./focus";
+import {
+  FOCUS_PREDICATES,
+  CROSS_SPAN_FOCUS,
+  isPromptsFocus,
+  isCrossSpanFocus,
+  crossSpanFocusPreset,
+  promptsFocusChip,
+  N1_TOOL_CALL_THRESHOLD,
+  RETRY_STORM_FAIL_THRESHOLD,
+  HISTORY_STATE_THRESHOLD,
+} from "./focus";
 import { buildPromptsListQuery } from "./queries";
+import { SAFE_TRACE_CAP } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const TF: Timeframe = { from: "now()-24h" };
@@ -93,5 +104,132 @@ describe("buildPromptsListQuery — focus presets", () => {
       const q = buildPromptsListQuery(null, TF, undefined, undefined, id);
       expect(q, `focus marker missing for ${id}`).toContain(`/* focus: ${id} */`);
     }
+  });
+});
+
+describe("tool-token-spike (SAME-SPAN predicate, not trace-scoped)", () => {
+  it("is in the same-span FOCUS_PREDICATES, NOT the cross-span catalog", () => {
+    expect(FOCUS_PREDICATES["tool-token-spike"]).toBeDefined();
+    expect(isPromptsFocus("tool-token-spike")).toBe(true);
+    expect(isCrossSpanFocus("tool-token-spike")).toBe(false);
+    expect(CROSS_SPAN_FOCUS["tool-token-spike"]).toBeUndefined();
+  });
+
+  it("injects a same-span input-token predicate + token sort", () => {
+    const q = buildPromptsListQuery(null, TF, undefined, undefined, "tool-token-spike");
+    expect(q).toContain("/* focus: tool-token-spike */");
+    expect(q).toContain("gen_ai.usage.input_tokens");
+    expect(q).toContain("> 8000");
+    expect(q).toContain("| sort in_tok desc");
+    // It must NOT inject a trace-scope filter — that's the cross-span path.
+    expect(q).not.toContain("in(trace.id");
+  });
+});
+
+describe("CROSS_SPAN_FOCUS — trace-resolution query builders", () => {
+  const CROSS_IDS = [
+    "tool-retry-storm",
+    "agent-n1-tool-calls",
+    "vdb-topk-over-retrieval",
+    "mem-history-growth",
+  ] as const;
+
+  it("defines each cross-span id with a non-empty label", () => {
+    for (const id of CROSS_IDS) {
+      const preset = CROSS_SPAN_FOCUS[id];
+      expect(preset, `missing cross-span preset ${id}`).toBeDefined();
+      expect(preset.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("recognises cross-span ids and rejects same-span / unknown ones", () => {
+    expect(isCrossSpanFocus("tool-retry-storm")).toBe(true);
+    expect(isCrossSpanFocus("agent-n1-tool-calls")).toBe(true);
+    expect(isCrossSpanFocus("llm-rate-limit")).toBe(false); // same-span
+    expect(isCrossSpanFocus("tool-token-spike")).toBe(false); // same-span
+    expect(isCrossSpanFocus("nope")).toBe(false);
+    expect(isCrossSpanFocus(null)).toBe(false);
+  });
+
+  it("same-span and cross-span catalogs do not overlap", () => {
+    for (const id of Object.keys(CROSS_SPAN_FOCUS)) {
+      expect(FOCUS_PREDICATES[id], `${id} must not be in both catalogs`).toBeUndefined();
+    }
+  });
+
+  it("every resolver query summarizes by trace.id, projects trace_id, and caps at cap+1", () => {
+    for (const id of CROSS_IDS) {
+      const q = crossSpanFocusPreset(id)!.buildResolveQuery(TF, SAFE_TRACE_CAP);
+      expect(q, `${id} groups by trace.id`).toContain("by: { trace.id }");
+      expect(q, `${id} projects trace_id`).toContain("trace_id = toString(trace.id)");
+      expect(q, `${id} caps at cap+1`).toContain(`| limit ${SAFE_TRACE_CAP + 1}`);
+      expect(q, `${id} runs at full fidelity`).toContain("samplingRatio: 1");
+      // Pre-filter BEFORE the group-by (Lesson 23/38): the first pipe must be a
+      // filter, never a bare `summarize by:{trace.id}` over the whole table.
+      const firstPipe = q.split("\n").find((l) => l.trim().startsWith("|"));
+      expect(firstPipe, `${id} pre-filters before grouping`).toContain("| filter");
+    }
+  });
+
+  it("tool-retry-storm resolves on a repeated tool-failure signal", () => {
+    const q = crossSpanFocusPreset("tool-retry-storm")!.buildResolveQuery(TF, SAFE_TRACE_CAP);
+    expect(q).toContain('traceloop.span.kind == "tool"');
+    expect(q).toContain('span.status_code == "error"');
+    expect(q).toContain(`fails >= ${RETRY_STORM_FAIL_THRESHOLD}`);
+  });
+
+  it("agent-n1-tool-calls resolves on a high tool-call count", () => {
+    const q = crossSpanFocusPreset("agent-n1-tool-calls")!.buildResolveQuery(TF, SAFE_TRACE_CAP);
+    expect(q).toContain('traceloop.span.kind == "tool"');
+    expect(q).toContain(`tools >= ${N1_TOOL_CALL_THRESHOLD}`);
+  });
+
+  it("vdb-topk-over-retrieval uses the retrieval proxy scoped to agent traces (approximate)", () => {
+    const preset = crossSpanFocusPreset("vdb-topk-over-retrieval")!;
+    expect(preset.approximate).toBe(true);
+    const q = preset.buildResolveQuery(TF, SAFE_TRACE_CAP);
+    expect(q).toContain("isNotNull(gen_ai.agent.name)");
+    expect(q).toContain('contains(lname,"retriev")');
+    // top_k is not emitted on this tenant — the resolver must NOT depend on it.
+    expect(q).not.toContain("vector_db.query.top_k");
+  });
+
+  it("mem-history-growth resolves on conversation/thread/checkpoint state (approximate)", () => {
+    const preset = crossSpanFocusPreset("mem-history-growth")!;
+    expect(preset.approximate).toBe(true);
+    const q = preset.buildResolveQuery(TF, SAFE_TRACE_CAP);
+    expect(q).toContain("gen_ai.conversation.id");
+    expect(q).toContain("traceloop.association.properties.thread_id");
+    expect(q).toContain("langgraph_checkpoint_ns");
+    expect(q).toContain(`state >= ${HISTORY_STATE_THRESHOLD}`);
+  });
+});
+
+describe("promptsFocusChip — chip label + approximate marker", () => {
+  it("returns a non-approximate label for same-span focuses", () => {
+    expect(promptsFocusChip("llm-rate-limit")).toEqual({
+      label: "Provider rate-limit",
+      approximate: false,
+    });
+    expect(promptsFocusChip("tool-token-spike")?.approximate).toBe(false);
+  });
+
+  it("returns an approximate marker for proxy cross-span focuses", () => {
+    expect(promptsFocusChip("vdb-topk-over-retrieval")?.approximate).toBe(true);
+    expect(promptsFocusChip("mem-history-growth")?.approximate).toBe(true);
+  });
+
+  it("returns a non-approximate label for exact cross-span focuses", () => {
+    expect(promptsFocusChip("tool-retry-storm")).toEqual({
+      label: "Tool retry storm",
+      approximate: false,
+    });
+    expect(promptsFocusChip("agent-n1-tool-calls")?.approximate).toBe(false);
+  });
+
+  it("is undefined for unknown / absent focus", () => {
+    expect(promptsFocusChip("nope")).toBeUndefined();
+    expect(promptsFocusChip(null)).toBeUndefined();
+    expect(promptsFocusChip(undefined)).toBeUndefined();
   });
 });

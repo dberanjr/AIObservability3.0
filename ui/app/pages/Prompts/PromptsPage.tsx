@@ -8,7 +8,7 @@ import {
   FilterIcon,
   XmarkIcon,
 } from "@dynatrace/strato-icons";
-import { promptsFocusPreset } from "./focus";
+import { promptsFocusChip } from "./focus";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
@@ -27,7 +27,9 @@ export const PromptsPage = () => {
   // useFocusParam union, which only covers architecture-layer keys). A known id
   // applies that pattern's predicate to the list; unknown/absent is a no-op.
   const focus = new URLSearchParams(search).get("focus");
-  const focusPreset = promptsFocusPreset(focus);
+  // Chip label for ANY known focus — same-span (PP-3) OR cross-span (PP-4).
+  // `approximate` adds the "≈ approximate" marker where the signal is a proxy.
+  const focusChip = promptsFocusChip(focus);
   // Remove the `?focus` param (drops the predicate and the chip), keeping every
   // other search param (timeframe, global filter, sidebar pf_*) intact.
   const clearFocus = useCallback(() => {
@@ -214,7 +216,7 @@ export const PromptsPage = () => {
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
         {firstError && <ErrorBanner error={firstError} />}
-        {focusPreset && (
+        {focusChip && (
           <Flex alignItems="center" gap={8}>
             <span
               style={{
@@ -229,14 +231,26 @@ export const PromptsPage = () => {
                 fontSize: 11.5,
                 color: "var(--text)",
                 whiteSpace: "nowrap",
-                maxWidth: 360,
+                maxWidth: 420,
               }}
             >
               <span style={{ color: "var(--text-2)" }}>Filtered:</span>
-              <span style={{ fontWeight: 600 }}>{focusPreset.label}</span>
+              <span style={{ fontWeight: 600 }}>{focusChip.label}</span>
+              {focusChip.approximate && (
+                <span
+                  title="Approximate: the pattern's exact signal isn't emitted on this tenant, so the closest defensible proxy is used."
+                  style={{
+                    color: "var(--text-3)",
+                    fontStyle: "italic",
+                    cursor: "help",
+                  }}
+                >
+                  ≈ approximate
+                </span>
+              )}
               <button
                 type="button"
-                aria-label={`Remove ${focusPreset.label} filter`}
+                aria-label={`Remove ${focusChip.label} filter`}
                 title="Clear filter"
                 onClick={clearFocus}
                 style={{

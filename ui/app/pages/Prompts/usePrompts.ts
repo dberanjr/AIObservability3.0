@@ -15,6 +15,8 @@ import {
 import { canonicalizeModel } from "../../detection/attributes";
 import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
+import { injectTraceScope } from "../../scope/queries";
+import { useFocusTraceScope } from "./useFocusTraceScope";
 
 /** True when `val` satisfies a numeric range filter (>, <, between). */
 const matchRange = (val: number, r?: LatencyFilter): boolean => {
@@ -194,6 +196,17 @@ export const usePrompts = (
   const canQuery = canQueryScope(resolution);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // CROSS-SPAN focus (PP-4): tool-retry-storm / agent-n1-tool-calls /
+  // vdb-topk-over-retrieval / mem-history-growth define their pattern on the
+  // tool/state span, not the LLM/prompt span this page reads. Resolve the
+  // matching trace.ids and scope the list to those traces (injectTraceScope).
+  // Same-span focuses (the LLM ones + tool-token-spike) leave this inert and
+  // use the synchronous predicate path in buildPromptsListQuery.
+  const focusScope = useFocusTraceScope(focus);
+  // While a cross-span focus is resolving its trace.ids, gate the list query:
+  // firing it before resolution would scope to a stale/empty id set.
+  const focusGated = focusScope.active && focusScope.isResolving;
+
   const refetch = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
@@ -216,22 +229,32 @@ export const usePrompts = (
     temperature: filter.temperature,
   };
   const query = useMemo(
-    () =>
-      canQuery
-        ? buildPromptsListQuery(
-            resolution.serviceIds,
-            scope.timeframe,
-            filters,
-            sidebar,
-            focus,
-          ) + ` /* r${refreshKey} */`
-        : "",
+    () => {
+      if (!canQuery) return "";
+      const base = buildPromptsListQuery(
+        resolution.serviceIds,
+        scope.timeframe,
+        filters,
+        sidebar,
+        focus,
+      );
+      // For a cross-span focus, scope the list to the resolved trace.ids. An
+      // empty array injects the no-match sentinel so the list renders empty
+      // (the correct result when the pattern matched no traces). Inactive ⇒
+      // base query unchanged.
+      const scoped = focusScope.active
+        ? injectTraceScope(base, focusScope.traceIds)
+        : base;
+      return scoped + ` /* r${refreshKey} */`;
+    },
     [
       canQuery,
       resolution.serviceIds,
       scope.timeframe,
       refreshKey,
       focus,
+      focusScope.active,
+      focusScope.traceIds,
       filter.services?.join(","),
       filter.kinds?.join(","),
       filter.search,
@@ -252,7 +275,11 @@ export const usePrompts = (
   );
 
   const { data, isLoading, error } = useScopedDql<PromptRecord>(query, {
-    enabled: canQuery,
+    // Don't fire the list until a cross-span focus has resolved its trace.ids
+    // (firing early would scope to a stale/empty set). The global attribute
+    // filter still applies and ANDs with the focus scope — both inject a
+    // `| filter in(trace.id, …)` and a span must satisfy every one.
+    enabled: canQuery && !focusGated,
     staleTime: 60_000,
   });
 
@@ -429,8 +456,10 @@ export const usePrompts = (
       },
       hasContent,
       hasEval,
-      isLoading: resolution.isLoading || isLoading,
-      error: error ?? undefined,
+      // Surface the cross-span focus resolution as loading too, so the table
+      // shows its spinner (not an empty state) while the trace.ids resolve.
+      isLoading: resolution.isLoading || isLoading || focusGated,
+      error: (error ?? undefined) ?? focusScope.error,
       refetch,
     };
   }, [
@@ -440,6 +469,8 @@ export const usePrompts = (
     isLoading,
     error,
     resolution.isLoading,
+    focusGated,
+    focusScope.error,
     filter?.search,
     filter?.kinds?.join(","),
     filter?.services?.join(","),
