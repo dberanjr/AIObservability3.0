@@ -5,7 +5,7 @@
  * then measure their boxes (refs + ResizeObserver + fonts.ready) and draw the
  * connecting edges in an absolutely-positioned SVG behind them. Edge thickness
  * tracks live call volume; a dashed magenta arc is the reasoning-loop feedback
- * edge (llm → orchestrator). Hovering a node or edge spotlights its neighbours;
+ * edge (llm → agent). Hovering a node or edge spotlights its neighbours;
  * a lens spotlights its contributing path. Flowing packets + dash drift are
  * decorative and motion-gated in CSS.
  */
@@ -243,7 +243,7 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
       }
     });
 
-    // ── loop edge (always anchors llm → orchestrator) ──────
+    // ── loop edge (always anchors llm → agent) ──────
     const a = R[LOOP.from];
     const b2 = R[LOOP.to];
     if (a && b2) {
@@ -323,11 +323,11 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
           k === "orchestrator" ? (
             <div className="am-row" key={k}>
               {/* The orchestrator tier is split into one node per framework. The
-                  whole row registers as nodeEls["orchestrator"] so ALL existing
-                  orchestrator edges (gateway→orchestrator, orchestrator→agent,
-                  llm→orchestrator loop) still anchor to it as a group. It always
-                  renders a measurable element (a tile during load, a fallback
-                  when empty) so edges never break. */}
+                  whole row registers as nodeEls["orchestrator"] so the orchestrator
+                  edges (gateway→orchestrator, orchestrator→agent) still anchor to it
+                  as a group. (The reasoning loop now anchors llm→agent, not here.)
+                  It always renders a measurable element (a tile during load, a
+                  fallback when empty) so edges never break. */}
               <div
                 className="am-fw-row"
                 ref={(el) => {

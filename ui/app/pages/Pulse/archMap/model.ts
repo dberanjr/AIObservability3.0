@@ -10,7 +10,7 @@
  *
  * Canonical flow (matches ai-layer-patterns stackPosition):
  *   client → gateway → orchestrator → agent, then the leaf row tools / llm /
- *   vector / memory. A dashed magenta feedback edge runs llm → orchestrator.
+ *   vector / memory. A dashed magenta feedback edge runs llm → agent.
  */
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import { layerByKey } from "../../../data/ai-layer-patterns";
@@ -195,8 +195,12 @@ export const EDGES: ArchEdge[] = [
   { from: "llm", to: "memory", baseW: 0.22 },
 ];
 
-/** The feedback / reasoning-loop edge (dashed, magenta) — llm back to orchestrator. */
-export const LOOP = { from: "llm" as LayerKey, to: "orchestrator" as LayerKey };
+/**
+ * The feedback / reasoning-loop edge (dashed, magenta) — llm back to the agent.
+ * Anchored to the agent tier (the ReAct-style reasoning cycle is the agent
+ * re-invoking the LLM); the agent tile also carries the folded-in workflow spans.
+ */
+export const LOOP = { from: "llm" as LayerKey, to: "agent" as LayerKey };
 
 export const edgeKey = (from: LayerKey, to: LayerKey): string => `${from}-${to}`;
 
