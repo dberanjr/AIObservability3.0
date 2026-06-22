@@ -231,6 +231,13 @@ export const ARCH_MAP_CSS = `
 .am-cta { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; }
 .am-cta:hover { border-color: var(--text-4); background: var(--surface-2); }
 .am-cta:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.am-pattern { display: flex; flex-direction: column; gap: 2px; }
+.am-pattern.is-disabled { opacity: .5; }
+.am-pattern-tag { font-size: 9px; color: var(--text-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+.am-pattern-drills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.am-drill { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--blue); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; }
+.am-drill:hover { border-color: var(--blue); background: var(--surface-2); }
+.am-drill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .am-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: var(--surface-3); padding: 0 4px; border-radius: 4px; }
 
 .am-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -46%); width: 460px; max-width: 92vw; max-height: 86vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; z-index: 42; }

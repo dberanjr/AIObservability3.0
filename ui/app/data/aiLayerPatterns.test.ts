@@ -4,6 +4,8 @@ import {
   layerRows,
   layerByKey,
   patternStatus,
+  patternDisabledReason,
+  drillRoute,
   type LayerKey,
 } from "./ai-layer-patterns";
 import { USE_CASE_LENSES } from "../pages/Pulse/architectureLenses";
@@ -92,6 +94,17 @@ describe("problem-pattern drill targets", () => {
         expect(d.label.length, p.title).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("drillRoute maps a drill tab to its destination pathname", () => {
+    expect(drillRoute({ tab: "prompts", focus: "x", label: "X" })).toBe("/prompts");
+    expect(drillRoute({ tab: "agents", focus: "y", label: "Y" })).toBe("/agents");
+  });
+
+  it("patternDisabledReason explains why non-detected patterns are not clickable", () => {
+    expect(patternDisabledReason("detected")).toBeUndefined();
+    expect(patternDisabledReason("reference")).toMatch(/reference only/i);
+    expect(patternDisabledReason("needs-enrichment")).toMatch(/gen_ai\.evaluation/);
   });
 
   it("encodes the expected detected-pattern focus ids from the catalog", () => {

@@ -5,7 +5,12 @@
  * it observable, and a drill-out CTA to the owning tab.
  */
 import React from "react";
-import { layerByKey } from "../../../data/ai-layer-patterns";
+import {
+  drillRoute,
+  layerByKey,
+  patternDisabledReason,
+  patternStatus,
+} from "../../../data/ai-layer-patterns";
 import { fmtCount, fmtMs, fmtTokens, fmtUSDCompact } from "../../../data/format";
 import { statusColor } from "./tokens";
 import { Spark } from "./Spark";
@@ -167,25 +172,42 @@ export const NodeDrawer = ({ meta, view, tierSeries, onClose, onDrill }: Props) 
               <div className="am-dsection">
                 <div className="am-dsection-h">Problem patterns at this tier</div>
                 <div className="am-contrib">
-                  {layer.patterns.map((p) => (
-                    <div key={p.title} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span className="am-contrib-name">{p.title}</span>
-                        <span
-                          style={{
-                            fontSize: 9,
-                            color: "var(--text-3)",
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
-                            padding: "0 5px",
-                          }}
-                        >
-                          {TIER_TAG[p.tier]}
-                        </span>
+                  {layer.patterns.map((p) => {
+                    const status = patternStatus(p.tier);
+                    const detected = status === "detected" && p.drills.length > 0;
+                    const disabledReason = detected ? undefined : patternDisabledReason(status);
+                    return (
+                      <div
+                        key={p.title}
+                        className={`am-pattern${detected ? "" : " is-disabled"}`}
+                        title={disabledReason}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span className="am-contrib-name">{p.title}</span>
+                          <span className="am-pattern-tag">{TIER_TAG[p.tier]}</span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.4 }}>{p.detail}</div>
+                        {detected && (
+                          <div className="am-pattern-drills">
+                            {p.drills.map((d) => (
+                              <button
+                                key={`${d.tab}:${d.focus}:${d.label}`}
+                                type="button"
+                                className="am-drill"
+                                aria-label={`${p.title} — ${d.label}`}
+                                onClick={() => {
+                                  onClose();
+                                  onDrill(drillRoute(d), d.focus);
+                                }}
+                              >
+                                ↗ {d.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.4 }}>{p.detail}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

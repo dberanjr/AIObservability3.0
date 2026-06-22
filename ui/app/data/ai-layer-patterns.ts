@@ -50,6 +50,18 @@ export const patternStatus = (tier: PatternTier): PatternStatus =>
   tier === "live" ? "detected" : tier === "card" ? "reference" : "needs-enrichment";
 
 /**
+ * "Why not clickable" tooltip for a non-detected pattern. `detected` patterns
+ * are actionable (drill links) and have no disabled-reason, so this returns
+ * undefined for them.
+ */
+export const patternDisabledReason = (status: PatternStatus): string | undefined =>
+  status === "reference"
+    ? "Not derivable from spans — reference only"
+    : status === "needs-enrichment"
+      ? "Needs evaluation enrichment (emit gen_ai.evaluation.*)"
+      : undefined;
+
+/**
  * A clickable drill target for a detected pattern: open a destination tab with
  * `?focus=<focus>`, which the tab interprets as a page-local query preset.
  * Empty for non-detected patterns.
@@ -60,6 +72,9 @@ export interface PatternDrill {
   focus: string;
   label: string;
 }
+
+/** Destination pathname for a drill (the tab route the drawer navigates to). */
+export const drillRoute = (drill: PatternDrill): string => `/${drill.tab}`;
 
 export interface LayerPattern {
   title: string;
