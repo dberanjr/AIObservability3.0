@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
+import { dqlTimeArg, dqlEscape, scopeFilterClause, globalFilterClauses, logicalErrorField, LOGICAL_ERROR_EXPR, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -77,4 +77,59 @@ ${globalFilterClauses(filters)}
     }
 | sort tokens desc
 | limit 1000
+`.trim();
+
+/**
+ * OTel-flavoured logical-error markers, mirroring the `has_*` fields summed in
+ * buildAIServicesQuery (gen_ai.error.type, guardrail/moderation, refusal,
+ * truncation, content_filter). Folded into a single boolean for `countIf` so
+ * the detail query reports the same logical-error population the services
+ * catalog does. These markers are often zero on this tenant; finish_reasons
+ * does the load-bearing work.
+ */
+const OTEL_LOGICAL_ERROR_EXPR = `(
+    isNotNull(gen_ai.error.type)
+    or isNotNull(gen_ai.guardrail.action)
+    or isNotNull(gen_ai.moderation.action)
+    or isNotNull(gen_ai.response.refusal_reason)
+    or contains(toString(gen_ai.response.finish_reasons), "refusal")
+    or contains(toString(gen_ai.response.finish_reasons), "max_tokens")
+    or contains(toString(gen_ai.response.finish_reasons), "content_filter")
+  )`;
+
+/**
+ * Golden-signal + token metrics for ONE service×model pair, powering the
+ * heatmap-cell detail modal. The pair is identified by the SAME fields the
+ * heatmap groups by — `entityName(dt.entity.service)` and
+ * `gen_ai.request.model` — so the cell the user clicked maps to exactly this
+ * row. Values are escaped via dqlEscape. `errors` counts the load-bearing
+ * logical-error rule (shared with buildAIServicesQuery's `is_error`);
+ * `logical_errors` counts the OTel-marker population.
+ */
+export const buildServiceModelDetailQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  service: string,
+  model: string,
+  filters?: GlobalFilters,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
+| filter isNotNull(gen_ai.request.model)
+| filter gen_ai.request.model == "${dqlEscape(model)}"
+| filter entityName(dt.entity.service) == "${dqlEscape(service)}"
+| dedup {span.id}
+| fieldsAdd
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
+| summarize
+    requests = count(),
+    in_tok = sum(in_tok),
+    out_tok = sum(out_tok),
+    errors = countIf(${LOGICAL_ERROR_EXPR}),
+    logical_errors = countIf(${OTEL_LOGICAL_ERROR_EXPR}),
+    p50_ns = percentile(duration, 50),
+    p90_ns = percentile(duration, 90),
+    p95_ns = percentile(duration, 95)
 `.trim();
