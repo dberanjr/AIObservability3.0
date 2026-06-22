@@ -1,6 +1,8 @@
 import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, mcpNotLifecycleClause, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
+export type { CandidateTrace, RepTrace } from "./representativeTraces";
+
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
 /**
@@ -330,6 +332,57 @@ ${scopeFilterClause(serviceIds)}
 | fieldsAdd trace_id = toString(trace.id), start_ms = toLong(ts) / 1000000
 | fields trace_id, start_ms
 `.trim();
+
+/**
+ * Candidate traces for ONE agent+tool — the pool the "Representative traces"
+ * list (Agents-tab tool drilldown) selects an interesting <=10 subset from.
+ *
+ * Scoping mirrors buildAgentToolDetailQuery EXACTLY so the candidate population
+ * matches the tool row's call counts: filter to the agent's tool spans (strict
+ * -> gen_ai.tool.name == toolName; discovered -> span.name == toolName with the
+ * same internal/client + non-LLM + non-MCP-lifecycle exclusions), then collapse
+ * to one row per trace.
+ *
+ * Per trace we surface: dur_ms (the slowest tool-span duration in the trace),
+ * is_error (any errored tool span -> the trace is interesting), start_ms (epoch
+ * ms, for recency + the trace-spans window) and calls. trace.id is a uid column
+ * so it's stringified via toString(). Tool spans carry no tokens/model, so
+ * selection downstream is latency/error/recency-driven only.
+ */
+export const buildAgentToolTracesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  agentName: string,
+  toolName: string,
+  strict: boolean,
+): string => {
+  const toolKey = strict ? "gen_ai.tool.name" : "span.name";
+  const modeFilter = strict
+    ? `| filter isNotNull(gen_ai.tool.name)`
+    : `| filter span.kind == "internal" or span.kind == "client"
+| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
+| filter ${mcpNotLifecycleClause()}`;
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name)
+| filter gen_ai.agent.name == "${dqlEscape(agentName)}"
+${modeFilter}
+| filter ${toolKey} == "${dqlEscape(toolName)}"
+| dedup {span.id}
+| fieldsAdd is_err_span = if(isNotNull(exception.type) or span.status_code == "error", 1, else: 0)
+| summarize
+    dur_ms = max(duration) / 1000000,
+    is_error = if(countIf(is_err_span > 0) > 0, true, else: false),
+    start_ms = toLong(min(start_time)) / 1000000,
+    calls = count(),
+    by: { trace.id }
+| fieldsAdd trace_id = toString(trace.id)
+| fields trace_id, start_ms, dur_ms, is_error, calls
+| sort start_ms desc
+| limit 200
+`.trim();
+};
 
 /** Per-agent invocations timeseries for the hero chart. */
 export const buildInvocationsSeriesQuery = (

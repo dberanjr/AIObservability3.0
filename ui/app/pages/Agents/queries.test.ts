@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAgentLatestTraceQuery,
   buildAgentsQuery,
+  buildAgentToolTracesQuery,
   buildLatencyDecompositionQuery,
 } from "./queries";
 import type { Timeframe } from "../../scope/types";
@@ -83,5 +84,51 @@ describe("buildAgentLatestTraceQuery — trace-topology seed", () => {
   it("summarizes the latest start_time and takes a single trace", () => {
     expect(q).toContain("ts = max(start_time)");
     expect(q).toContain("| limit 1");
+  });
+});
+
+describe("buildAgentToolTracesQuery — candidate traces per agent+tool", () => {
+  it("scopes to the agent name like buildAgentToolDetailQuery", () => {
+    const q = buildAgentToolTracesQuery(null, TF, "my-agent", "my_tool", false);
+    expect(q).toContain("isNotNull(gen_ai.agent.name)");
+    expect(q).toContain('gen_ai.agent.name == "my-agent"');
+  });
+
+  it("strict mode matches the tool on gen_ai.tool.name", () => {
+    const q = buildAgentToolTracesQuery(null, TF, "my-agent", "my_tool", true);
+    expect(q).toContain("isNotNull(gen_ai.tool.name)");
+    expect(q).toContain('gen_ai.tool.name == "my_tool"');
+  });
+
+  it("discovered mode matches the tool on span.name with the same exclusions", () => {
+    const q = buildAgentToolTracesQuery(null, TF, "my-agent", "my_tool", false);
+    expect(q).toContain('span.kind == "internal" or span.kind == "client"');
+    expect(q).toContain(
+      "isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)",
+    );
+    expect(q).toContain("isNull(mcp.method.name) or");
+    expect(q).toContain('span.name == "my_tool"');
+  });
+
+  it("summarizes per trace with named fields", () => {
+    const q = buildAgentToolTracesQuery(null, TF, "my-agent", "my_tool", false);
+    expect(q).toContain("by: { trace.id }");
+    expect(q).toContain("dur_ms = max(duration) / 1000000");
+    expect(q).toContain("start_ms = toLong(min(start_time)) / 1000000");
+    expect(q).toContain("calls = count()");
+    // is_error: any errored span in the trace makes the trace errored.
+    expect(q).toContain("is_error = if(countIf(");
+  });
+
+  it("stringifies trace.id and projects the candidate fields", () => {
+    const q = buildAgentToolTracesQuery(null, TF, "my-agent", "my_tool", false);
+    expect(q).toContain("trace_id = toString(trace.id)");
+    expect(q).toContain("fields trace_id, start_ms, dur_ms, is_error, calls");
+  });
+
+  it("sorts by recency and caps the candidate pool at 200", () => {
+    const q = buildAgentToolTracesQuery(null, TF, "my-agent", "my_tool", false);
+    expect(q).toContain("sort start_ms desc");
+    expect(q).toContain("| limit 200");
   });
 });
