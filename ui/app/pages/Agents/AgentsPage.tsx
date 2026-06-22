@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { XmarkIcon } from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import {
@@ -24,9 +26,13 @@ import { OrchestrationSection } from "./OrchestrationSection";
 import { UpstreamServicesTable } from "./UpstreamServicesTable";
 import { useAgentEval } from "./useAgentEval";
 import { useAgents } from "./useAgents";
+import { useAgentLoops } from "./useAgentLoops";
 import { useDegradedAgents } from "./useDegradedAgents";
+import { useHighFrequencyAgents } from "./useHighFrequencyAgents";
 import { useOrchestrationNodes } from "./useOrchestrationNodes";
 import { useUpstreamServices } from "./useUpstreamServices";
+import { agentsFocusPreset, applyAgentsFocus, type FocusContext } from "./focus";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 
 const SLOW_VIEW_P90_MS = 2000;
 
@@ -37,6 +43,57 @@ const AgentsPageBody = () => {
   const upstream = useUpstreamServices();
   const degraded = useDegradedAgents(agentsResult.all);
   const orchestrationNodes = useOrchestrationNodes();
+  const highFreqAgents = useHighFrequencyAgents();
+  const agentLoops = useAgentLoops();
+
+  // Pulse problem-pattern drill-down (PP-5): the RAW `?focus` id (not the typed
+  // useFocusParam union, which only covers architecture-layer keys). A known id
+  // filters/sorts the per-agent rows to that pattern; unknown/absent is a no-op.
+  const { search, pathname } = useLocation();
+  const navigate = useNavigate();
+  const focus = new URLSearchParams(search).get("focus");
+  const focusPreset = agentsFocusPreset(focus);
+  // Remove the `?focus` param (drops the row filter + the chip), keeping every
+  // other search param (timeframe, global filter, …) intact.
+  const clearFocus = useCallback(() => {
+    const next = new URLSearchParams(search);
+    next.delete("focus");
+    const qs = next.toString();
+    navigate({ pathname, search: qs ? `?${qs}` : "" }, { replace: true });
+  }, [search, pathname, navigate]);
+
+  // The shared toolbar's global Reset must also clear the `?focus` drill-down,
+  // mirroring the Prompts/Explorer reset-handler registration. Keep the latest
+  // clearFocus in a ref so the once-registered handler always clears the
+  // CURRENT focus (no stale closure over an old search string).
+  const { registerResetHandler } = useGlobalFilters();
+  const clearFocusRef = useRef(clearFocus);
+  clearFocusRef.current = clearFocus;
+  useEffect(
+    () => registerResetHandler(() => clearFocusRef.current()),
+    [registerResetHandler],
+  );
+
+  // Auxiliary fleet signals the focus presets reason about (N+1 set + per-agent
+  // loop/state context), assembled once.
+  const focusCtx = useMemo<FocusContext>(
+    () => ({
+      highFreqAgents,
+      loopByAgent: new Map(
+        agentLoops.rows
+          .filter((r) => !r.unattributed)
+          .map((r) => [
+            r.agent,
+            {
+              loopRatePct: r.loopRatePct,
+              runs: r.runs,
+              avgNodesPerRun: r.avgNodesPerRun,
+            },
+          ]),
+      ),
+    }),
+    [highFreqAgents, agentLoops.rows],
+  );
 
   const [view, setView] = useState<AgentView>("all");
   const [operation, setOperation] = useState<AgentOperation>("all");
@@ -56,8 +113,13 @@ const AgentsPageBody = () => {
     } else if (view === "used") {
       rows = [...rows].sort((a, b) => b.invocations - a.invocations).slice(0, 50);
     }
+    // Pulse drill-down: narrow/rank to the focused problem pattern. ANDs with
+    // the View / Operation selectors above. No-op when no known `?focus` is set.
+    // (The table re-sorts by its own column header, but the row SET — the
+    // filter — is what the focus contributes.)
+    rows = applyAgentsFocus(focus, rows, focusCtx);
     return rows;
-  }, [agentsResult.substantive, view, operation]);
+  }, [agentsResult.substantive, view, operation, focus, focusCtx]);
 
 
   // Suggested thresholds: fleet P90 × 1.5 / P99 × 1.5 / 5% errors / $0.05 / invocation.
@@ -94,6 +156,52 @@ const AgentsPageBody = () => {
         style={{ padding: "18px 20px 80px" }}
       >
         {firstError && <ErrorBanner error={firstError} />}
+        {focusPreset && (
+          <Flex alignItems="center" gap={8}>
+            <span
+              title={
+                focusPreset.approximate
+                  ? "Approximate: this pattern's exact signal isn't emitted at the agent grain on this tenant — the closest defensible per-agent filter is applied."
+                  : undefined
+              }
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "3px 8px",
+                borderRadius: 6,
+                background:
+                  "var(--blue-surface, color-mix(in oklab, var(--blue) 12%, transparent))",
+                border:
+                  "1px solid color-mix(in oklab, var(--blue) 35%, transparent)",
+                fontSize: 11.5,
+                color: "var(--text)",
+                whiteSpace: "nowrap",
+                maxWidth: 380,
+              }}
+            >
+              <span style={{ color: "var(--text-2)" }}>Filtered:</span>
+              <span style={{ fontWeight: 600 }}>{focusPreset.label}</span>
+              {focusPreset.approximate && (
+                <span style={{ color: "var(--text-3)", fontSize: 10.5 }}>≈</span>
+              )}
+              <button
+                type="button"
+                aria-label={`Remove ${focusPreset.label} filter`}
+                title="Clear filter"
+                onClick={clearFocus}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  color: "var(--text-3)",
+                }}
+              >
+                <XmarkIcon size={12} />
+              </button>
+            </span>
+          </Flex>
+        )}
         {hasActive && <SLAOverrideBanner onEdit={() => setSlaOpen(true)} />}
 
         <AgentsActionsRow
