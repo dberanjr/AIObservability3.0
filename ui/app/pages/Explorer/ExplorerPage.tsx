@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { useSearchParams } from "react-router-dom";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
@@ -82,6 +83,16 @@ export const ExplorerPage = () => {
       );
     },
     [setSearchParams],
+  );
+
+  // The Explorer sidebar filter lives in URL params (q/providers/frameworks/
+  // models), which the shared toolbar's Reset can't reach on its own. Register
+  // a handler so global Reset clears ONLY those keys — applyFilterToParams({})
+  // removes exactly the four filter keys and preserves timeframe/other state.
+  const { registerResetHandler } = useGlobalFilters();
+  useEffect(
+    () => registerResetHandler(() => setFilter({})),
+    [registerResetHandler, setFilter],
   );
 
   const aiServices = useAIServices(filter);

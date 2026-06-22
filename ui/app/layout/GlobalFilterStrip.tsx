@@ -3,9 +3,10 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { SegmentSelector, useSegments } from "@dynatrace/strato-components/filters";
-import { ResetIcon } from "@dynatrace/strato-icons";
+import { ResetIcon, RefreshIcon } from "@dynatrace/strato-icons";
 import { filterSegmentsClient } from "@dynatrace-sdk/client-filter-segment-management";
-import { useEffect, useState } from "react";
+import { _UseDqlQueryClientContext } from "@dynatrace-sdk/react-hooks";
+import { useContext, useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { useGlobalFilters } from "../scope/GlobalFilterContext";
 import { useTraceScope } from "../scope/TraceScopeContext";
@@ -148,15 +149,26 @@ const TraceScopeIndicator = () => {
 };
 
 export const GlobalFilterStrip = () => {
-  const { scope, reset } = useScope();
-  const { hasFilters, clearAll } = useGlobalFilters();
-
-  const isDefaultScope =
-    scope.timeframe.from === "now()-24h" && !scope.timeframe.to;
+  const { reset } = useScope();
+  const { clearAll, runResetHandlers } = useGlobalFilters();
+  // useDql runs all page queries on this client (the SDK's default client,
+  // exposed via _UseDqlQueryClientContext — the app installs no QueryClientProvider
+  // of its own). Invalidating it forces every active query to refetch.
+  const queryClient = useContext(_UseDqlQueryClientContext);
+  const [isReloading, setIsReloading] = useState(false);
 
   const resetAll = () => {
     reset();
     clearAll();
+    // Clear page-local filters (e.g. Explorer's URL-param sidebar facets).
+    runResetHandlers();
+  };
+
+  const reload = () => {
+    setIsReloading(true);
+    void queryClient
+      .invalidateQueries()
+      .finally(() => setIsReloading(false));
   };
 
   return (
@@ -201,17 +213,32 @@ export const GlobalFilterStrip = () => {
 
         <Flex flexGrow={1} style={{ minWidth: 0 }} />
 
-        <Button
-          variant="default"
-          onClick={resetAll}
-          disabled={isDefaultScope && !hasFilters}
-          aria-label="Reset filters"
-        >
-          <Button.Prefix>
-            <ResetIcon />
-          </Button.Prefix>
-          Reset
-        </Button>
+        <Flex gap={8} alignItems="center">
+          <Button
+            variant="default"
+            onClick={reload}
+            disabled={isReloading}
+            aria-label="Reload data"
+          >
+            <Button.Prefix>
+              <RefreshIcon />
+            </Button.Prefix>
+            Reload
+          </Button>
+          {/* Always enabled: page-local filters (e.g. Explorer's URL-param
+              sidebar) can be active even when scope is default and no global
+              attribute filter is set, and they aren't reflected in hasFilters. */}
+          <Button
+            variant="default"
+            onClick={resetAll}
+            aria-label="Reset filters"
+          >
+            <Button.Prefix>
+              <ResetIcon />
+            </Button.Prefix>
+            Reset
+          </Button>
+        </Flex>
       </Flex>
       <ResolutionStatusLine />
     </Flex>

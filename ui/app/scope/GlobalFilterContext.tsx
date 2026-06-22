@@ -1,6 +1,7 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useRef } from "react";
 import { usePersistedState } from "../state/usePersistedState";
 import { hasActiveFilter, type GlobalFilters } from "./queries";
+import { createResetHandlerRegistry } from "./resetHandlerRegistry";
 
 // `FilterCondition` / `GlobalFilters` are defined once in `queries.ts` (the DQL
 // resolver owns the shape); re-export the condition type for existing importers
@@ -16,6 +17,15 @@ interface GlobalFilterContextValue {
   removeCondition: (attribute: string) => void;
   clearAll: () => void;
   hasFilters: boolean;
+  /**
+   * Register a side-effect to run when the global Reset is invoked. Lets pages
+   * with their own local (e.g. URL-param) filter state clear themselves on
+   * Reset without the shared toolbar needing to know about them. Returns an
+   * unregister function — call it on unmount.
+   */
+  registerResetHandler: (fn: () => void) => () => void;
+  /** Invoke every registered reset handler. Called by the toolbar's Reset. */
+  runResetHandlers: () => void;
 }
 
 const GlobalFilterContext = createContext<GlobalFilterContextValue | undefined>(
@@ -61,6 +71,16 @@ export const GlobalFilterProvider = ({
 
   const clearAll = () => setFilters(EMPTY);
 
+  // Reset-handler registry. Built once and held in a ref (stable across
+  // renders) so register/run never change identity and effects that register a
+  // handler don't re-run on every parent render.
+  const registryRef = useRef<ReturnType<typeof createResetHandlerRegistry>>();
+  if (!registryRef.current) {
+    registryRef.current = createResetHandlerRegistry();
+  }
+  const { register: registerResetHandler, run: runResetHandlers } =
+    registryRef.current;
+
   const normalized: GlobalFilters = { conditions };
   const hasFilters = hasActiveFilter(normalized);
 
@@ -73,6 +93,8 @@ export const GlobalFilterProvider = ({
         removeCondition,
         clearAll,
         hasFilters,
+        registerResetHandler,
+        runResetHandlers,
       }}
     >
       {children}
