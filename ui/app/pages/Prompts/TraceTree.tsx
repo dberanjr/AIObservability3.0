@@ -525,6 +525,7 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
         { label: "Service", value: span.service, type: "string" },
         { label: "Duration", value: span.durationMs, type: "duration" },
         { label: "Status", value: span.statusCode, type: "string" },
+        { label: "HTTP status", value: span.httpStatus, type: "number" },
         {
           label: "Request is root span",
           value: span.isRoot,
@@ -542,6 +543,7 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
         { label: "Operation", value: span.operation, type: "string" },
         { label: "Agent", value: span.agentName, type: "string" },
         { label: "Tool", value: span.toolName, type: "string" },
+        { label: "MCP method", value: span.mcpMethod, type: "string" },
         {
           label: "Input tokens",
           value: span.inTokens > 0 ? span.inTokens : null,
@@ -561,6 +563,12 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
         { label: "Entity name", value: span.tlEntity, type: "string" },
         { label: "Entity path", value: span.tlEntityPath, type: "string" },
         { label: "Span kind", value: span.tlKind, type: "string" },
+        { label: "LangGraph node", value: span.lgNode, type: "string" },
+        {
+          label: "LangGraph checkpoint",
+          value: span.lgCheckpoint,
+          type: "string",
+        },
       ]),
     },
     {
@@ -575,6 +583,7 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
     {
       title: "Error",
       rows: present([
+        { label: "Status message", value: span.statusMessage, type: "string" },
         { label: "Exception type", value: span.exceptionType, type: "string" },
         { label: "Exception message", value: span.exceptionMsg, type: "string" },
       ]),
@@ -591,9 +600,15 @@ const buildSections = (span: TraceSpan): AttrSectionData[] => {
   return sections.filter((s) => s.rows.length > 0);
 };
 
-// Sections expanded by default; the rest (Code attributes, Error, Identifiers)
-// start collapsed.
-const OPEN_BY_DEFAULT = new Set(["Core", "Gen AI", "Langchain"]);
+// Sections expanded by default. Core/Gen AI/Langchain are always open; the
+// Error section opens too when the span is errored so the failure detail (e.g.
+// the Status message / Pydantic validation error) is visible without hunting.
+// Pure — unit-testable without a React render.
+export const defaultOpenSections = (span: TraceSpan): Set<string> => {
+  const open = new Set(["Core", "Gen AI", "Langchain"]);
+  if (span.isError) open.add("Error");
+  return open;
+};
 
 const AttrSection = ({
   section,
@@ -679,6 +694,7 @@ const SpanAttributesPanel = ({
 }: SpanAttributesPanelProps) => {
   const [q, setQ] = useState("");
   const term = q.trim().toLowerCase();
+  const openByDefault = useMemo(() => defaultOpenSections(span), [span]);
   const sections = useMemo(() => {
     const all = buildSections(span);
     if (!term) return all;
@@ -767,7 +783,7 @@ const SpanAttributesPanel = ({
             <AttrSection
               key={`${s.title}:${term ? "q" : ""}`}
               section={s}
-              defaultOpen={!!term || OPEN_BY_DEFAULT.has(s.title)}
+              defaultOpen={!!term || openByDefault.has(s.title)}
             />
           ))
         )}

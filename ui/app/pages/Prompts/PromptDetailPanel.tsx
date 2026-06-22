@@ -351,6 +351,10 @@ export const PromptDetailPanel = ({
               spans={spans}
               isLoading={isLoading}
               highlight={searchTerm}
+              // Derive a generous height from the viewport so the waterfall and
+              // the span-attributes panel can scroll within the page (the panel
+              // otherwise clips at the 300px default and detail is unreachable).
+              maxHeight={Math.max(360, Math.round(window.innerHeight * 0.55))}
               selectedSpanId={selectedSpanId}
               onSelectSpan={setSelectedSpanId}
             />

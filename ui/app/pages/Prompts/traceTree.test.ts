@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { spanCategory, markErrors, type TreeNode } from "./TraceTree";
+import {
+  spanCategory,
+  markErrors,
+  defaultOpenSections,
+  type TreeNode,
+} from "./TraceTree";
 import type { TraceSpan } from "./useTraceSpans";
 
 const base: TraceSpan = {
@@ -97,6 +102,22 @@ const byId = (roots: TreeNode[]): Map<string, TreeNode> => {
   roots.forEach(walk);
   return m;
 };
+
+describe("defaultOpenSections — which attribute sections start expanded", () => {
+  it("opens Core / Gen AI / Langchain by default, but not Error", () => {
+    const open = defaultOpenSections(base);
+    expect(open.has("Core")).toBe(true);
+    expect(open.has("Gen AI")).toBe(true);
+    expect(open.has("Langchain")).toBe(true);
+    expect(open.has("Error")).toBe(false);
+  });
+
+  it("also opens the Error section when the span is errored", () => {
+    const open = defaultOpenSections({ ...base, isError: true });
+    expect(open.has("Error")).toBe(true);
+    expect(open.has("Core")).toBe(true);
+  });
+});
 
 describe("markErrors — error propagation up the tree", () => {
   it("flags an errored leaf and propagates hasErrorDescendant to ancestors", () => {
