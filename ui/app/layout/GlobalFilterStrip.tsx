@@ -9,6 +9,7 @@ import { _UseDqlQueryClientContext } from "@dynatrace-sdk/react-hooks";
 import { useContext, useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { useGlobalFilters } from "../scope/GlobalFilterContext";
+import { useTraceScope } from "../scope/TraceScopeContext";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
 import { SamplingSegmented } from "./SamplingSegmented";
 import { ScanLimitSegmented } from "./ScanLimitSegmented";
@@ -105,6 +106,50 @@ const SelectedSegmentNames = () => {
   );
 };
 
+/**
+ * Compact readout of the resolved CROSS-SPAN (agent/tool) trace scope. Renders
+ * ONLY when a trace-scoped condition is active — the direct subset
+ * (model/service/…) is exact + uncapped and shows no count. Reports how many
+ * traces the entity filter matched, a resolving / empty / error state, and an
+ * "approximate" note when the match set hit SAFE_TRACE_CAP.
+ */
+const TraceScopeIndicator = () => {
+  const { hasScopeConditions, isResolving, isTruncated, matchedCount, cap, error } =
+    useTraceScope();
+  if (!hasScopeConditions) return null;
+
+  let text: string;
+  let color = "var(--text-2)";
+  if (error) {
+    text = "entity filter failed — narrow it";
+    color = "var(--red, #c4314b)";
+  } else if (isResolving) {
+    text = "resolving matching traces…";
+  } else if (matchedCount === 0) {
+    text = "no matching traces";
+    color = "var(--amber, #ab6400)";
+  } else if (isTruncated) {
+    text = `approximate · first ${cap.toLocaleString()} traces`;
+    color = "var(--amber, #ab6400)";
+  } else {
+    const n = matchedCount.toLocaleString();
+    text = `scoped to ${n} trace${matchedCount === 1 ? "" : "s"}`;
+  }
+
+  return (
+    <Text
+      style={{ fontSize: 11, color, whiteSpace: "nowrap" }}
+      title={
+        isTruncated
+          ? `Too many traces match this agent/tool — only the first ${cap.toLocaleString()} are applied. Narrow the filter or shorten the timeframe.`
+          : undefined
+      }
+    >
+      {text}
+    </Text>
+  );
+};
+
 export const GlobalFilterStrip = () => {
   const { reset } = useScope();
   const { clearAll, runResetHandlers } = useGlobalFilters();
@@ -164,10 +209,13 @@ export const GlobalFilterStrip = () => {
         <LabeledField label="Filters">
           <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
             {/* Active conditions render as removable pills inside
-                GlobalAttributeFilter — that is the filter indicator. Direct
-                condition injection is exact + uncapped, so there is no
-                "N matching traces / approximate" count to show. */}
+                GlobalAttributeFilter. The direct subset (model/service/…) is
+                exact + uncapped, so no count is shown for it. The cross-span
+                entity subset (agent/tool) is resolved to trace.ids — the
+                TraceScopeIndicator shows that count (and an approximate note
+                when the match set hits the cap). */}
             <GlobalAttributeFilter />
+            <TraceScopeIndicator />
           </Flex>
         </LabeledField>
 

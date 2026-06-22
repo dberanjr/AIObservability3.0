@@ -10,7 +10,12 @@ import type { ResultRecord } from "@dynatrace-sdk/client-query";
 import { useScanLimit } from "./ScanLimitContext";
 import { useSampling } from "./SamplingContext";
 import { useGlobalFilters } from "./GlobalFilterContext";
-import { injectGlobalFilters } from "./queries";
+import { useTraceScope } from "./TraceScopeContext";
+import {
+  injectGlobalFilters,
+  injectTraceScope,
+  partitionConditions,
+} from "./queries";
 import { injectScanLimit } from "./dqlScanLimit";
 
 const SAMPLING_RE = /samplingRatio:\s*\d+/g;
@@ -75,27 +80,40 @@ export function useScopedDql<T = ResultRecord>(
   const { samplingRatio } = useSampling();
   const { segments } = useSegments();
   const { filters } = useGlobalFilters();
+  const { traceIds, hasScopeConditions, isResolving } = useTraceScope();
   const ignoreGlobalFilter = Boolean(options?.ignoreGlobalFilter);
   // A per-query override wins over the toolbar ratio (used by heavy background
   // estimates that can't run at full fidelity — see UseScopedDqlExtra).
   const effectiveSampling = options?.samplingRatioOverride ?? samplingRatio;
 
+  // Split the active conditions: the DIRECT subset (model/service/…) is injected
+  // per span; the SCOPE subset (agent/tool) is resolved to trace.ids by
+  // TraceScopeContext and injected as `in(trace.id, …)`.
+  const directConditions = useMemo(
+    () => partitionConditions(filters.conditions).direct,
+    [filters.conditions],
+  );
+
   const queryInput = useMemo<string | DqlQueryParams>(() => {
     // Sampling first (may inject samplingRatio, adding the comma the scan-limit
-    // injector keys on), then the scan limit, then the global trace scope.
+    // injector keys on), then the scan limit, then the hybrid global filter.
     const sampled = applySampling(query, effectiveSampling);
     const scanned = injectScanLimit(sampled, scanLimitGb);
-    // Apply the active global filter directly to every `fetch spans|logs` as
-    // `| filter in(toString(attr), array(...))` per condition (unless the caller
-    // opted out). This is uncapped and exact — no trace-id materialisation, so
-    // no DQL expression-limit crash on busy attributes. Trade-off: each
-    // condition must match on the page's OWN spans, so a multi-attribute filter
-    // whose attributes live on DIFFERENT span types (e.g. agent name on the
-    // agent span + model on the LLM span) won't co-match per span. Filters that
-    // share a span (model + service on the LLM span) work exactly.
-    const rewritten = ignoreGlobalFilter
-      ? scanned
-      : injectGlobalFilters(scanned, filters);
+    // HYBRID injection (unless the caller opted out):
+    //  - DIRECT subset → `| filter in(toString(attr), array(...))` on the
+    //    page's own spans. Uncapped and exact, no trace-id materialisation, so
+    //    no DQL expression-limit crash on busy attributes (model, service, …).
+    //  - SCOPE subset → `| filter in(trace.id, array(toUid(...)))` from the
+    //    resolved trace.ids, so a cross-span entity filter (agent/tool) reaches
+    //    pages built on OTHER span types (e.g. agent → Prompts LLM spans).
+    // Both AND together when both subsets are active.
+    let rewritten = scanned;
+    if (!ignoreGlobalFilter) {
+      rewritten = injectGlobalFilters(rewritten, { conditions: directConditions });
+      if (hasScopeConditions) {
+        rewritten = injectTraceScope(rewritten, traceIds);
+      }
+    }
     if (!rewritten) return rewritten;
     if (!segments || segments.length === 0) return rewritten;
     return {
@@ -110,12 +128,19 @@ export function useScopedDql<T = ResultRecord>(
     effectiveSampling,
     segments,
     ignoreGlobalFilter,
-    filters,
+    directConditions,
+    hasScopeConditions,
+    traceIds,
   ]);
 
-  // Direct injection is synchronous (no resolver round-trip), so page queries
-  // are never gated on the global filter — they fire already filtered.
-  const enabled = options?.enabled ?? true;
+  // The direct subset is synchronous (no resolver), so the common no-scope case
+  // is never gated. Only gate while a SCOPE condition is actively resolving its
+  // trace.ids — firing the page query before resolution would scope to the
+  // wrong (stale/empty) id set. `ignoreGlobalFilter` queries are never gated.
+  const callerEnabled = options?.enabled ?? true;
+  const enabled =
+    callerEnabled &&
+    !(!ignoreGlobalFilter && hasScopeConditions && isResolving);
 
   // `ignoreGlobalFilter` is an extra key useDql ignores; forward options as-is.
   return useDql<T>(queryInput, { ...options, enabled });

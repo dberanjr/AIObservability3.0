@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTraceScopeQuery,
   hasActiveFilter,
   injectGlobalFilters,
+  injectTraceScope,
   mcpNotLifecycleClause,
   MCP_LIFECYCLE_METHODS,
+  partitionConditions,
+  SAFE_TRACE_CAP,
+  TRACE_SCOPED_ATTRS,
   validConditions,
 } from "./queries";
 import type { GlobalFilters } from "./queries";
@@ -105,6 +110,132 @@ describe("injectGlobalFilters (direct condition injection)", () => {
       conditions: [{ attribute: "gen_ai.request.model", values: ["m1"] }],
     };
     expect(injectGlobalFilters(entity, f)).toBe(entity);
+  });
+});
+
+describe("TRACE_SCOPED_ATTRS", () => {
+  it("contains the low-volume cross-span entity attributes", () => {
+    expect(TRACE_SCOPED_ATTRS.has("gen_ai.agent.name")).toBe(true);
+    expect(TRACE_SCOPED_ATTRS.has("gen_ai.tool.name")).toBe(true);
+  });
+
+  it("deliberately excludes high-cardinality / same-span attributes", () => {
+    // These resolve to huge trace sets and live on the same span as the data
+    // pages query, so they go through DIRECT injection (uncapped, no crash).
+    expect(TRACE_SCOPED_ATTRS.has("gen_ai.request.model")).toBe(false);
+    expect(TRACE_SCOPED_ATTRS.has("dt.entity.service")).toBe(false);
+    expect(TRACE_SCOPED_ATTRS.has("gen_ai.provider.name")).toBe(false);
+    expect(TRACE_SCOPED_ATTRS.has("span.status_code")).toBe(false);
+  });
+});
+
+describe("SAFE_TRACE_CAP", () => {
+  it("is a finite cap with headroom below the DQL ~1000-expression limit", () => {
+    expect(Number.isFinite(SAFE_TRACE_CAP)).toBe(true);
+    expect(SAFE_TRACE_CAP).toBeGreaterThanOrEqual(600);
+    expect(SAFE_TRACE_CAP).toBeLessThanOrEqual(900);
+  });
+});
+
+describe("partitionConditions", () => {
+  it("routes agent/tool to scope and everything else to direct", () => {
+    const conditions = [
+      { attribute: "gen_ai.agent.name", values: ["a"] },
+      { attribute: "gen_ai.tool.name", values: ["t"] },
+      { attribute: "gen_ai.request.model", values: ["m"] },
+      { attribute: "dt.entity.service", values: ["s"] },
+      { attribute: "span.status_code", values: ["error"] },
+    ];
+    const { direct, scope } = partitionConditions(conditions);
+    expect(scope.map((c) => c.attribute).sort()).toEqual([
+      "gen_ai.agent.name",
+      "gen_ai.tool.name",
+    ]);
+    expect(direct.map((c) => c.attribute).sort()).toEqual([
+      "dt.entity.service",
+      "gen_ai.request.model",
+      "span.status_code",
+    ]);
+  });
+
+  it("drops malformed conditions from both partitions", () => {
+    const { direct, scope } = partitionConditions([
+      { attribute: "bad attr!", values: ["x"] },
+      { attribute: "gen_ai.request.model", values: [] },
+      { attribute: "gen_ai.agent.name", values: ["ok"] },
+    ]);
+    expect(scope).toHaveLength(1);
+    expect(scope[0].attribute).toBe("gen_ai.agent.name");
+    expect(direct).toHaveLength(0);
+  });
+
+  it("returns empty partitions for an empty / undefined input", () => {
+    expect(partitionConditions([])).toEqual({ direct: [], scope: [] });
+    expect(partitionConditions(undefined)).toEqual({ direct: [], scope: [] });
+  });
+});
+
+describe("buildTraceScopeQuery", () => {
+  const tf = { from: "now()-24h" };
+
+  it("emits a countIf + having per scope condition and AND-joins across conditions", () => {
+    const f: GlobalFilters = {
+      conditions: [
+        { attribute: "gen_ai.agent.name", values: ["a1", "a2"] },
+        { attribute: "gen_ai.tool.name", values: ["t1"] },
+      ],
+    };
+    const q = buildTraceScopeQuery(tf, f, SAFE_TRACE_CAP);
+    // Counter per condition, values OR within a condition.
+    expect(q).toContain(
+      'c0 = countIf(in(toString(gen_ai.agent.name), array("a1", "a2")))',
+    );
+    expect(q).toContain(
+      'c1 = countIf(in(toString(gen_ai.tool.name), array("t1")))',
+    );
+    // having ANDs the conditions across the trace.
+    expect(q).toContain("c0 > 0 and c1 > 0");
+    expect(q).toContain("by: { trace.id }");
+    expect(q).toContain("trace_id = toString(trace.id)");
+  });
+
+  it("runs at full fidelity and caps the result at cap+1 (truncation probe)", () => {
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.agent.name", values: ["a"] }],
+    };
+    const q = buildTraceScopeQuery(tf, f, SAFE_TRACE_CAP);
+    expect(q).toContain("samplingRatio: 1");
+    expect(q).toContain(`| limit ${SAFE_TRACE_CAP + 1}`);
+  });
+});
+
+describe("injectTraceScope", () => {
+  const SPANS = "fetch spans, samplingRatio: 1, from: now()-24h\n| summarize count()";
+
+  it("injects in(trace.id, array(toUid(...))) after the fetch", () => {
+    const out = injectTraceScope(SPANS, ["abc", "def"]);
+    expect(out).toContain(
+      '| filter in(trace.id, array(toUid("abc"), toUid("def")))',
+    );
+    expect(out.indexOf("in(trace.id")).toBeLessThan(out.indexOf("summarize"));
+  });
+
+  it("scopes a nested span fetch in a join too", () => {
+    const multi =
+      "fetch spans, from: now()-1h\n| join [\n    fetch spans, from: now()-1h\n    | fields trace.id\n  ], on: { trace.id }";
+    const out = injectTraceScope(multi, ["x"]);
+    expect(out.match(/\| filter in\(trace\.id, array\(toUid\("x"\)\)\)/g)).toHaveLength(2);
+  });
+
+  it("injects a no-match sentinel when the scope resolved to zero traces", () => {
+    const out = injectTraceScope(SPANS, []);
+    expect(out).toContain("in(trace.id, array(toUid(");
+    // A real trace never matches the all-zero id, so the page renders empty.
+    expect(out).toContain("00000000000000000000000000000000");
+  });
+
+  it("no-ops when traceIds is null (no scope conditions active)", () => {
+    expect(injectTraceScope(SPANS, null)).toBe(SPANS);
   });
 });
 

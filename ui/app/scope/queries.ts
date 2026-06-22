@@ -213,21 +213,85 @@ export const injectGlobalFilters = (
 };
 
 /* ------------------------------------------------------------------ *
- * Active-filter helpers
+ * HYBRID global filtering — per-attribute partition
  *
- * The global filter is applied via DIRECT per-span condition injection
- * (`injectGlobalFilters` above): every page query is filtered by the active
- * conditions on its own spans — uncapped and exact, with no trace-id
- * materialisation (so no DQL expression-limit crash on busy attributes).
+ * The global filter is applied two ways depending on the attribute, so that
+ * cross-span entity filters work again WITHOUT reintroducing the high-volume
+ * expression-limit crash:
  *
- * Trade-off: each condition must match on the page's OWN spans. A
- * multi-attribute filter whose attributes live on DIFFERENT span types (e.g.
- * agent name on the agent span + model on the LLM span) won't co-match per
- * span. Filters that share a span (model + service on the LLM span) work
- * exactly. The prior trace-id resolver handled the cross-span case but capped
- * the match set and crashed past DQL's 1000-expression limit on busy models —
- * which is the failure this change removes.
+ *  1. DIRECT injection (`injectGlobalFilters`) for the high-volume / same-span
+ *     attributes (model, service, provider, system, status, workflow, …).
+ *     Each condition is injected as `| filter in(toString(attr), array(...))`
+ *     on the page's own spans — uncapped and exact, with no trace-id
+ *     materialisation, so a busy model filter (10k+ traces) cannot crash.
+ *
+ *  2. TRACE-SCOPE injection (`buildTraceScopeQuery` + `injectTraceScope`) for
+ *     the low-volume cross-span ENTITY attributes in `TRACE_SCOPED_ATTRS`
+ *     (agent name, tool name). These live on a specific span type (the agent
+ *     span / the tool span) but must filter pages built on OTHER span types
+ *     (e.g. the Prompts page reads LLM spans, which carry no gen_ai.agent.name).
+ *     A resolver query finds the trace.ids where ANY span matches, and every
+ *     page query gets `| filter in(trace.id, array(toUid(...)))`. A specific
+ *     agent/tool resolves to FEW traces (bos-agcre-test ≈ 10), so the injected
+ *     id list stays far under DQL's ~1000-expression limit. The resolved set is
+ *     capped at SAFE_TRACE_CAP as a hard safety bound.
+ *
+ * Both paths AND together: "agent X + model Y" on the Prompts page injects the
+ * direct model filter on LLM spans AND scopes to agent X's trace.ids = LLM
+ * spans of model Y in traces where agent X ran. Correct cross-span semantics.
+ *
+ * Why model/service are NOT trace-scoped: they are high-cardinality and live on
+ * the same span the data pages query, so direct injection is both exact and
+ * crash-proof. Resolving them to trace.ids would reproduce the
+ * TOO_MANY_EXPRESSIONS_IN_QUERY failure that motivated this design.
  * ------------------------------------------------------------------ */
+
+/**
+ * Attributes routed to TRACE-SCOPE injection instead of direct per-span
+ * injection. Keep this to LOW-VOLUME, SPAN-SPECIFIC entity attributes that need
+ * cross-span coverage. Deliberately excludes high-cardinality / same-span
+ * attributes (model, service, provider, system, status, workflow) — those go
+ * through direct injection so they stay uncapped and never hit the DQL
+ * expression limit.
+ */
+export const TRACE_SCOPED_ATTRS = new Set<string>([
+  "gen_ai.agent.name",
+  "gen_ai.tool.name",
+]);
+
+/**
+ * Maximum number of resolved trace.ids injected per page query. Each id becomes
+ * one `toUid("…")` expression inside `array(...)`; DQL rejects queries past a
+ * ~1000-expression limit with TOO_MANY_EXPRESSIONS_IN_QUERY. 800 keeps ~200
+ * expressions of headroom while comfortably covering any realistic single
+ * agent/tool (which resolve to a handful to low-hundreds of traces). The
+ * resolver requests cap+1 so the UI can flag truncation. Validated on ualpre: a
+ * real agent (bos-agcre-test) resolved to ~10 traces, and injecting that id
+ * list into the Prompts query returned the agent's prompts with no crash.
+ */
+export const SAFE_TRACE_CAP = 800;
+
+/**
+ * Split active conditions into the two injection paths. `scope` conditions
+ * (attributes in TRACE_SCOPED_ATTRS) resolve to trace.ids; `direct` conditions
+ * inject per-span. Malformed conditions are dropped from both (see
+ * `validConditions`).
+ */
+export const partitionConditions = (
+  conditions?: FilterCondition[],
+): { direct: FilterCondition[]; scope: FilterCondition[] } => {
+  const valid = validConditions({ conditions: conditions ?? [] });
+  const direct: FilterCondition[] = [];
+  const scope: FilterCondition[] = [];
+  for (const c of valid) {
+    (TRACE_SCOPED_ATTRS.has(c.attribute) ? scope : direct).push(c);
+  }
+  return { direct, scope };
+};
+
+/** A trace-scope predicate for one condition (values OR within the condition). */
+const conditionPredicate = (c: FilterCondition): string =>
+  `in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`;
 
 /**
  * True when the global filter has at least one valid attribute condition.
@@ -245,6 +309,68 @@ export const validConditions = (f?: GlobalFilters): FilterCondition[] =>
       Array.isArray(c.values) &&
       c.values.length > 0,
   );
+
+/**
+ * Build the trace-scope resolver query for the SCOPE subset of conditions
+ * (caller passes only the TRACE_SCOPED_ATTRS conditions — see
+ * `partitionConditions`). Returns every trace.id whose trace satisfies ALL
+ * passed conditions, where a condition is satisfied when ANY span in the trace
+ * matches it (countIf + having c_i > 0 across conditions; values OR within a
+ * condition). Runs at full fidelity (samplingRatio: 1) so it never misses a
+ * matching trace; pages then sample independently within the resolved scope.
+ *
+ * `cap` bounds the result; cap+1 is requested so the caller can detect
+ * truncation. Pass `Infinity` for no cap (not used in practice — the hybrid
+ * design always passes SAFE_TRACE_CAP).
+ */
+export const buildTraceScopeQuery = (
+  timeframe: { from: string; to?: string },
+  f: GlobalFilters,
+  cap: number,
+): string => {
+  const preds = validConditions(f).map(conditionPredicate);
+  const counters = preds.map((p, i) => `c${i} = countIf(${p})`).join(",\n    ");
+  const having = preds.map((_, i) => `c${i} > 0`).join(" and ");
+  const orAll = preds.join(" or ");
+  const limit = Number.isFinite(cap) ? `\n| limit ${cap + 1}` : "";
+  const toClause = dqlTimeArg(timeframe.to ?? "now()");
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
+| filter ${orAll}
+| summarize
+    ${counters},
+    by: { trace.id }
+| filter ${having}
+| fields trace_id = toString(trace.id)${limit}
+`.trim();
+};
+
+/** Sentinel uid (a syntactically valid all-zero trace id) that matches no real
+ *  trace — injected when scope conditions are active but resolve to zero
+ *  traces, so downstream pages correctly render empty. */
+const NO_MATCH_TRACE_ID = "00000000000000000000000000000000";
+
+/**
+ * Inject a `| filter in(trace.id, array(toUid(...)))` after EVERY
+ * `fetch spans|logs` statement (including any nested span fetch in a join) so
+ * the resolved trace scope applies app-wide. `trace.id` is a uid column, so ids
+ * are wrapped in `toUid(...)` — comparing the column to bare strings matches
+ * nothing. `traceIds === null` means no scope conditions are active (query
+ * returned unchanged); an empty array means the scope matched nothing (the
+ * no-match sentinel is injected so pages render empty).
+ */
+export const injectTraceScope = (
+  query: string,
+  traceIds: string[] | null,
+): string => {
+  if (traceIds === null || !query) return query;
+  const ids = traceIds.length > 0 ? traceIds : [NO_MATCH_TRACE_ID];
+  const pipe = `| filter in(trace.id, array(${dqlUidArray(ids)}))`;
+  return query.replace(
+    /^([ \t]*fetch\s+(?:spans|logs)\b[^\n]*)$/gm,
+    `$1\n${pipe}`,
+  );
+};
 
 
 export const buildFilterOptionsQuery = (
