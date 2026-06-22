@@ -1,5 +1,6 @@
 import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
+import { promptsFocusPreset } from "./focus";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
@@ -110,6 +111,8 @@ export const buildPromptsListQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
   sidebar?: PromptsSidebarFilter,
+  /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-2/PP-3). */
+  focus?: string | null,
 ): string => {
   const svcClause = sidebar?.services?.length
     ? `| filter in(${SVC_EXPR}, array(${dqlIdArray(sidebar.services)}))`
@@ -149,6 +152,18 @@ export const buildPromptsListQuery = (
   const contentClause = statusFilterActive
     ? ""
     : `| filter prompt_text != "" or response_text != "" or span.status_code == "error"`;
+  // Pulse problem-pattern focus (PP-3): a page-local predicate applied as an
+  // additional `| filter`, ANDed with the sidebar + global filters. The marker
+  // comment makes the active focus visible in the emitted DQL (and testable).
+  // An optional orderBy overrides the default timestamp sort so the worst
+  // offenders surface first (e.g. highest ttft / most tokens).
+  const focusPreset = promptsFocusPreset(focus);
+  const focusClause = focusPreset
+    ? `| filter (${focusPreset.predicate}) /* focus: ${focus} */`
+    : "";
+  const sortClause = focusPreset?.orderBy
+    ? `| sort ${focusPreset.orderBy}`
+    : `| sort timestamp desc`;
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
@@ -208,6 +223,12 @@ ${agentClause}
 // content-less proxy spans, so the requirement is dropped there.
 ${contentClause}
 ${searchClause}
+${focusClause}
+// Sort BEFORE the projection: the focus orderBy may reference raw attributes
+// (e.g. gen_ai.response.ttft) that the fields projection drops. Row order is
+// preserved through the projection, so the subsequent limit keeps the
+// worst-offending rows.
+${sortClause}
 | fields
     timestamp = start_time,
     kind,
@@ -234,7 +255,6 @@ ${searchClause}
     eval_relevance,
     trace_id = trace.id,
     span_id = span.id
-| sort timestamp desc
 | limit 200
 `.trim();
 };

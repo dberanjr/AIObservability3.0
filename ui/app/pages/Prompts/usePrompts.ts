@@ -183,7 +183,11 @@ const countBy = <T>(
   return counts;
 };
 
-export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
+export const usePrompts = (
+  filter: PromptsFilter = {},
+  /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-3). */
+  focus?: string | null,
+): UsePromptsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
@@ -219,6 +223,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
             scope.timeframe,
             filters,
             sidebar,
+            focus,
           ) + ` /* r${refreshKey} */`
         : "",
     [
@@ -226,6 +231,7 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       resolution.serviceIds,
       scope.timeframe,
       refreshKey,
+      focus,
       filter.services?.join(","),
       filter.kinds?.join(","),
       filter.search,

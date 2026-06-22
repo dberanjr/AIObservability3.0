@@ -1,12 +1,14 @@
-import React, { useState, useRef, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import {
   CloseSidebarIcon,
   OpenSidebarIcon,
   FilterIcon,
+  XmarkIcon,
 } from "@dynatrace/strato-icons";
+import { promptsFocusPreset } from "./focus";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
@@ -19,7 +21,21 @@ import { decodePromptsFilter } from "./findingFilter";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 
 export const PromptsPage = () => {
-  const { search } = useLocation();
+  const { search, pathname } = useLocation();
+  const navigate = useNavigate();
+  // Pulse problem-pattern drill-down (PP-3): the RAW `?focus` id (not the typed
+  // useFocusParam union, which only covers architecture-layer keys). A known id
+  // applies that pattern's predicate to the list; unknown/absent is a no-op.
+  const focus = new URLSearchParams(search).get("focus");
+  const focusPreset = promptsFocusPreset(focus);
+  // Remove the `?focus` param (drops the predicate and the chip), keeping every
+  // other search param (timeframe, global filter, sidebar pf_*) intact.
+  const clearFocus = useCallback(() => {
+    const next = new URLSearchParams(search);
+    next.delete("focus");
+    const qs = next.toString();
+    navigate({ pathname, search: qs ? `?${qs}` : "" }, { replace: true });
+  }, [search, pathname, navigate]);
   const [filter, setFilter] = useState<PromptsFilter>(() =>
     decodePromptsFilter(typeof window !== "undefined" ? window.location.search : ""),
   );
@@ -41,11 +57,17 @@ export const PromptsPage = () => {
   // applied-filter ref so a still-present `pf_*` URL param doesn't immediately
   // re-apply on the next render.
   const { registerResetHandler } = useGlobalFilters();
+  // Keep the latest clearFocus in a ref so the once-registered reset handler
+  // always clears the CURRENT `?focus` (avoids a stale-closure that would clear
+  // an old search string).
+  const clearFocusRef = useRef(clearFocus);
+  clearFocusRef.current = clearFocus;
   useEffect(
     () =>
       registerResetHandler(() => {
         appliedFilterRef.current = "";
         setFilter({});
+        clearFocusRef.current();
       }),
     [registerResetHandler],
   );
@@ -95,7 +117,7 @@ export const PromptsPage = () => {
     refetch,
     hasContent,
     hasEval,
-  } = usePrompts(filter);
+  } = usePrompts(filter, focus);
 
   const firstError = promptsError ?? null;
 
@@ -192,6 +214,43 @@ export const PromptsPage = () => {
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
         {firstError && <ErrorBanner error={firstError} />}
+        {focusPreset && (
+          <Flex alignItems="center" gap={8}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "3px 8px",
+                borderRadius: 6,
+                background:
+                  "var(--blue-surface, color-mix(in oklab, var(--blue) 12%, transparent))",
+                border: "1px solid color-mix(in oklab, var(--blue) 35%, transparent)",
+                fontSize: 11.5,
+                color: "var(--text)",
+                whiteSpace: "nowrap",
+                maxWidth: 360,
+              }}
+            >
+              <span style={{ color: "var(--text-2)" }}>Filtered:</span>
+              <span style={{ fontWeight: 600 }}>{focusPreset.label}</span>
+              <button
+                type="button"
+                aria-label={`Remove ${focusPreset.label} filter`}
+                title="Clear filter"
+                onClick={clearFocus}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  color: "var(--text-3)",
+                }}
+              >
+                <XmarkIcon size={12} />
+              </button>
+            </span>
+          </Flex>
+        )}
         {showMetadataNotice && (
           <Flex
             alignItems="flex-start"
