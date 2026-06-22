@@ -9,7 +9,6 @@ import { _UseDqlQueryClientContext } from "@dynatrace-sdk/react-hooks";
 import { useContext, useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { useGlobalFilters } from "../scope/GlobalFilterContext";
-import { useTraceScope } from "../scope/TraceScopeContext";
 import { ResolutionStatusLine } from "./ResolutionStatusLine";
 import { SamplingSegmented } from "./SamplingSegmented";
 import { ScanLimitSegmented } from "./ScanLimitSegmented";
@@ -106,48 +105,6 @@ const SelectedSegmentNames = () => {
   );
 };
 
-/**
- * Compact readout of the resolved global-filter trace scope: how many traces
- * the active filter matched, whether the result is approximate (capped), and a
- * resolving / empty / error state. Renders nothing when no filter is active.
- */
-const TraceScopeIndicator = () => {
-  const { isActive, isLoading, isTruncated, matchedCount, cap, error } =
-    useTraceScope();
-  if (!isActive) return null;
-
-  let text: string;
-  let color = "var(--text-2)";
-  if (error) {
-    text = "filter failed — narrow it or lower the trace cap";
-    color = "var(--red, #c4314b)";
-  } else if (isLoading) {
-    text = "resolving matching traces…";
-  } else if (matchedCount === 0) {
-    text = "no matching traces";
-    color = "var(--amber, #ab6400)";
-  } else {
-    const n = matchedCount.toLocaleString();
-    text = isTruncated
-      ? `approximate · first ${n} of ${cap.toLocaleString()}+ traces`
-      : `${n} matching trace${matchedCount === 1 ? "" : "s"}`;
-    if (isTruncated) color = "var(--amber, #ab6400)";
-  }
-
-  return (
-    <Text
-      style={{ fontSize: 11, color, whiteSpace: "nowrap" }}
-      title={
-        isTruncated
-          ? "Too many traces match — only the first N are applied. Raise the cap in Tweaks › Global filter, or narrow the filter."
-          : undefined
-      }
-    >
-      {text}
-    </Text>
-  );
-};
-
 export const GlobalFilterStrip = () => {
   const { reset } = useScope();
   const { clearAll, runResetHandlers } = useGlobalFilters();
@@ -206,8 +163,11 @@ export const GlobalFilterStrip = () => {
 
         <LabeledField label="Filters">
           <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
+            {/* Active conditions render as removable pills inside
+                GlobalAttributeFilter — that is the filter indicator. Direct
+                condition injection is exact + uncapped, so there is no
+                "N matching traces / approximate" count to show. */}
             <GlobalAttributeFilter />
-            <TraceScopeIndicator />
           </Flex>
         </LabeledField>
 

@@ -194,9 +194,11 @@ const emitConditionPipes = (f?: GlobalFilters): string =>
 export const globalFilterClauses = (_f?: GlobalFilters): string => "";
 
 /**
- * Insert the global filter pipes immediately after the first
- * `fetch spans|logs …` statement in a query. Used by useScopedDql so the
- * active global filter applies to every data query in the app.
+ * Insert the global filter pipes immediately after EVERY
+ * `fetch spans|logs …` statement in a query (including any nested span/log
+ * fetch inside a join). Used by useScopedDql so the active global filter
+ * applies to every data query in the app, uncapped and exact. No-ops when the
+ * filter has no valid conditions, leaving the query (and its query key) stable.
  */
 export const injectGlobalFilters = (
   query: string,
@@ -205,31 +207,31 @@ export const injectGlobalFilters = (
   const pipes = emitConditionPipes(f);
   if (!pipes || !query) return query;
   return query.replace(
-    /^(\s*fetch\s+(?:spans|logs)\b[^\n]*\n)/m,
-    `$1${pipes}\n`,
+    /^([ \t]*fetch\s+(?:spans|logs)\b[^\n]*)$/gm,
+    `$1\n${pipes}`,
   );
 };
 
 /* ------------------------------------------------------------------ *
- * Trace-scoped global filtering
+ * Active-filter helpers
  *
- * The active filter is resolved ONCE (TraceScopeContext) into the set of
- * trace.ids whose trace satisfies every condition, then `injectTraceScope`
- * scopes every page query to those traces. This is the correct model for
- * distributed AI traces: a trace's attributes are spread across span types
- * (agent name on the agent span, model on the LLM span, tool name on the tool
- * span), so a per-span AND across conditions can never match. Per-trace, a
- * condition is satisfied when ANY span in the trace matches it.
+ * The global filter is applied via DIRECT per-span condition injection
+ * (`injectGlobalFilters` above): every page query is filtered by the active
+ * conditions on its own spans — uncapped and exact, with no trace-id
+ * materialisation (so no DQL expression-limit crash on busy attributes).
+ *
+ * Trade-off: each condition must match on the page's OWN spans. A
+ * multi-attribute filter whose attributes live on DIFFERENT span types (e.g.
+ * agent name on the agent span + model on the LLM span) won't co-match per
+ * span. Filters that share a span (model + service on the LLM span) work
+ * exactly. The prior trace-id resolver handled the cross-span case but capped
+ * the match set and crashed past DQL's 1000-expression limit on busy models —
+ * which is the failure this change removes.
  * ------------------------------------------------------------------ */
-
-/** A trace-scope predicate for one condition (values OR within the condition). */
-const conditionPredicate = (c: FilterCondition): string =>
-  `in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`;
 
 /**
  * True when the global filter has at least one valid attribute condition.
- * Centralises the "is the filter on?" test so the context and the trace-scope
- * resolver agree.
+ * Centralises the "is the filter on?" test for the filter context + strip.
  */
 export const hasActiveFilter = (f?: GlobalFilters): boolean =>
   validConditions(f).length > 0;
@@ -244,62 +246,6 @@ export const validConditions = (f?: GlobalFilters): FilterCondition[] =>
       c.values.length > 0,
   );
 
-/**
- * Build the resolver query: every trace.id whose trace satisfies ALL active
- * conditions (each condition matched by ANY span in the trace; conditions AND
- * across the trace). `cap` bounds the result; we request cap+1 so the caller
- * can detect truncation. Pass `Infinity` for no cap (exact — may fail on very
- * broad filters, which is the intended "fail loud" behaviour).
- */
-export const buildTraceScopeQuery = (
-  timeframe: { from: string; to?: string },
-  f: GlobalFilters,
-  cap: number,
-): string => {
-  // Each condition contributes one predicate; conditions AND across the trace
-  // (every predicate matched by ANY span), while values within a predicate OR.
-  const preds = validConditions(f).map(conditionPredicate);
-  const orAll = preds.join(" or ");
-  const counters = preds.map((p, i) => `c${i} = countIf(${p})`).join(",\n    ");
-  const having = preds.map((_, i) => `c${i} > 0`).join(" and ");
-  const limit = Number.isFinite(cap) ? `\n| limit ${cap + 1}` : "";
-  const toClause = dqlTimeArg(timeframe.to ?? "now()");
-  return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${toClause}
-| filter ${orAll}
-| summarize
-    ${counters},
-    by: { trace.id }
-| filter ${having}
-| fields trace_id = toString(trace.id)${limit}
-`.trim();
-};
-
-/** Sentinel uid (a syntactically valid all-zero trace id) that matches no real
- *  trace — injected when a filter is active but resolves to zero traces, so
- *  downstream pages correctly render empty. */
-const NO_MATCH_TRACE_ID = "00000000000000000000000000000000";
-
-/**
- * Inject a `| filter in(trace.id, array(toUid(...)))` after EVERY
- * `fetch spans|logs` statement (including any nested span fetch) so the resolved
- * trace scope applies app-wide. `trace.id` is a uid column, so ids are wrapped
- * in `toUid(...)` — comparing the column to bare strings matches nothing.
- * `traceIds === null` means no active filter (query returned unchanged); an
- * empty array means the filter matched nothing.
- */
-export const injectTraceScope = (
-  query: string,
-  traceIds: string[] | null,
-): string => {
-  if (traceIds === null || !query) return query;
-  const ids = traceIds.length > 0 ? traceIds : [NO_MATCH_TRACE_ID];
-  const pipe = `| filter in(trace.id, array(${dqlUidArray(ids)}))`;
-  return query.replace(
-    /^([ \t]*fetch\s+(?:spans|logs)\b[^\n]*)$/gm,
-    `$1\n${pipe}`,
-  );
-};
 
 export const buildFilterOptionsQuery = (
   serviceIds: string[] | null,

@@ -1,59 +1,110 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildTraceScopeQuery,
   hasActiveFilter,
-  injectTraceScope,
+  injectGlobalFilters,
   mcpNotLifecycleClause,
   MCP_LIFECYCLE_METHODS,
   validConditions,
 } from "./queries";
 import type { GlobalFilters } from "./queries";
 
-const TF = { from: "now()-24h" };
+describe("injectGlobalFilters (direct condition injection)", () => {
+  const SPANS = "fetch spans, samplingRatio: 1, from: now()-24h\n| summarize count()";
+  const LOGS = "fetch logs, from: now()-1h\n| fields content";
 
-describe("buildTraceScopeQuery", () => {
-  it("resolves a single condition per-trace (countIf + having)", () => {
-    const f: GlobalFilters = {
-      conditions: [{ attribute: "gen_ai.agent.name", values: ["alpha"] }],
-    };
-    const q = buildTraceScopeQuery(TF, f, 25000);
-    expect(q).toContain(
-      'c0 = countIf(in(toString(gen_ai.agent.name), array("alpha")))',
-    );
-    expect(q).toContain("by: { trace.id }");
-    expect(q).toContain("| filter c0 > 0");
-    // trace.id is a uid column — resolver emits it as a plain string.
-    expect(q).toContain("| fields trace_id = toString(trace.id)");
-    // cap+1 so the caller can detect truncation.
-    expect(q).toContain("| limit 25001");
-  });
-
-  it("ANDs conditions across the trace, ORs values within a condition", () => {
+  it("emits one in(toString(attr), array(...)) pipe for a single condition", () => {
     const f: GlobalFilters = {
       conditions: [
-        { attribute: "gen_ai.agent.name", values: ["alpha", "beta"] },
-        { attribute: "gen_ai.request.model", values: ["gpt-4o"] },
+        { attribute: "gen_ai.request.model", values: ["m1", "m2"] },
       ],
     };
-    const q = buildTraceScopeQuery(TF, f, 5000);
-    // OR within a condition: both values in one array.
-    expect(q).toContain(
-      'in(toString(gen_ai.agent.name), array("alpha", "beta"))',
-    );
-    // AND across conditions: every counter must be positive.
-    expect(q).toContain("| filter c0 > 0 and c1 > 0");
-    // Pre-filter narrows the scan to spans matching ANY condition.
-    expect(q).toContain(
-      'in(toString(gen_ai.agent.name), array("alpha", "beta")) or in(toString(gen_ai.request.model), array("gpt-4o"))',
+    const out = injectGlobalFilters(SPANS, f);
+    expect(out).toContain(
+      '| filter in(toString(gen_ai.request.model), array("m1", "m2"))',
     );
   });
 
-  it("omits the limit for an uncapped (exact) resolve", () => {
+  it("OR-joins values within a condition (single array literal)", () => {
     const f: GlobalFilters = {
-      conditions: [{ attribute: "gen_ai.provider.name", values: ["openai"] }],
+      conditions: [{ attribute: "gen_ai.agent.name", values: ["alpha", "beta"] }],
     };
-    const q = buildTraceScopeQuery(TF, f, Infinity);
-    expect(q).not.toContain("| limit");
+    const out = injectGlobalFilters(SPANS, f);
+    expect(out).toContain(
+      '| filter in(toString(gen_ai.agent.name), array("alpha", "beta"))',
+    );
+  });
+
+  it("ANDs multiple conditions as separate filter pipes", () => {
+    const f: GlobalFilters = {
+      conditions: [
+        { attribute: "gen_ai.request.model", values: ["gpt-4o"] },
+        { attribute: "dt.entity.service", values: ["SERVICE-1"] },
+      ],
+    };
+    const out = injectGlobalFilters(SPANS, f);
+    expect(out).toContain('| filter in(toString(gen_ai.request.model), array("gpt-4o"))');
+    expect(out).toContain('| filter in(toString(dt.entity.service), array("SERVICE-1"))');
+    // Two distinct pipes (one per condition) ⇒ logical AND.
+    expect(out.match(/\| filter in\(toString\(/g)).toHaveLength(2);
+  });
+
+  it("inserts the pipes immediately after the fetch, before existing pipes", () => {
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.request.model", values: ["m1"] }],
+    };
+    const out = injectGlobalFilters(SPANS, f);
+    expect(out.indexOf("in(toString(gen_ai.request.model)")).toBeLessThan(
+      out.indexOf("summarize"),
+    );
+  });
+
+  it("injects after a fetch logs statement too", () => {
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.agent.name", values: ["a"] }],
+    };
+    const out = injectGlobalFilters(LOGS, f);
+    expect(out).toContain('| filter in(toString(gen_ai.agent.name), array("a"))');
+    expect(out.indexOf("in(toString")).toBeLessThan(out.indexOf("fields content"));
+  });
+
+  it("scopes every span fetch, including a nested span fetch in a join", () => {
+    const multi =
+      "fetch spans, from: now()-1h\n| join [\n    fetch spans, from: now()-1h\n    | fields trace.id\n  ], on: { trace.id }";
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.request.model", values: ["m1"] }],
+    };
+    const out = injectGlobalFilters(multi, f);
+    expect(
+      out.match(/\| filter in\(toString\(gen_ai\.request\.model\), array\("m1"\)\)/g),
+    ).toHaveLength(2);
+  });
+
+  it("no-ops when no condition is active (query + key stay stable)", () => {
+    expect(injectGlobalFilters(SPANS, { conditions: [] })).toBe(SPANS);
+    expect(injectGlobalFilters(SPANS, undefined)).toBe(SPANS);
+  });
+
+  it("drops malformed attribute conditions before emitting", () => {
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "bad attr!", values: ["x"] }],
+    };
+    expect(injectGlobalFilters(SPANS, f)).toBe(SPANS);
+  });
+
+  it("escapes quotes in values", () => {
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.request.model", values: ['ab"cd'] }],
+    };
+    const out = injectGlobalFilters(SPANS, f);
+    expect(out).toContain('array("ab\\"cd")');
+  });
+
+  it("does not touch non-span/log fetches (no AI attributes there)", () => {
+    const entity = "fetch dt.entity.service\n| fields id";
+    const f: GlobalFilters = {
+      conditions: [{ attribute: "gen_ai.request.model", values: ["m1"] }],
+    };
+    expect(injectGlobalFilters(entity, f)).toBe(entity);
   });
 });
 
@@ -94,46 +145,6 @@ describe("hasActiveFilter", () => {
         conditions: [{ attribute: "gen_ai.agent.name", values: ["a"] }],
       }),
     ).toBe(true);
-  });
-});
-
-describe("injectTraceScope", () => {
-  const Q = "fetch spans, samplingRatio: 1, from: now()-24h\n| summarize count()";
-
-  it("returns the query unchanged when no filter is active (null)", () => {
-    expect(injectTraceScope(Q, null)).toBe(Q);
-  });
-
-  it("injects a uid-wrapped trace.id filter after the fetch when ids are present", () => {
-    const out = injectTraceScope(Q, ["t1", "t2"]);
-    // trace.id is a uid column — ids must be wrapped in toUid(...).
-    expect(out).toContain('| filter in(trace.id, array(toUid("t1"), toUid("t2")))');
-    // Inserted right after the fetch, before the existing summarize pipe.
-    expect(out.indexOf("trace.id")).toBeLessThan(out.indexOf("summarize"));
-  });
-
-  it("injects an all-zero uid sentinel when the filter resolves to zero traces", () => {
-    const out = injectTraceScope(Q, []);
-    expect(out).toContain('toUid("00000000000000000000000000000000")');
-  });
-
-  it("scopes every fetch spans/logs, including a nested span fetch", () => {
-    const multi =
-      "fetch spans, from: now()-1h\n| join [\n    fetch spans, from: now()-1h\n    | fields trace.id\n  ], on: { trace.id }";
-    const out = injectTraceScope(multi, ["t1"]);
-    expect(
-      out.match(/\| filter in\(trace\.id, array\(toUid\("t1"\)\)\)/g),
-    ).toHaveLength(2);
-  });
-
-  it("does not touch non-span/log fetches (no trace.id there)", () => {
-    const entity = "fetch dt.entity.service\n| fields id";
-    expect(injectTraceScope(entity, ["t1"])).toBe(entity);
-  });
-
-  it("escapes quotes in trace ids", () => {
-    const out = injectTraceScope(Q, ['ab"cd']);
-    expect(out).toContain('toUid("ab\\"cd")');
   });
 });
 

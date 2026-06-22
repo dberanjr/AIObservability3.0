@@ -9,8 +9,8 @@ import { useSegments } from "@dynatrace/strato-components/filters";
 import type { ResultRecord } from "@dynatrace-sdk/client-query";
 import { useScanLimit } from "./ScanLimitContext";
 import { useSampling } from "./SamplingContext";
-import { useTraceScope } from "./TraceScopeContext";
-import { injectTraceScope } from "./queries";
+import { useGlobalFilters } from "./GlobalFilterContext";
+import { injectGlobalFilters } from "./queries";
 import { injectScanLimit } from "./dqlScanLimit";
 
 const SAMPLING_RE = /samplingRatio:\s*\d+/g;
@@ -74,7 +74,7 @@ export function useScopedDql<T = ResultRecord>(
   const { scanLimitGb } = useScanLimit();
   const { samplingRatio } = useSampling();
   const { segments } = useSegments();
-  const { traceIds, isLoading: scopeLoading } = useTraceScope();
+  const { filters } = useGlobalFilters();
   const ignoreGlobalFilter = Boolean(options?.ignoreGlobalFilter);
   // A per-query override wins over the toolbar ratio (used by heavy background
   // estimates that can't run at full fidelity — see UseScopedDqlExtra).
@@ -85,11 +85,17 @@ export function useScopedDql<T = ResultRecord>(
     // injector keys on), then the scan limit, then the global trace scope.
     const sampled = applySampling(query, effectiveSampling);
     const scanned = injectScanLimit(sampled, scanLimitGb);
-    // Scope every fetch to the trace ids resolved from the active global filter
-    // (unless the caller opted out), so the toolbar filter is truly app-wide.
+    // Apply the active global filter directly to every `fetch spans|logs` as
+    // `| filter in(toString(attr), array(...))` per condition (unless the caller
+    // opted out). This is uncapped and exact — no trace-id materialisation, so
+    // no DQL expression-limit crash on busy attributes. Trade-off: each
+    // condition must match on the page's OWN spans, so a multi-attribute filter
+    // whose attributes live on DIFFERENT span types (e.g. agent name on the
+    // agent span + model on the LLM span) won't co-match per span. Filters that
+    // share a span (model + service on the LLM span) work exactly.
     const rewritten = ignoreGlobalFilter
       ? scanned
-      : injectTraceScope(scanned, traceIds);
+      : injectGlobalFilters(scanned, filters);
     if (!rewritten) return rewritten;
     if (!segments || segments.length === 0) return rewritten;
     return {
@@ -104,14 +110,12 @@ export function useScopedDql<T = ResultRecord>(
     effectiveSampling,
     segments,
     ignoreGlobalFilter,
-    traceIds,
+    filters,
   ]);
 
-  // While the global filter is resolving its trace set, hold page queries so
-  // they don't fire unscoped (and flash unfiltered data) then refetch. Queries
-  // that opt out of the global filter are never gated.
-  const gated = scopeLoading && !ignoreGlobalFilter;
-  const enabled = (options?.enabled ?? true) && !gated;
+  // Direct injection is synchronous (no resolver round-trip), so page queries
+  // are never gated on the global filter — they fire already filtered.
+  const enabled = options?.enabled ?? true;
 
   // `ignoreGlobalFilter` is an extra key useDql ignores; forward options as-is.
   return useDql<T>(queryInput, { ...options, enabled });

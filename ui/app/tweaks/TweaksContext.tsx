@@ -56,18 +56,16 @@ export type ColorBlindFilter =
 export type ToolsMode = "strict" | "discovered";
 
 /**
- * How aggressively to cap the global filter's resolved trace-id set. The global
- * filter is trace-scoped: it resolves the matching trace.ids once and injects
- * them into every query. A very broad filter can match more traces than fit in
- * a DQL array literal, so the set is capped:
- *   - fast     — 5k traces (snappiest; truncates sooner)
- *   - balanced — 25k traces (default; best correctness/reliability balance)
- *   - exact    — no cap (always precise; can fail loud on very broad filters)
- * Truncated results are flagged in the filter strip ("approximate").
+ * DORMANT. The global filter previously resolved matching trace.ids and capped
+ * the injected set with this knob; it now applies conditions via DIRECT per-span
+ * injection (`injectGlobalFilters`), which is uncapped and exact, so nothing
+ * reads `traceMatchCap` / `TRACE_MATCH_CAPS` anymore. Retained only to keep the
+ * persisted pageConfig shape stable (no migration); the Tweaks UI control was
+ * removed. Safe to delete once a config migration is in place.
  */
 export type TraceMatchCap = "fast" | "balanced" | "exact";
 
-/** Trace-id cap for each TraceMatchCap option. `Infinity` = no cap. */
+/** Dormant — see TraceMatchCap. `Infinity` = no cap. */
 export const TRACE_MATCH_CAPS: Record<TraceMatchCap, number> = {
   fast: 5000,
   balanced: 25000,
