@@ -33,6 +33,9 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
     const sharePct =
       totalRequests > 0 ? (topProviderRequests / totalRequests) * 100 : 0;
     if (sharePct > 80) {
+      const providerModels = models
+        .filter((m) => m.provider.id === topProvider)
+        .map((m) => m.model);
       out.push({
         id: "single-vendor-risk",
         severity: "warning",
@@ -42,6 +45,7 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
         context:
           "More than 80% of model requests route to one provider. Diversify to reduce blast radius if that vendor degrades.",
         intents: DEFAULT_FINDING_INTENTS,
+        promptsFilter: { models: providerModels },
       });
     }
 
@@ -65,6 +69,7 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
         metric: fmtUSD(expensiveModel.costPerMTok),
         context: `${expensiveModel.model} costs ${(expensiveModel.costPerMTok / cheapPeer.costPerMTok).toFixed(1)}× ${cheapPeer.model}. Pilot ${cheapPeer.model} on lower-stakes prompts and compare quality.`,
         intents: DEFAULT_FINDING_INTENTS,
+        promptsFilter: { models: [expensiveModel.model] },
       });
     }
 
@@ -80,6 +85,7 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
         context:
           "Anthropic / Cohere / Mistral served via AWS Bedrock typically carry a proxy markup. Compare to direct vendor pricing when sizing the FinOps story.",
         intents: DEFAULT_FINDING_INTENTS,
+        promptsFilter: { models: bedrockModels.map((m) => m.model) },
       });
     }
 
@@ -96,6 +102,7 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
           metric: `${opusShare.toFixed(1)}% of requests`,
           context: `${opus.model} is provisioned but handles less than 5% of traffic (${fmtCount(opus.requests)} req). Consider routing harder prompts to it or downgrading the contract.`,
           intents: DEFAULT_FINDING_INTENTS,
+          promptsFilter: { models: [opus.model] },
         });
       }
     }

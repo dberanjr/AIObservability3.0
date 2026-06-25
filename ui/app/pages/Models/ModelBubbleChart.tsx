@@ -9,6 +9,7 @@ import {
   type ProviderId,
 } from "../../detection/attributes";
 import type { ModelRow } from "./useModels";
+import { ModelDetailModal } from "./ModelDetailModal";
 
 /**
  * Top-level component (per DESIGN_HANDOFF §8 gotcha 1). Defining the chart
@@ -106,6 +107,7 @@ export const ModelBubbleChart = ({
 }: ModelBubbleChartProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [selected, setSelected] = useState<ModelRow | null>(null);
 
   const plotted = useMemo<{ scales: Scales; points: Plotted[] }>(() => {
     const scales = buildScales(models);
@@ -122,28 +124,46 @@ export const ModelBubbleChart = ({
   const { scales, points } = plotted;
 
   /**
-   * Single onMouseMove handler — finds the nearest bubble inside its radius
-   * +12px tolerance. Per the gotcha, per-circle onMouseEnter/Leave flickers
-   * when bubbles overlap; circles + labels carry pointer-events: none.
+   * Resolve which bubble the cursor maps to. Containment wins first: among the
+   * bubbles whose circle actually contains the point we keep the LAST-drawn one
+   * (highest index = rendered on top), so hovering inside a bubble always
+   * selects THAT bubble — not a neighbour whose center happens to be closer.
+   * (The previous "nearest center within +12px" rule mismatched the tooltip to
+   * an adjacent bubble whenever two overlapped.) Only when the cursor is inside
+   * no bubble do we fall back to the nearest center within a small tolerance, so
+   * near-misses still surface something. Per the overlap gotcha, the single
+   * handler lives on the svg; circles/labels carry pointer-events: none.
    */
-  const onMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const bubbleAt = (e: React.MouseEvent<SVGSVGElement>): number => {
     const svg = svgRef.current;
-    if (!svg || points.length === 0) return;
+    if (!svg || points.length === 0) return -1;
     const rect = svg.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * VIEW_W;
     const y = ((e.clientY - rect.top) / rect.height) * VIEW_H;
-    let best = -1;
-    let bestDist = Infinity;
+    let contained = -1;
+    let nearest = -1;
+    let nearestDist = Infinity;
     for (let i = 0; i < points.length; i += 1) {
       const p = points[i];
       const d = distSq(x, y, p.cx, p.cy);
+      if (d <= p.r ** 2) contained = i; // keep last (topmost) containing bubble
       const threshold = (p.r + 12) ** 2;
-      if (d < threshold && d < bestDist) {
-        bestDist = d;
-        best = i;
+      if (d < threshold && d < nearestDist) {
+        nearestDist = d;
+        nearest = i;
       }
     }
+    return contained !== -1 ? contained : nearest;
+  };
+
+  const onMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const best = bubbleAt(e);
     setHoverIndex(best === -1 ? null : best);
+  };
+
+  const onClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const best = bubbleAt(e);
+    if (best !== -1) setSelected(points[best].model);
   };
 
   const xTicks = [1_000, 10_000, 100_000, 1_000_000, 10_000_000].filter(
@@ -157,7 +177,8 @@ export const ModelBubbleChart = ({
       <Flex flexDirection="column" gap={12}>
         <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Models · tokens vs latency · log-log axes · bubble size = requests
+            Models · tokens vs latency · log-log axes · bubble size = requests ·
+            click for detail
           </Text>
           <ProviderLegend models={models} />
         </Flex>
@@ -175,12 +196,14 @@ export const ModelBubbleChart = ({
               viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
               onMouseMove={onMouseMove}
               onMouseLeave={() => setHoverIndex(null)}
+              onClick={onClick}
               role="img"
               aria-label="Model bubble chart"
               style={{
                 display: "block",
                 width: "100%",
                 height: "auto",
+                cursor: hoverIndex != null ? "pointer" : "default",
                 // Lock the rendered aspect ratio so circles stay round when
                 // the container is wider than the viewBox.
                 aspectRatio: `${VIEW_W} / ${VIEW_H}`,
@@ -321,6 +344,9 @@ export const ModelBubbleChart = ({
           </div>
         )}
       </Flex>
+      {selected && (
+        <ModelDetailModal model={selected} onClose={() => setSelected(null)} />
+      )}
     </Surface>
   );
 };

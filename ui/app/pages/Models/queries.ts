@@ -1,4 +1,4 @@
-import { dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
+import { dqlEscape, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -8,15 +8,21 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
  * realistic AppCI). Timeout rate reads span.status_code which is the OTel
  * convention — when the tenant doesn't set it the field comes back null and
  * the UI shows "—".
+ *
+ * `serviceName` (optional) scopes every metric to a single service's traffic —
+ * used by the A/B comparison's "service being compared" selector so latency /
+ * cost-per-request / errors reflect that service's actual usage, not the fleet.
  */
 export const buildModelsQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  serviceName?: string | null,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
+${serviceName ? `| filter entityName(dt.entity.service) == "${dqlEscape(serviceName)}"` : ""}
 | filter isNotNull(gen_ai.request.model)
 | dedup {span.id}
 | fieldsAdd

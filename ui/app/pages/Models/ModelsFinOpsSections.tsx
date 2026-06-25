@@ -9,6 +9,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import type { Finding } from "../../components/drawers/types";
 import { CollapsibleSection } from "../../components/CollapsibleSection";
 import { CapabilityGate } from "../../components/CapabilityGate";
+import { useUpstreamServices } from "../Agents/useUpstreamServices";
 import type { ModelRow } from "./useModels";
 import { useFinOps } from "./useFinOps";
 import { FinOpsTilesRow } from "./FinOpsTilesRow";
@@ -30,16 +31,18 @@ export const ModelsFinOpsSections = ({
   onSelectFinding,
 }: ModelsFinOpsSectionsProps) => {
   const finOps = useFinOps();
+  const upstream = useUpstreamServices();
 
-  const monthlyRequests = useMemo(() => {
-    const fleetRequests = models.reduce((acc, m) => acc + m.requests, 0);
-    if (fleetRequests === 0) return 0;
-    return Math.round(fleetRequests * (30 / 7));
-  }, [models]);
-
-  const observedUpstream = useMemo(
-    () => finOps.services.slice(0, 6).map((s) => s.service),
+  // AI service names for the A/B "service being compared" dropdown.
+  const serviceNames = useMemo(
+    () => finOps.services.map((s) => s.service),
     [finOps.services],
+  );
+  // Real upstream caller services (Smartscape topology) for the A/B "driving
+  // upstream" dropdown.
+  const upstreamOptions = useMemo(
+    () => upstream.rows.map((r) => r.upstream),
+    [upstream.rows],
   );
 
   return (
@@ -89,9 +92,8 @@ export const ModelsFinOpsSections = ({
 
       <CollapsibleSection title="Model A/B swap comparison">
         <ModelComparisonPanel
-          models={models}
-          observedUpstream={observedUpstream}
-          monthlyRequests={monthlyRequests}
+          services={serviceNames}
+          upstreamOptions={upstreamOptions}
         />
       </CollapsibleSection>
 

@@ -17,6 +17,7 @@ import { FilterTrigger } from "../../components/FilterTrigger";
 import { BlendedBadge } from "../../components/displayHints";
 import { useModelDisplay } from "../../components/useModelDisplay";
 import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
+import { ModelDetailModal } from "./ModelDetailModal";
 
 type SortKey =
   | "model"
@@ -37,12 +38,32 @@ interface Column {
   id: string;
   label: string;
   width?: number;
+  /** Flexible column that absorbs slack but never shrinks below minWidth. */
+  grow?: boolean;
+  minWidth?: number;
   align?: "left" | "right";
   sortBy?: SortKey;
 }
 
+/**
+ * Single source of truth for a column's flex/width so the header and every data
+ * cell lay out identically. Previously the header's flexible "Model" column had
+ * minWidth:auto while its data cell had minWidth:0 — they collapsed to different
+ * widths, knocking every downstream column out of alignment and squeezing the
+ * model name to a single character. Driving both from this helper keeps them
+ * pinned together; box-sizing makes the px widths exact regardless of theme.
+ */
+const colStyle = (c: Pick<Column, "width" | "grow" | "minWidth">): React.CSSProperties =>
+  c.grow
+    ? { flex: `1 1 ${c.minWidth ?? 200}px`, minWidth: c.minWidth ?? 200, boxSizing: "border-box" }
+    : { flex: "0 0 auto", width: c.width, boxSizing: "border-box" };
+
+/** Min width of the table body; below this the horizontal scroller kicks in so
+ *  columns keep their widths and stay aligned instead of collapsing. */
+const TABLE_MIN_WIDTH = 1450;
+
 const COLS: Column[] = [
-  { id: "model", label: "Model", sortBy: "model" },
+  { id: "model", label: "Model", grow: true, minWidth: 200, sortBy: "model" },
   { id: "type", label: "Type", width: 100 },
   { id: "provider", label: "Provider", width: 130 },
   { id: "req", label: "Req", width: 80, align: "right", sortBy: "requests" },
@@ -163,6 +184,8 @@ const ContextUtilBar = ({ model }: { model: ModelRow }) => {
 const Cell = ({
   children,
   width,
+  grow,
+  minWidth,
   align,
   mono,
   color,
@@ -170,6 +193,8 @@ const Cell = ({
 }: {
   children: React.ReactNode;
   width?: number;
+  grow?: boolean;
+  minWidth?: number;
   align?: "left" | "right";
   mono?: boolean;
   color?: string;
@@ -177,9 +202,7 @@ const Cell = ({
 }) => (
   <div
     style={{
-      flex: width ? "0 0 auto" : 1,
-      width,
-      minWidth: 0,
+      ...colStyle({ width, grow, minWidth }),
       textAlign: align,
       padding: "8px 6px",
       fontSize: 12.5,
@@ -209,6 +232,7 @@ export interface ModelsTableProps {
 
 export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
   const fmtModel = useModelDisplay();
+  const [selected, setSelected] = useState<ModelRow | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: "requests",
     dir: "desc",
@@ -237,13 +261,31 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
         : { key, dir: "desc" },
     );
 
+  // The Timeout column reads span.status_code == "TIMEOUT". Most tenants never
+  // emit it (this fleet sets span.status_code only for "error", never
+  // "TIMEOUT"), so the column would be an all-"—"/"0%" filler that pads the row
+  // and pushes Cost / $/1M off to the right. Only show it when a model actually
+  // recorded a timeout, so it carries real signal when present and disappears
+  // otherwise.
+  const showTimeout = useMemo(
+    () => models.some((m) => m.timeouts > 0),
+    [models],
+  );
+  const cols = useMemo(
+    () => (showTimeout ? COLS : COLS.filter((c) => c.id !== "timeout")),
+    [showTimeout],
+  );
+  const tableMinWidth = showTimeout ? TABLE_MIN_WIDTH : TABLE_MIN_WIDTH - 80;
+
   return (
-    <Flex flexDirection="column" gap={0}>
+    <div style={{ overflowX: "auto" }}>
+      <style>{`.models-row{cursor:pointer}.models-row:hover{background:var(--surface-2)}`}</style>
+      <Flex flexDirection="column" gap={0} style={{ minWidth: tableMinWidth }}>
         <Flex
           alignItems="center"
           style={{ padding: "0 10px", borderBottom: "1px solid var(--border)" }}
         >
-          {COLS.map((c) => {
+          {cols.map((c) => {
             const active = c.sortBy && sort.key === c.sortBy;
             const Arrow =
               active && sort.dir === "asc" ? ChevronUpIcon : ChevronDownIcon;
@@ -255,9 +297,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 onClick={() => c.sortBy && toggleSort(c.sortBy)}
                 style={{
                   all: "unset",
+                  ...colStyle(c),
                   cursor: c.sortBy ? "pointer" : "default",
-                  flex: c.width ? "0 0 auto" : 1,
-                  width: c.width,
                   textAlign: c.align,
                   padding: "8px 6px",
                   fontSize: 10.5,
@@ -298,7 +339,17 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
           sorted.map((m) => (
             <div
               key={m.modelKey}
-              role="row"
+              role="button"
+              tabIndex={0}
+              aria-label={`Open details for ${m.model}`}
+              className="models-row"
+              onClick={() => setSelected(m)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelected(m);
+                }
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -306,14 +357,18 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 borderTop: "1px solid var(--border)",
               }}
             >
-              <Cell mono>
-                <FilterTrigger
-                  attribute="gen_ai.request.model"
-                  value={m.rawModels}
-                  label="model"
-                >
-                  {fmtModel(m.rawModels?.[0] ?? m.model)}
-                </FilterTrigger>
+              <Cell mono grow minWidth={200}>
+                {/* Stop propagation so the model-name click filters (existing
+                    behavior) without also opening the row detail modal. */}
+                <span onClick={(e) => e.stopPropagation()}>
+                  <FilterTrigger
+                    attribute="gen_ai.request.model"
+                    value={m.rawModels}
+                    label="model"
+                  >
+                    {fmtModel(m.rawModels?.[0] ?? m.model)}
+                  </FilterTrigger>
+                </span>
               </Cell>
               <Cell width={100}>
                 <TypeChip model={m} />
@@ -365,26 +420,28 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
               >
                 {m.errors > 0 ? fmtPercent(m.errorRatePct) : "0%"}
               </Cell>
-              <Cell width={80} align="right" mono>
-                {m.hasTimeoutAttribute ? (
-                  m.timeouts > 0 ? (
-                    fmtPercent(m.timeoutRatePct, 2)
+              {showTimeout && (
+                <Cell width={80} align="right" mono>
+                  {m.hasTimeoutAttribute ? (
+                    m.timeouts > 0 ? (
+                      fmtPercent(m.timeoutRatePct, 2)
+                    ) : (
+                      "0%"
+                    )
                   ) : (
-                    "0%"
-                  )
-                ) : (
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-4)",
-                      fontFamily: "var(--mono, monospace)",
-                    }}
-                    title="span.status_code not set on this model's spans"
-                  >
-                    —
-                  </Text>
-                )}
-              </Cell>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--text-4)",
+                        fontFamily: "var(--mono, monospace)",
+                      }}
+                      title="span.status_code not set on this model's spans"
+                    >
+                      —
+                    </Text>
+                  )}
+                </Cell>
+              )}
               <Cell width={90} align="right" mono>
                 {fmtUSD(m.cost)}
                 {m.pricingUnknown && <BlendedBadge />}
@@ -410,12 +467,20 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
           }}
         >
           <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-            $/1M coloured green &lt; $2, red &gt; $20. Context util = avg input
-            tokens / model context window from{" "}
-            <code>data/pricing.ts</code> (green &lt; 40%, amber 40–80%, red &gt;
-            80%). Tokens/sec shows "—" for embedding models.
+            Click a row for full cost, pricing and golden-signal detail. $/1M
+            coloured green &lt; $2, red &gt; $20. Context util = avg input tokens
+            / model context window from <code>data/pricing.ts</code> (green &lt;
+            40%, amber 40–80%, red &gt; 80%). Tokens/sec shows "—" for embedding
+            models.
           </Text>
         </Flex>
-    </Flex>
+      </Flex>
+      {selected && (
+        <ModelDetailModal
+          model={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </div>
   );
 };

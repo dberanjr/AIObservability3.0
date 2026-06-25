@@ -7,7 +7,7 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildModelsQuery } from "./queries";
-import { costOf, getPricing } from "../../data/pricing";
+import { costOf, getPricing, type ModelPricing } from "../../data/pricing";
 import {
   canonicalizeModel,
   normalizeProvider,
@@ -91,6 +91,9 @@ export interface ModelRow {
   hasTimeoutAttribute: boolean;
   cost: number;
   costPerMTok: number;
+  /** Effective pricing record (rates, context window, provider, tier) for the
+   *  dominant model variant — drives the detail modal's pricing card. */
+  pricing: ModelPricing;
   /** avg input tokens / context window size. Null when the model isn't in pricing.ts. */
   contextUtilizationPct: number | null;
   /** avg output tokens / (avg latency in seconds). Null for embedding (no output tokens). */
@@ -116,14 +119,16 @@ export interface UseModelsResult {
   error?: Error;
 }
 
-export const useModels = (): UseModelsResult => {
+export const useModels = (serviceName?: string | null): UseModelsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<ModelRecord>(
-    canQuery ? buildModelsQuery(resolution.serviceIds, scope.timeframe, filters) : "",
+    canQuery
+      ? buildModelsQuery(resolution.serviceIds, scope.timeframe, filters, serviceName)
+      : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -271,6 +276,7 @@ export const useModels = (): UseModelsResult => {
         hasTimeoutAttribute,
         cost,
         costPerMTok,
+        pricing,
         contextUtilizationPct,
         tokensPerSec,
         pricingUnknown:

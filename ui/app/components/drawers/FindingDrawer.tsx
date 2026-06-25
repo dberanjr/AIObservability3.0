@@ -123,9 +123,12 @@ export const FindingDrawer = ({ finding, onDismiss }: FindingDrawerProps) => {
   const openInPrompts = () => {
     if (!finding) return;
     onDismiss();
+    // A finding may carry an explicit filter (Model findings scope to their
+    // model[s]); otherwise fall back to the anomaly-type mapping.
+    const filter = finding.promptsFilter ?? promptsFilterForFinding(finding);
     goToTab("/prompts", {
       focus: "llm",
-      params: encodePromptsFilter(promptsFilterForFinding(finding)),
+      params: encodePromptsFilter(filter),
     });
   };
 

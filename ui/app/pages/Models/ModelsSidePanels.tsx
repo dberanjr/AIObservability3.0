@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -13,6 +13,7 @@ import {
   type ProviderId,
 } from "../../detection/attributes";
 import type { ModelRow } from "./useModels";
+import { ModelDetailModal } from "./ModelDetailModal";
 
 const Panel = ({
   title,
@@ -47,6 +48,7 @@ export const ModelsSidePanels = ({
   models,
   isLoading,
 }: ModelsSidePanelsProps) => {
+  const [selected, setSelected] = useState<ModelRow | null>(null);
   const topSpenders = useMemo<BarListItem[]>(
     () =>
       [...models]
@@ -86,7 +88,7 @@ export const ModelsSidePanels = ({
     <Flex flexDirection="column" gap={16}>
       <Panel
         title="Top spenders"
-        sub="Estimated cost per model in this scope"
+        sub="Estimated cost per model in this scope · click for detail"
       >
         {isLoading && topSpenders.length === 0 ? (
           <Flex flexDirection="column" gap={8}>
@@ -104,6 +106,10 @@ export const ModelsSidePanels = ({
             color={(item) => {
               const model = models.find((m) => m.modelKey === item.key);
               return model?.providerColor ?? "var(--blue)";
+            }}
+            onSelect={(item) => {
+              const model = models.find((m) => m.modelKey === item.key);
+              if (model) setSelected(model);
             }}
           />
         )}
@@ -124,6 +130,9 @@ export const ModelsSidePanels = ({
           />
         )}
       </Panel>
+      {selected && (
+        <ModelDetailModal model={selected} onClose={() => setSelected(null)} />
+      )}
     </Flex>
   );
 };

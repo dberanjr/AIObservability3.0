@@ -1,9 +1,10 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent, fmtUSDCompact } from "../../data/format";
 import type { ServiceCost } from "./useFinOps";
+import { ServiceDetailModal } from "./ServiceDetailModal";
 
 const COLORS = [
   "var(--blue)",
@@ -73,11 +74,27 @@ const buildTiles = (services: ServiceCost[]): Tile[] => {
   return tiles;
 };
 
-const Cell = ({ tile }: { tile: Tile }) => {
+const Cell = ({
+  tile,
+  onSelect,
+}: {
+  tile: Tile;
+  onSelect: (service: ServiceCost) => void;
+}) => {
   const small = tile.height < 12 || tile.width < 14;
   return (
     <div
-      title={`${tile.service.service}: ${fmtUSDCompact(tile.service.cost)} (${fmtPercent(tile.area, 0)})`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open details for ${tile.service.service}`}
+      onClick={() => onSelect(tile.service)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(tile.service);
+        }
+      }}
+      title={`${tile.service.service}: ${fmtUSDCompact(tile.service.cost)} (${fmtPercent(tile.area, 0)}) — click for detail`}
       style={{
         position: "absolute",
         left: `${tile.left}%`,
@@ -89,6 +106,7 @@ const Cell = ({ tile }: { tile: Tile }) => {
         overflow: "hidden",
         padding: 8,
         boxSizing: "border-box",
+        cursor: "pointer",
       }}
     >
       {!small && (
@@ -131,6 +149,7 @@ export const CostConcentrationTreemap = ({
   isLoading,
 }: CostConcentrationTreemapProps) => {
   const tiles = useMemo(() => buildTiles(services), [services]);
+  const [selected, setSelected] = useState<ServiceCost | null>(null);
 
   return (
     <Surface elevation="raised" padding={16}>
@@ -140,7 +159,8 @@ export const CostConcentrationTreemap = ({
             Cost concentration
           </Heading>
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Slice-and-dice treemap by service spend (current scope)
+            Slice-and-dice treemap by service spend (current scope) · click a
+            tile for detail
           </Text>
         </Flex>
         {isLoading && tiles.length === 0 ? (
@@ -161,11 +181,17 @@ export const CostConcentrationTreemap = ({
             }}
           >
             {tiles.map((t) => (
-              <Cell key={t.service.service} tile={t} />
+              <Cell key={t.service.service} tile={t} onSelect={setSelected} />
             ))}
           </div>
         )}
       </Flex>
+      {selected && (
+        <ServiceDetailModal
+          service={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </Surface>
   );
 };
