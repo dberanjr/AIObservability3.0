@@ -8,6 +8,7 @@ import {
   NumberInputV2,
 } from "@dynatrace/strato-components/forms";
 import { FacetGroup } from "../../components/FacetGroup";
+import { PROMPTS_FOCUS_OPTIONS } from "./focus";
 import type {
   PromptKind,
   PromptsFacets,
@@ -243,23 +244,123 @@ const PrivacySegment = ({
   );
 };
 
+/**
+ * Single-select list of the architecture-diagram problem patterns (the same
+ * `?focus` presets Pulse drills into). Picking one applies that pattern's
+ * predicate / trace scope to the prompt list; picking the active one again — or
+ * "Any" — clears it. Single-select because the page carries one `?focus` at a
+ * time (it ANDs with every other sidebar / global filter).
+ */
+const ProblemPatternSelect = ({
+  focus,
+  onFocusChange,
+}: {
+  focus: string | null;
+  onFocusChange: (id: string | null) => void;
+}) => {
+  const Row = ({
+    active,
+    label,
+    approximate,
+    onClick,
+  }: {
+    active: boolean;
+    label: string;
+    approximate?: boolean;
+    onClick: () => void;
+  }) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 8px",
+        borderRadius: 6,
+        fontSize: 12,
+        color: active ? "var(--text)" : "var(--text-2)",
+        fontWeight: active ? 600 : 400,
+        background: active
+          ? "color-mix(in oklab, var(--blue) 14%, transparent)"
+          : "transparent",
+        border: active
+          ? "1px solid color-mix(in oklab, var(--blue) 35%, transparent)"
+          : "1px solid transparent",
+      }}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+      {approximate && (
+        <span
+          title="Approximate: the pattern's exact signal isn't emitted on this tenant, so the closest defensible proxy is used."
+          style={{ color: "var(--text-3)", fontStyle: "italic", fontSize: 10.5 }}
+        >
+          ≈ approx
+        </span>
+      )}
+    </button>
+  );
+  return (
+    <Flex flexDirection="column" gap={6}>
+      <SegLabel>Problem patterns</SegLabel>
+      <div role="radiogroup" aria-label="Problem patterns">
+        <Flex flexDirection="column" gap={2}>
+          <Row
+            active={!focus}
+            label="Any (no pattern)"
+            onClick={() => onFocusChange(null)}
+          />
+          {PROMPTS_FOCUS_OPTIONS.map((o) => (
+            <Row
+              key={o.id}
+              active={focus === o.id}
+              label={o.label}
+              approximate={o.approximate}
+              onClick={() => onFocusChange(focus === o.id ? null : o.id)}
+            />
+          ))}
+        </Flex>
+      </div>
+    </Flex>
+  );
+};
+
 export interface PromptsSidebarProps {
   facets: PromptsFacets;
   filter: PromptsFilter;
   privacy: PrivacyMode;
+  /** Active problem-pattern focus id (raw `?focus`), or null. */
+  focus: string | null;
   onFilterChange: (next: PromptsFilter) => void;
   onPrivacyChange: (next: PrivacyMode) => void;
+  /** Set (or clear, when null) the active problem-pattern focus. */
+  onFocusChange: (id: string | null) => void;
 }
 
 export const PromptsSidebar = ({
   facets,
   filter,
   privacy,
+  focus,
   onFilterChange,
   onPrivacyChange,
+  onFocusChange,
 }: PromptsSidebarProps) => (
   <Surface elevation="raised" padding={16}>
     <Flex flexDirection="column" gap={16} style={{ width: "100%", minWidth: 0 }}>
+      <ProblemPatternSelect focus={focus} onFocusChange={onFocusChange} />
       <Flex flexDirection="column" gap={4}>
         <SegLabel>Search</SegLabel>
         <TextInput

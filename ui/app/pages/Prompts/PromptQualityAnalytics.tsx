@@ -5,6 +5,7 @@ import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { useCapability } from "../../scope/CapabilityContext";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
 import { usePromptQuality, type QualityMetricSnapshot } from "./usePromptQuality";
 
@@ -135,12 +136,22 @@ const PromptQualityBody = () => {
   );
 };
 
-export const PromptQualityAnalytics = () => (
-  <CollapsibleCard
-    title="Prompt quality analytics"
-    subtitle="Aggregate evaluation scores across LLM spans in the current scope"
-    defaultOpen
-  >
-    <PromptQualityBody />
-  </CollapsibleCard>
-);
+export const PromptQualityAnalytics = () => {
+  // Collapse by default when no eval data exists in this tenant. The evalScore
+  // capability (gen_ai.evaluation.*) is probed cheaply app-wide, so we can
+  // decide without running the section's own query. Mount only once the probe
+  // settles so the initial defaultOpen reflects the real answer (CollapsibleCard
+  // reads defaultOpen once). When eval data IS present the section opens as
+  // before; the body query still runs only while expanded.
+  const cap = useCapability();
+  if (cap.isLoading) return null;
+  return (
+    <CollapsibleCard
+      title="Prompt quality analytics"
+      subtitle="Aggregate evaluation scores across LLM spans in the current scope"
+      defaultOpen={cap.has("evalScore")}
+    >
+      <PromptQualityBody />
+    </CollapsibleCard>
+  );
+};

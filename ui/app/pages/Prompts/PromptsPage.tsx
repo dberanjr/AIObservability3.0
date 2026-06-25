@@ -38,6 +38,18 @@ export const PromptsPage = () => {
     const qs = next.toString();
     navigate({ pathname, search: qs ? `?${qs}` : "" }, { replace: true });
   }, [search, pathname, navigate]);
+  // Set (or clear, when null) the `?focus` problem-pattern from the sidebar —
+  // the SAME mechanism the Pulse drill-down and the "Filtered:" chip use, so the
+  // chip and the sidebar selection stay in sync via the URL.
+  const setFocus = useCallback(
+    (id: string | null) => {
+      if (!id) return clearFocus();
+      const next = new URLSearchParams(search);
+      next.set("focus", id);
+      navigate({ pathname, search: `?${next.toString()}` }, { replace: true });
+    },
+    [search, pathname, navigate, clearFocus],
+  );
   const [filter, setFilter] = useState<PromptsFilter>(() =>
     decodePromptsFilter(typeof window !== "undefined" ? window.location.search : ""),
   );
@@ -207,8 +219,10 @@ export const PromptsPage = () => {
               facets={facets}
               filter={filter}
               privacy={privacy}
+              focus={focus}
               onFilterChange={setFilter}
               onPrivacyChange={setPrivacy}
+              onFocusChange={setFocus}
             />
           </>
         )}

@@ -260,6 +260,34 @@ ${resolveTail(cap)}
   },
 };
 
+/** One selectable problem-pattern filter for the Prompts sidebar. */
+export interface PromptsFocusOption {
+  id: string;
+  label: string;
+  /** True when the signal is a proxy (shown with an "≈ approx" marker). */
+  approximate: boolean;
+}
+
+/**
+ * Every problem pattern the Prompts page can filter by — the same set the Pulse
+ * architecture diagram drills into (same-span predicates + cross-span trace
+ * scopes). Surfaced as a single-select list at the top of the Prompts sidebar so
+ * a pattern can be picked directly, not only by drilling in from Pulse. Order:
+ * same-span LLM/tool/orch predicates first, then the trace-scoped patterns.
+ */
+export const PROMPTS_FOCUS_OPTIONS: PromptsFocusOption[] = [
+  ...Object.entries(FOCUS_PREDICATES).map(([id, p]) => ({
+    id,
+    label: p.label,
+    approximate: false,
+  })),
+  ...Object.entries(CROSS_SPAN_FOCUS).map(([id, p]) => ({
+    id,
+    label: p.label,
+    approximate: Boolean(p.approximate),
+  })),
+];
+
 /** Type guard: is this raw `?focus` a known CROSS-SPAN (trace-scoped) focus? */
 export const isCrossSpanFocus = (
   focus: string | null | undefined,
