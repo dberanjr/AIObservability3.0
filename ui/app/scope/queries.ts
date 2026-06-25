@@ -261,15 +261,19 @@ export const TRACE_SCOPED_ATTRS = new Set<string>([
 
 /**
  * Maximum number of resolved trace.ids injected per page query. Each id becomes
- * one `toUid("…")` expression inside `array(...)`; DQL rejects queries past a
- * ~1000-expression limit with TOO_MANY_EXPRESSIONS_IN_QUERY. 800 keeps ~200
- * expressions of headroom while comfortably covering any realistic single
- * agent/tool (which resolve to a handful to low-hundreds of traces). The
- * resolver requests cap+1 so the UI can flag truncation. Validated on ualpre: a
- * real agent (bos-agcre-test) resolved to ~10 traces, and injecting that id
- * list into the Prompts query returned the agent's prompts with no crash.
+ * one `toUid("…")` call inside a SINGLE `in(trace.id, array(...))` expression —
+ * and DQL caps *sub-expressions per expression* at 250 (EXPRESSION_TOO_MANY_SUB_
+ * EXPRESSIONS, "DQL-LIMIT-REACHED"), NOT the ~1000 query-wide limit assumed
+ * earlier. So array(toUid×N) + in() overflows once N approaches 248 — an 800 cap
+ * crashed any focus/global-filter that resolved >~248 traces (e.g. History
+ * growth → 268 traces). 240 stays safely under the 250 ceiling while still
+ * covering any realistic single agent/tool (a handful to low-hundreds of
+ * traces) and over-filling the ~200-row sampled list. The resolver requests
+ * cap+1 so the UI can flag truncation; injectTraceScope hard-caps as a backstop.
+ * Verified on ualpre: array(toUid×256) → EXPRESSION_TOO_MANY_SUB_EXPRESSIONS
+ * (max 250); ×240 parses cleanly.
  */
-export const SAFE_TRACE_CAP = 800;
+export const SAFE_TRACE_CAP = 240;
 
 /**
  * Split active conditions into the two injection paths. `scope` conditions
@@ -364,7 +368,14 @@ export const injectTraceScope = (
   traceIds: string[] | null,
 ): string => {
   if (traceIds === null || !query) return query;
-  const ids = traceIds.length > 0 ? traceIds : [NO_MATCH_TRACE_ID];
+  // Hard backstop against the 250-sub-expressions-per-expression DQL limit: the
+  // injected `in(trace.id, array(toUid×N))` is a single expression, so N must
+  // stay under ~248 no matter what the caller passed (callers should already cap
+  // at SAFE_TRACE_CAP, but this guarantees the query never throws).
+  const ids = (traceIds.length > 0 ? traceIds : [NO_MATCH_TRACE_ID]).slice(
+    0,
+    SAFE_TRACE_CAP,
+  );
   const pipe = `| filter in(trace.id, array(${dqlUidArray(ids)}))`;
   return query.replace(
     /^([ \t]*fetch\s+(?:spans|logs)\b[^\n]*)$/gm,

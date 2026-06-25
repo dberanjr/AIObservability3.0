@@ -130,10 +130,26 @@ describe("TRACE_SCOPED_ATTRS", () => {
 });
 
 describe("SAFE_TRACE_CAP", () => {
-  it("is a finite cap with headroom below the DQL ~1000-expression limit", () => {
+  it("stays under the 250 sub-expressions-per-expression DQL limit", () => {
+    // injectTraceScope emits a single `in(trace.id, array(toUid×N))` expression;
+    // DQL caps sub-expressions per expression at 250 (verified on ualpre:
+    // toUid×256 throws EXPRESSION_TOO_MANY_SUB_EXPRESSIONS). The cap must leave
+    // room for array()/in()/field-ref overhead, so keep it a few below 248.
     expect(Number.isFinite(SAFE_TRACE_CAP)).toBe(true);
-    expect(SAFE_TRACE_CAP).toBeGreaterThanOrEqual(600);
-    expect(SAFE_TRACE_CAP).toBeLessThanOrEqual(900);
+    expect(SAFE_TRACE_CAP).toBeGreaterThanOrEqual(100);
+    expect(SAFE_TRACE_CAP).toBeLessThanOrEqual(245);
+  });
+});
+
+describe("injectTraceScope sub-expression safety", () => {
+  it("hard-caps injected ids at SAFE_TRACE_CAP even if handed more", () => {
+    const tooMany = Array.from({ length: 500 }, (_, i) =>
+      i.toString(16).padStart(32, "0"),
+    );
+    const out = injectTraceScope("fetch spans", tooMany);
+    const toUidCount = (out.match(/toUid\(/g) ?? []).length;
+    expect(toUidCount).toBe(SAFE_TRACE_CAP);
+    expect(toUidCount).toBeLessThan(250);
   });
 });
 
