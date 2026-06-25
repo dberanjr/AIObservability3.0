@@ -11,10 +11,12 @@ import {
   patternDisabledReason,
   patternStatus,
 } from "../../../data/ai-layer-patterns";
-import { fmtCount, fmtMs, fmtTokens, fmtUSDCompact } from "../../../data/format";
+import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDCompact } from "../../../data/format";
 import { statusColor } from "./tokens";
 import { Spark } from "./Spark";
+import { FilterTrigger } from "../../../components/FilterTrigger";
 import type { ArchNodeMeta, NodeView } from "./model";
+import type { ClientUpstream } from "./useClientUpstream";
 
 /** Per-tier time series for the drawer charts. */
 export interface TierSeries {
@@ -53,9 +55,65 @@ interface Props {
   meta: ArchNodeMeta | null;
   view: NodeView | null;
   tierSeries: TierSeries | null;
+  /** Upstream callers for the Client tier drawer (null for other tiers). */
+  clientUpstream?: ClientUpstream | null;
   onClose: () => void;
   onDrill: (path: string, focus?: string) => void;
 }
+
+/** Upstream-callers list for the Client tier — each row filters the whole app
+ *  to that service on click. */
+const ClientUpstreamSection = ({ data }: { data: ClientUpstream }) => {
+  if (data.services.length === 0) return null;
+  return (
+    <div className="am-dsection">
+      <div className="am-dsection-h">Upstream services · click to filter the app</div>
+      <div className="am-contrib">
+        {data.services.map((s) => (
+          <div key={s.id} className="am-pattern">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <FilterTrigger
+                attribute="service.name"
+                value={[s.name]}
+                label="upstream service"
+              >
+                <span className="am-contrib-name">{s.name}</span>
+              </FilterTrigger>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-3)",
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {fmtCount(s.requests)} req · {fmtPercent(s.errPct)} err · p90{" "}
+                {fmtMs(s.p90Ms)}
+              </span>
+            </div>
+            {s.series.length >= 2 && (
+              <Spark
+                data={s.series}
+                color="var(--blue)"
+                width={360}
+                height={34}
+                fluid
+                format={fmtCount}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const DrawerChart = ({
   title,
@@ -81,7 +139,7 @@ const DrawerChart = ({
   );
 };
 
-export const NodeDrawer = ({ meta, view, tierSeries, onClose, onDrill }: Props) => {
+export const NodeDrawer = ({ meta, view, tierSeries, clientUpstream, onClose, onDrill }: Props) => {
   const open = !!meta && !!view;
   const layer = meta ? layerByKey(meta.key) : null;
   const color = view ? statusColor(view.status) : "var(--blue)";
@@ -122,6 +180,10 @@ export const NodeDrawer = ({ meta, view, tierSeries, onClose, onDrill }: Props) 
                 </div>
               ) : (
                 <div className="am-empty-note">{view.reason || view.sub}</div>
+              )}
+
+              {meta.key === "client" && clientUpstream && (
+                <ClientUpstreamSection data={clientUpstream} />
               )}
 
               {tierSeries && (

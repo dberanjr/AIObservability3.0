@@ -272,9 +272,15 @@ ${globalFilterClauses(filters)}
 `.trim();
 
 /**
- * Step 1 for upstream services: the dt.entity.service IDs that host AI agents
- * in scope. parent.service.name is NOT emitted on spans, so upstream callers
+ * Step 1 for upstream services: the dt.entity.service IDs of the in-scope AI
+ * footprint. parent.service.name is NOT emitted on spans, so upstream callers
  * must come from Smartscape topology (step 2) keyed by these service IDs.
+ *
+ * Captures BOTH agent-hosting services (gen_ai.agent.name) AND LLM-calling
+ * services (gen_ai.request.model). Keying on agent.name alone missed the proxy
+ * / model services (e.g. bos-proxy-core), which are exactly the ones that carry
+ * monitored caller edges in Smartscape — so the upstream table came back empty
+ * even though real callers existed. The union is the correct "AI services" set.
  */
 export const buildAiServiceIdsQuery = (
   serviceIds: string[] | null,
@@ -284,7 +290,7 @@ export const buildAiServiceIdsQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
-| filter isNotNull(gen_ai.agent.name)
+| filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.request.model)
 | summarize spans = count(), by: { svc = dt.entity.service }
 | limit 200
 `.trim();

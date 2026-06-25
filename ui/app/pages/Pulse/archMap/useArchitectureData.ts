@@ -37,6 +37,7 @@ import { AI_SPAN_POPULATION, dbSystemIsVectorStore } from "../../../detection/at
 import { fmtCount, fmtTokens, fmtMs, fmtUSD, fmtPercent, toNum } from "../../../data/format";
 import { usePulseSeries, type PulseSeries } from "./usePulseSeries";
 import { useSpendBreakdown } from "../useSpendBreakdown";
+import { useClientUpstream, type ClientUpstream } from "./useClientUpstream";
 import type { Finding } from "../../../components/drawers/types";
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import type { LensId } from "../architectureLenses";
@@ -80,6 +81,8 @@ export interface ArchData {
   loopPct: number | null;
   loopRate: string | null;
   loopEntity: string | null;
+  /** Upstream caller services for the Client node + its drawer drill-down. */
+  clientUpstream: ClientUpstream;
   findings: Finding[];
   counts: { services: number | null; agents: number | null; tools: number | null };
   breakdown: { critical: number; warning: number; info: number };
@@ -203,6 +206,7 @@ export const useArchitectureData = (): ArchData => {
   const highFreq = useHighFrequencyAgents();
   const counts = useResolvedCounts();
   const { anomalies, isLoading: anomLoading } = useAnomalies();
+  const clientUpstream = useClientUpstream();
 
   const { data, isLoading, error } = useScopedDql<Rec>(
     buildQuery(scope.timeframe.from, scope.timeframe.to ?? "now()"),
@@ -553,6 +557,41 @@ export const useArchitectureData = (): ArchData => {
       }
     }
 
+    // ── client tier (upstream callers from Smartscape topology) ──
+    // The Client tier has no native gen_ai spans, but the services that CALL the
+    // AI services are in Smartscape — so we surface their count + RED metrics
+    // here instead of the static "no native OTel" note. The drawer lists them
+    // (each filters the whole app on click).
+    if (clientUpstream.count > 0) {
+      const cErr = clientUpstream.errPct; // percent
+      const cStatus = rateStatus(cErr / 100);
+      const aggSeries = clientUpstream.services.reduce<number[]>((acc, s) => {
+        s.series.forEach((v, i) => {
+          acc[i] = (acc[i] ?? 0) + v;
+        });
+        return acc;
+      }, []);
+      nodes.client = {
+        status: cStatus,
+        state: "live",
+        headline: fmtCount(clientUpstream.count),
+        sub: clientUpstream.count === 1 ? "upstream service" : "upstream services",
+        badges: [
+          { text: `${fmtPercent(cErr)} err`, tone: cErr >= WARN_ERR * 100 ? "warning" : "neutral" },
+          { text: `p90 ${fmtMs(clientUpstream.p90Ms)}`, tone: "neutral" },
+        ],
+        findings: findingBadge("client").n,
+        findingTone: findingBadge("client").tone,
+        series: aggSeries.length >= 2 ? aggSeries : undefined,
+        reason: `${clientUpstream.count} upstream caller service${clientUpstream.count === 1 ? "" : "s"} · ${fmtPercent(cErr)} error rate`,
+        cells: {
+          throughput: { status: "healthy", headline: fmtCount(clientUpstream.count), sub: "upstream services", badges: [] },
+          latency: { status: latStatus(clientUpstream.p90Ms), headline: fmtMs(clientUpstream.p90Ms), sub: "p90 (worst caller)", badges: [] },
+          errors: { status: cStatus, headline: fmtPercent(cErr), sub: "caller error rate", badges: [] },
+        },
+      };
+    }
+
     // ── per-tier sparklines (attach to live tiers only) ───
     // The node sparkline switches metric with the active lens (handled in
     // MapNode): throughput by default, p90 latency / error count / tokens
@@ -660,6 +699,7 @@ export const useArchitectureData = (): ArchData => {
       loopPct,
       loopRate,
       loopEntity: fleetLoop.entity,
+      clientUpstream,
       findings: anomalies,
       counts: { services: counts.services, agents: counts.agents, tools: counts.tools },
       breakdown,
@@ -673,6 +713,7 @@ export const useArchitectureData = (): ArchData => {
     data,
     pulse,
     spendBreakdown.total,
+    clientUpstream,
     samplingRatio,
     loops.isEmpty,
     loops.isLoading,

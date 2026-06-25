@@ -234,6 +234,7 @@ export const ArchitectureMap = () => {
               }
             : null
         }
+        clientUpstream={picked?.key === "client" ? data.clientUpstream : null}
         onClose={() => setPicked(null)}
         onDrill={(path, focus) => goToTab(path, { focus: focus as FocusParam })}
       />
