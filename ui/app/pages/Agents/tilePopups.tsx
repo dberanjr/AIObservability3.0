@@ -2,6 +2,8 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
+import { Button } from "@dynatrace/strato-components/buttons";
+import { FilterIcon } from "@dynatrace/strato-icons";
 import { AreaChart } from "../../components/charts/AreaChart";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
 import { DataGapNote } from "../../components/DataGapNote";
@@ -18,8 +20,10 @@ import {
   fmtUSDCompact,
 } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useTweaks } from "../../tweaks/TweaksContext";
 import type { AgentRow } from "./useAgents";
+import { summarizeAgentTtft, TTFT_ATTRIBUTES } from "./ttft";
 import { useInvocationsChart } from "./useInvocationsChart";
 import { useAgentLoops, LOOP_REPEAT_RATIO, LOOP_MAX_STEP } from "./useAgentLoops";
 import { useAgentLoopSeries } from "./useAgentLoopSeries";
@@ -457,9 +461,71 @@ export const CostBody = ({ agents }: { agents: AgentRow[] }) => {
 
 const EXAMPLE_TTFT = [420, 510, 640, 380, 720, 560, 480, 610, 530, 690];
 
-export const TtftBody = () => {
+export const TtftBody = ({
+  agents,
+  onApplied,
+}: {
+  agents: AgentRow[];
+  /** Invoked after the filter is applied so the caller can close the modal. */
+  onApplied?: () => void;
+}) => {
   const { pageConfig } = useTweaks();
   const showExample = pageConfig.showExampleData;
+  const { setPresenceCondition } = useGlobalFilters();
+  const summary = summarizeAgentTtft(agents);
+
+  // Real data: TTFT is emitted (streamed responses). Show the fleet
+  // distribution built from per-agent averages, not the example placeholder.
+  if (summary) {
+    const agentCount = summary.agentsWithTtft;
+    // Scope the whole app to the traces that actually contain a TTFT span. A
+    // presence filter on the TTFT attribute is *selective* (Grail skips blocks
+    // without the column), so the trace-scope resolver completes — unlike a
+    // gen_ai.agent.name filter, which scans the whole spans bucket and gets
+    // truncated by the scan limit before finding these sparse agents.
+    const filterToTtftTraces = () => {
+      setPresenceCondition("gen_ai.response.ttft", TTFT_ATTRIBUTES);
+      onApplied?.();
+    };
+    return (
+      <Flex flexDirection="column" gap={16}>
+        <Text style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>
+          Time-to-first-token measures responsiveness of streamed model
+          responses — the delay before the first token reaches the user. Derived
+          from <code>gen_ai.response.ttft</code> on streamed agent responses; the
+          chart shows each emitting agent&apos;s average TTFT, ascending.
+        </Text>
+        <StatStrip
+          stats={[
+            { label: "Median TTFT", value: fmtMs(summary.medianMs) },
+            { label: "P90 TTFT", value: fmtMs(summary.p90Ms) },
+            { label: "Mean TTFT", value: fmtMs(summary.avgMs) },
+            { label: "Agents emitting", value: fmtCount(agentCount) },
+          ]}
+        />
+        <Flex flexDirection="row" alignItems="center" gap={12} flexWrap="wrap">
+          <Button variant="accent" onClick={filterToTtftTraces}>
+            <Button.Prefix>
+              <FilterIcon />
+            </Button.Prefix>
+            Filter to TTFT-emitting traces
+          </Button>
+          <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+            Scopes every tab to the {agentCount === 1 ? "1 agent" : `${agentCount} agents`}
+            &apos; traces that contain a TTFT span. Clear it anytime with Reset in
+            the toolbar.
+          </Text>
+        </Flex>
+        <AreaChart
+          height={260}
+          formatLeft={(n) => fmtMs(n)}
+          series={[
+            { label: "Avg TTFT by agent", color: "var(--purple)", values: summary.values },
+          ]}
+        />
+      </Flex>
+    );
+  }
 
   const exampleChart = (
     <Flex flexDirection="column" gap={12}>

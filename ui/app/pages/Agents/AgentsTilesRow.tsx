@@ -5,8 +5,9 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { ChartModal } from "../../components/charts/ChartExpander";
 import { MissingDataHint } from "../../components/displayHints";
-import { fmtCount, fmtPercent, fmtUSDCompact } from "../../data/format";
+import { fmtCount, fmtMs, fmtPercent, fmtUSDCompact } from "../../data/format";
 import { useAgentLoops } from "./useAgentLoops";
+import { summarizeAgentTtft } from "./ttft";
 import {
   CostBody,
   ErrorRateBody,
@@ -113,7 +114,7 @@ const MODAL_META: Record<TileId, { title: string; subtitle: string }> = {
   error: { title: "Error rate", subtitle: "Fleet error rate and the agents contributing the most failures" },
   cost: { title: "Estimated cost", subtitle: "Attributed LLM cost by agent and model in the current scope" },
   looping: { title: "Looping agents", subtitle: "Heuristic agent-loop detection with LangGraph node-execution trend" },
-  ttft: { title: "Time to first token", subtitle: "Streamed-response responsiveness (not currently emitted)" },
+  ttft: { title: "Time to first token", subtitle: "Streamed-response responsiveness (gen_ai.response.ttft)" },
 };
 
 export interface AgentsTilesRowProps {
@@ -146,6 +147,9 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
   const errors = substantive.reduce((acc, a) => acc + a.errors, 0);
   const errorRate = invocations > 0 ? (errors / invocations) * 100 : 0;
   const cost = substantive.reduce((acc, a) => acc + a.cost, 0);
+  // TTFT is emitted only on streamed responses, so it lands on a subset of
+  // agents; summarize their per-agent averages into a single fleet figure.
+  const ttft = summarizeAgentTtft(agents);
 
   const renderBody = () => {
     switch (open) {
@@ -162,7 +166,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       case "looping":
         return <LoopingAgentsBody />;
       case "ttft":
-        return <TtftBody />;
+        return <TtftBody agents={agents} onApplied={() => setOpen(null)} />;
       default:
         return null;
     }
@@ -185,7 +189,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         <Tile
           label="Invocations"
           value={fmtCount(invocations)}
-          info="Total agent invocations (agent spans) in the current scope. Click for the time series with forecast and brush-to-zoom."
+          info="Total agent invocations (distinct traces / runs) in the current scope. Click for the time series with forecast and brush-to-zoom."
           onClick={() => setOpen("invocations")}
         />
         <Tile
@@ -220,9 +224,19 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         />
         <Tile
           label="TTFT"
-          value="—"
-          sub={<MissingDataHint note="not emitted" attribute="gen_ai.response.ttft" />}
-          info="Time to first token — responsiveness of streamed responses. Not emitted by any agent in this scope. Click for instrumentation guidance (and an example view via Tweaks → Show example data)."
+          value={ttft ? fmtMs(ttft.medianMs) : "—"}
+          sub={
+            ttft ? (
+              `median · ${ttft.agentsWithTtft} agent${ttft.agentsWithTtft === 1 ? "" : "s"}`
+            ) : (
+              <MissingDataHint note="not emitted" attribute="gen_ai.response.ttft" />
+            )
+          }
+          info={
+            ttft
+              ? "Median time-to-first-token across agents that emit it (gen_ai.response.ttft on streamed responses). Click for the P50/P90 breakdown and per-agent distribution."
+              : "Time to first token — responsiveness of streamed responses. Not emitted by any agent in this scope. Click for instrumentation guidance (and an example view via Tweaks → Show example data)."
+          }
           onClick={() => setOpen("ttft")}
         />
       </div>

@@ -14,6 +14,12 @@ interface GlobalFilterContextValue {
   upsertCondition: (attribute: string, values: string[]) => void;
   /** Replace the values of an existing condition; removes it if empty. */
   setConditionValues: (attribute: string, values: string[]) => void;
+  /**
+   * Set (replace) a presence ("exists") condition keyed by `attribute`. Scopes
+   * to traces where any span carries at least one of `attributeNames`
+   * (OR-joined). Defaults `attributeNames` to `[attribute]`.
+   */
+  setPresenceCondition: (attribute: string, attributeNames?: string[]) => void;
   removeCondition: (attribute: string) => void;
   clearAll: () => void;
   hasFilters: boolean;
@@ -64,6 +70,18 @@ export const GlobalFilterProvider = ({
     setConditionValues(attribute, merged);
   };
 
+  const setPresenceCondition = (
+    attribute: string,
+    attributeNames?: string[],
+  ) => {
+    const names =
+      attributeNames && attributeNames.length > 0 ? attributeNames : [attribute];
+    const others = conditions.filter((c) => c.attribute !== attribute);
+    setFilters({
+      conditions: [...others, { attribute, values: names, op: "exists" }],
+    });
+  };
+
   const removeCondition = (attribute: string) =>
     setFilters({
       conditions: conditions.filter((c) => c.attribute !== attribute),
@@ -90,6 +108,7 @@ export const GlobalFilterProvider = ({
         filters: normalized,
         upsertCondition,
         setConditionValues,
+        setPresenceCondition,
         removeCondition,
         clearAll,
         hasFilters,

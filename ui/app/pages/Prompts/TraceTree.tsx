@@ -13,6 +13,14 @@ import {
 import { fmtMs, fmtTokens } from "../../data/format";
 import { MCP_LIFECYCLE_METHODS } from "../../scope/queries";
 import type { TraceSpan } from "./useTraceSpans";
+import {
+  AI_ATTR_GROUPS,
+  buildAiAttrSections,
+  buildOtherAttrSection,
+  type Attr,
+  type AttrType,
+  type AttrSectionData,
+} from "./spanAttributes";
 
 interface TraceNode {
   span: TraceSpan;
@@ -474,17 +482,6 @@ interface SpanAttributesPanelProps {
   onToggleMaximize?: () => void;
 }
 
-type AttrType = "string" | "number" | "bool" | "time" | "duration" | "id";
-interface Attr {
-  label: string;
-  value: string | number | boolean | null;
-  type: AttrType;
-}
-interface AttrSectionData {
-  title: string;
-  rows: Attr[];
-}
-
 // Value colors mirror the Distributed Tracing app: strings teal, numerics
 // (numbers / durations / timestamps) purple, booleans amber.
 const STRING_COLOR = "#0E8A8A";
@@ -519,98 +516,87 @@ const fmtAttr = (a: Attr): string => {
 const present = (rows: Attr[]): Attr[] =>
   rows.filter((a) => a.value !== null && a.value !== "");
 
+// Raw attribute keys surfaced in the curated Core/Error/Identifiers sections —
+// excluded from the catch-all "Other attributes" group so nothing shows twice.
+const CURATED_RAW_KEYS = new Set<string>([
+  // Core
+  "endpoint.name",
+  "span.kind",
+  "span.name",
+  "service.name",
+  "dt.service.name",
+  "duration",
+  "span.status_code",
+  "http.response.status_code",
+  "request.is_root_span",
+  "start_time",
+  "end_time",
+  // Error
+  "span.status_message",
+  "exception.type",
+  "exception.message",
+  // Identifiers
+  "span.id",
+  "span.parent_id",
+  "trace.id",
+  "dt.rum.session.id",
+]);
+
+/**
+ * Build the attribute sections for a span, in display order:
+ *   1. AI / OpenLLMetry namespace groups (gen_ai.*, llm.*, traceloop.*, …),
+ *      every raw key in each, humanized (see spanAttributes.ts).
+ *   2. Curated Core / Error / Identifiers, from the typed span fields.
+ *   3. "Other attributes" — every remaining raw attribute (infra, code, …).
+ */
 const buildSections = (span: TraceSpan): AttrSectionData[] => {
-  const sections: AttrSectionData[] = [
-    {
-      title: "Core",
-      rows: present([
-        { label: "Endpoint", value: span.endpoint, type: "string" },
-        { label: "Span kind", value: span.spanKind, type: "string" },
-        { label: "Span name", value: span.name, type: "string" },
-        { label: "Service", value: span.service, type: "string" },
-        { label: "Duration", value: span.durationMs, type: "duration" },
-        { label: "Status", value: span.statusCode, type: "string" },
-        { label: "HTTP status", value: span.httpStatus, type: "number" },
-        {
-          label: "Request is root span",
-          value: span.isRoot,
-          type: "bool",
-        },
-        { label: "Start time", value: span.timestampMs, type: "time" },
-        { label: "End time", value: span.endTimeMs, type: "time" },
-      ]),
-    },
-    {
-      title: "Gen AI",
-      rows: present([
-        { label: "Provider", value: span.provider, type: "string" },
-        { label: "Model", value: span.model, type: "string" },
-        { label: "Operation", value: span.operation, type: "string" },
-        { label: "Agent", value: span.agentName, type: "string" },
-        { label: "Tool", value: span.toolName, type: "string" },
-        { label: "MCP method", value: span.mcpMethod, type: "string" },
-        {
-          label: "Input tokens",
-          value: span.inTokens > 0 ? span.inTokens : null,
-          type: "number",
-        },
-        {
-          label: "Output tokens",
-          value: span.outTokens > 0 ? span.outTokens : null,
-          type: "number",
-        },
-      ]),
-    },
-    {
-      title: "Langchain",
-      rows: present([
-        { label: "Workflow", value: span.workflow, type: "string" },
-        { label: "Entity name", value: span.tlEntity, type: "string" },
-        { label: "Entity path", value: span.tlEntityPath, type: "string" },
-        { label: "Span kind", value: span.tlKind, type: "string" },
-        { label: "LangGraph node", value: span.lgNode, type: "string" },
-        {
-          label: "LangGraph checkpoint",
-          value: span.lgCheckpoint,
-          type: "string",
-        },
-      ]),
-    },
-    {
-      title: "Code attributes",
-      rows: present([
-        { label: "CPU self time", value: span.cpuSelfMs, type: "duration" },
-        { label: "CPU time", value: span.cpuMs, type: "duration" },
-        { label: "Code function", value: span.codeFunction, type: "string" },
-        { label: "Code namespace", value: span.codeNamespace, type: "string" },
-      ]),
-    },
-    {
-      title: "Error",
-      rows: present([
-        { label: "Status message", value: span.statusMessage, type: "string" },
-        { label: "Exception type", value: span.exceptionType, type: "string" },
-        { label: "Exception message", value: span.exceptionMsg, type: "string" },
-      ]),
-    },
-    {
-      title: "Identifiers",
-      rows: present([
-        { label: "Span ID", value: span.spanId, type: "id" },
-        { label: "Parent span ID", value: span.parentSpanId, type: "id" },
-        { label: "Session ID", value: span.sessionId, type: "id" },
-      ]),
-    },
-  ];
-  return sections.filter((s) => s.rows.length > 0);
+  const ai = buildAiAttrSections(span.attributes);
+
+  const core: AttrSectionData = {
+    title: "Core",
+    rows: present([
+      { label: "Endpoint", value: span.endpoint, type: "string" },
+      { label: "Span kind", value: span.spanKind, type: "string" },
+      { label: "Span name", value: span.name, type: "string" },
+      { label: "Service", value: span.service, type: "string" },
+      { label: "Duration", value: span.durationMs, type: "duration" },
+      { label: "Status", value: span.statusCode, type: "string" },
+      { label: "HTTP status", value: span.httpStatus, type: "number" },
+      { label: "Request is root span", value: span.isRoot, type: "bool" },
+      { label: "Start time", value: span.timestampMs, type: "time" },
+      { label: "End time", value: span.endTimeMs, type: "time" },
+    ]),
+  };
+  const error: AttrSectionData = {
+    title: "Error",
+    rows: present([
+      { label: "Status message", value: span.statusMessage, type: "string" },
+      { label: "Exception type", value: span.exceptionType, type: "string" },
+      { label: "Exception message", value: span.exceptionMsg, type: "string" },
+    ]),
+  };
+  const identifiers: AttrSectionData = {
+    title: "Identifiers",
+    rows: present([
+      { label: "Span ID", value: span.spanId, type: "id" },
+      { label: "Parent span ID", value: span.parentSpanId, type: "id" },
+      { label: "Session ID", value: span.sessionId, type: "id" },
+    ]),
+  };
+  const other = buildOtherAttrSection(span.attributes, CURATED_RAW_KEYS);
+
+  return [...ai, core, error, identifiers, ...(other ? [other] : [])].filter(
+    (s) => s.rows.length > 0,
+  );
 };
 
-// Sections expanded by default. Core/Gen AI/Langchain are always open; the
-// Error section opens too when the span is errored so the failure detail (e.g.
-// the Status message / Pydantic validation error) is visible without hunting.
+// Sections expanded by default: every AI namespace group and Core are open; the
+// Error section opens too when the span is errored so the failure detail is
+// visible without hunting. Identifiers + "Other attributes" stay collapsed.
 // Pure — unit-testable without a React render.
 export const defaultOpenSections = (span: TraceSpan): Set<string> => {
-  const open = new Set(["Core", "Gen AI", "Langchain"]);
+  const open = new Set<string>(AI_ATTR_GROUPS.map((g) => g.title));
+  open.add("Core");
   if (span.isError) open.add("Error");
   return open;
 };
@@ -707,11 +693,54 @@ const SpanAttributesPanel = ({
       .map((s) => ({
         ...s,
         rows: s.rows.filter((a) =>
-          `${a.label} ${fmtAttr(a)}`.toLowerCase().includes(term),
+          `${a.key ?? ""} ${a.label} ${fmtAttr(a)}`
+            .toLowerCase()
+            .includes(term),
         ),
       }))
       .filter((s) => s.rows.length > 0);
   }, [span, term]);
+
+  // Maximized: the panel is the modal's only content, so the section list must
+  // be the single scroll region sized to the ACTUAL space between its top and
+  // the modal's bottom (a fixed viewport fraction overshoots the modal body and
+  // hides the lower sections behind the footer). Measure it and re-measure on
+  // resize / span change / next frame so it always fits and scrolls fully.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [measuredMax, setMeasuredMax] = useState<number | null>(null);
+  useEffect(() => {
+    if (!maximized) {
+      setMeasuredMax(null);
+      return;
+    }
+    const compute = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      // Bottom boundary = the trace modal's footer (its top edge). Strato's Modal
+      // exposes no role="dialog"/aria-modal, so we locate the footer button
+      // directly; this keeps the scroll region above the footer instead of
+      // overshooting the viewport.
+      let boundary = window.innerHeight - 24;
+      const footerBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => /Open in Distributed Tracing/i.test(b.textContent || ""),
+      );
+      if (footerBtn) {
+        const fb = footerBtn.getBoundingClientRect();
+        if (fb.top > top) boundary = fb.top - 12;
+      }
+      setMeasuredMax(Math.max(180, Math.round(boundary - top)));
+    };
+    compute();
+    const raf = requestAnimationFrame(compute);
+    const t = window.setTimeout(compute, 120);
+    window.addEventListener("resize", compute);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+      window.removeEventListener("resize", compute);
+    };
+  }, [maximized, span]);
 
   return (
     <Flex flexDirection="column" gap={8}>
@@ -754,7 +783,7 @@ const SpanAttributesPanel = ({
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search attributes"
+        placeholder="Filter attribute keys & values…"
         style={{
           width: "100%",
           boxSizing: "border-box",
@@ -767,11 +796,23 @@ const SpanAttributesPanel = ({
         }}
       />
       <div
+        ref={scrollRef}
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          maxHeight: maxHeight ?? 360,
+          // When maximized the panel is the modal's only content, so this list
+          // is the single scroll region, sized to the measured space above the
+          // modal footer (header + search stay pinned above it). Non-maximized
+          // uses the caller's px cap. Both scroll internally so every section —
+          // and every row within a section — is reachable.
+          maxHeight: maximized ? measuredMax ?? 400 : maxHeight ?? 360,
+          // CRITICAL: this div is itself a flex column AND a flex item of the
+          // panel's Flex, so its default min-height:auto resolves to content
+          // height and would override max-height (min wins over max) — leaving it
+          // un-clamped and unscrollable. min-height:0 lets max-height clamp so
+          // overflow scrolling actually engages.
+          minHeight: 0,
           overflowY: "auto",
           overflowX: "hidden",
           paddingRight: 4,
@@ -1139,8 +1180,8 @@ export const TraceTree = ({
         {selectedSpan ? (
           <SpanAttributesPanel
             span={selectedSpan}
-            maxHeight={maxed ? Math.round(maxHeight * 1.8) : maxHeight}
-            maximized={attrsMaximized}
+            maxHeight={maxHeight}
+            maximized={maxed}
             onToggleMaximize={() => setAttrsMaximized((m) => !m)}
           />
         ) : (

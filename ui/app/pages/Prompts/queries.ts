@@ -402,51 +402,28 @@ export const buildTraceSpansQuery = (
   // client HTTP spans and internal wrappers the old AI filter dropped. The
   // `trace.id` filter scopes to a single trace; TRACE_SPANS_LIMIT caps the
   // result and isTruncated flags pathological traces that exceed it.
+  //
+  // We deliberately do NOT project a curated `| fields` list: the span-attribute
+  // panel groups EVERY raw attribute by namespace (gen_ai.*, llm.*, traceloop.*,
+  // …), so the record must carry the full attribute set. A few derived helpers
+  // are added under stable snake_case names (`__*`-free so they don't collide
+  // with real attributes); `span.events` is dropped because it is large and not
+  // shown. useTraceSpans reads the raw keys for the waterfall and exposes the
+  // rest as the per-span attribute map.
   return `
 fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
 | filter trace.id == toUid("${dqlEscape(traceId)}")
 | dedup {span.id}
+| fieldsRemove span.events
 | fieldsAdd
-    duration_ms = duration / 1000000,
-    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
-    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
-| fields
-    span_id = span.id,
-    parent_span_id = span.parent_id,
-    name = span.name,
-    service = coalesce(service.name, getNodeName(dt.smartscape.service)),
-    duration_ms,
-    timestamp = start_time,
-    end_time,
-    has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
-    span_kind = span.kind,
-    status_code = span.status_code,
-    is_root = request.is_root_span,
-    endpoint = endpoint.name,
-    code_function = code.function,
-    code_namespace = code.namespace,
+    dur_ms = duration / 1000000,
     cpu_ms = span.timing.cpu / 1000000,
     cpu_self_ms = span.timing.cpu_self / 1000000,
-    gen_ai_provider = coalesce(gen_ai.system, gen_ai.provider.name),
-    gen_ai_model = coalesce(gen_ai.request.model, gen_ai.response.model, gen_ai.model),
-    gen_ai_operation = gen_ai.operation.name,
-    agent_name = gen_ai.agent.name,
-    tool_name = gen_ai.tool.name,
-    in_tok,
-    out_tok,
-    exception_type = exception.type,
-    exception_msg = exception.message,
-    workflow = traceloop.workflow.name,
-    tl_entity = traceloop.entity.name,
-    tl_entity_path = traceloop.entity.path,
-    tl_kind = traceloop.span.kind,
-    session_id = dt.rum.session.id,
-    mcp_method = mcp.method.name,
-    status_message = span.status_message,
-    http_status = http.response.status_code,
-    lg_node = traceloop.association.properties.langgraph_node,
-    lg_checkpoint = traceloop.association.properties.langgraph_checkpoint_ns
-| sort timestamp asc
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
+    has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
+    svc = coalesce(service.name, getNodeName(dt.smartscape.service))
+| sort start_time asc
 | limit ${TRACE_SPANS_LIMIT}
 `.trim();
 };

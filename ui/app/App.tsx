@@ -12,6 +12,7 @@ import { ModelsPage } from "./pages/Models/ModelsPage";
 import { PromptsPage } from "./pages/Prompts/PromptsPage";
 import { PulsePage } from "./pages/Pulse/PulsePage";
 import { AttributeAuditPage } from "./pages/AttributeAudit/AttributeAuditPage";
+import { About } from "./pages/About/About";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
 import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
@@ -79,6 +80,7 @@ export const App = () => {
                   path="/finops"
                   element={<RedirectKeepingSearch to="/models" />}
                 />
+                <Route path="/about" element={<About />} />
                 <Route path="/home" element={<Home />} />
               </Routes>
             </div>

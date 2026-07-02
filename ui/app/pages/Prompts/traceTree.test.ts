@@ -43,6 +43,7 @@ const base: TraceSpan = {
   httpStatus: null,
   lgNode: null,
   lgCheckpoint: null,
+  attributes: {},
 };
 
 describe("spanCategory — tool classification", () => {
@@ -104,11 +105,13 @@ const byId = (roots: TreeNode[]): Map<string, TreeNode> => {
 };
 
 describe("defaultOpenSections — which attribute sections start expanded", () => {
-  it("opens Core / Gen AI / Langchain by default, but not Error", () => {
+  it("opens the AI namespace groups + Core by default, but not Error", () => {
     const open = defaultOpenSections(base);
     expect(open.has("Core")).toBe(true);
-    expect(open.has("Gen AI")).toBe(true);
-    expect(open.has("Langchain")).toBe(true);
+    // AI/OpenLLMetry groups are expanded by default.
+    expect(open.has("Gen ai")).toBe(true);
+    expect(open.has("Llm")).toBe(true);
+    expect(open.has("Traceloop")).toBe(true);
     expect(open.has("Error")).toBe(false);
   });
 

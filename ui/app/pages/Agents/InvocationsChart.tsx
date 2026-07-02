@@ -15,7 +15,7 @@ import { useScope } from "../../scope/ScopeContext";
 import { useInvocationsChart } from "./useInvocationsChart";
 
 const INFO =
-  "Total agent invocations over the active timeframe (any span carrying gen_ai.agent.name), at a snapped time interval. Toggle Forecast to overlay a Dynatrace Intelligence prediction of the next ~30% of the window. Click-and-drag across the chart to brush a narrower timeframe. Expand for per-interval statistics.";
+  "Total agent invocations over the active timeframe (distinct traces / runs carrying gen_ai.agent.name), at a snapped time interval. Toggle Forecast to overlay a Dynatrace Intelligence prediction of the next ~30% of the window. Click-and-drag across the chart to brush a narrower timeframe. Expand for per-interval statistics.";
 
 /**
  * Agent-invocations time series with brush-to-zoom, a Dynatrace Intelligence

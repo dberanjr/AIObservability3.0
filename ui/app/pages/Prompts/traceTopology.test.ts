@@ -47,6 +47,7 @@ const mk = (over: Partial<TraceSpan>): TraceSpan => ({
   httpStatus: null,
   lgNode: null,
   lgCheckpoint: null,
+  attributes: {},
   ...over,
 });
 

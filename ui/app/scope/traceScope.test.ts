@@ -280,6 +280,64 @@ describe("mcpNotLifecycleClause", () => {
   });
 });
 
+describe("exists (presence) conditions", () => {
+  const TTFT = [
+    "gen_ai.response.ttft",
+    "gen_ai.usage.time_to_first_token",
+    "gen_ai.response.time_to_first_chunk",
+  ];
+
+  it("routes exists conditions to the trace-scope subset", () => {
+    const { direct, scope } = partitionConditions([
+      { attribute: "gen_ai.response.ttft", values: TTFT, op: "exists" },
+      { attribute: "gen_ai.request.model", values: ["m"] },
+    ]);
+    expect(scope.map((c) => c.attribute)).toEqual(["gen_ai.response.ttft"]);
+    expect(direct.map((c) => c.attribute)).toEqual(["gen_ai.request.model"]);
+  });
+
+  it("resolver tests presence of any listed attribute (OR-joined isNotNull)", () => {
+    const q = buildTraceScopeQuery(
+      { from: "now()-24h" },
+      { conditions: [{ attribute: "gen_ai.response.ttft", values: TTFT, op: "exists" }] },
+      SAFE_TRACE_CAP,
+    );
+    expect(q).toContain(
+      "c0 = countIf((isNotNull(gen_ai.response.ttft) or isNotNull(gen_ai.usage.time_to_first_token) or isNotNull(gen_ai.response.time_to_first_chunk)))",
+    );
+    expect(q).toContain("c0 > 0");
+  });
+
+  it("direct injection emits an isNotNull-OR filter for an exists condition", () => {
+    const out = injectGlobalFilters(
+      "fetch spans, from: now()-1h\n| summarize count()",
+      { conditions: [{ attribute: "gen_ai.response.ttft", values: TTFT, op: "exists" }] },
+    );
+    expect(out).toContain(
+      "| filter (isNotNull(gen_ai.response.ttft) or isNotNull(gen_ai.usage.time_to_first_token) or isNotNull(gen_ai.response.time_to_first_chunk))",
+    );
+  });
+
+  it("drops exists conditions whose attribute names are unsafe", () => {
+    const out = validConditions({
+      conditions: [
+        { attribute: "gen_ai.response.ttft", values: ["ok.attr", "bad attr!"], op: "exists" },
+      ],
+    });
+    expect(out).toHaveLength(0);
+  });
+
+  it("keeps exists conditions with only safe attribute names", () => {
+    const out = validConditions({
+      conditions: [
+        { attribute: "gen_ai.response.ttft", values: ["gen_ai.response.ttft"], op: "exists" },
+      ],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].op).toBe("exists");
+  });
+});
+
 describe("hasActiveFilter", () => {
   it("is false for an empty filter", () => {
     expect(hasActiveFilter({ conditions: [] })).toBe(false);

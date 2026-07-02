@@ -148,7 +148,17 @@ fetch spans, samplingRatio: 1, from: now()-24h
 
 export interface FilterCondition {
   attribute: string;
+  /**
+   * For the default `"in"` op these are the literal values to match
+   * (`in(toString(attribute), array(values))`). For the `"exists"` op they are
+   * span attribute NAMES whose presence is tested (`isNotNull(name) or …`),
+   * OR-joined — this lets one condition cover attribute synonyms (e.g. the
+   * three TTFT variants). `attribute` is then just the display key.
+   */
   values: string[];
+  /** Match mode. Omitted = "in" (value match). "exists" = presence of any
+   *  attribute named in `values`. */
+  op?: "in" | "exists";
 }
 
 export interface GlobalFilters {
@@ -170,18 +180,8 @@ const SAFE_ATTR_RE = /^[A-Za-z][A-Za-z0-9_.]*$/;
  * genuinely doesn't satisfy the condition).
  */
 const emitConditionPipes = (f?: GlobalFilters): string =>
-  (f?.conditions ?? [])
-    .filter(
-      (c) =>
-        c &&
-        SAFE_ATTR_RE.test(c.attribute) &&
-        Array.isArray(c.values) &&
-        c.values.length > 0,
-    )
-    .map(
-      (c) =>
-        `| filter in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`,
-    )
+  validConditions(f)
+    .map((c) => `| filter ${conditionPredicate(c)}`)
     .join("\n");
 
 /**
@@ -288,14 +288,27 @@ export const partitionConditions = (
   const direct: FilterCondition[] = [];
   const scope: FilterCondition[] = [];
   for (const c of valid) {
-    (TRACE_SCOPED_ATTRS.has(c.attribute) ? scope : direct).push(c);
+    // "exists" conditions are presence checks that must reach pages built on
+    // OTHER span types (e.g. a TTFT LLM-span presence filter scoping the Agents
+    // and Explorer tabs), so they always go through trace-scope resolution —
+    // same as the cross-span entity attributes.
+    const toScope = c.op === "exists" || TRACE_SCOPED_ATTRS.has(c.attribute);
+    (toScope ? scope : direct).push(c);
   }
   return { direct, scope };
 };
 
-/** A trace-scope predicate for one condition (values OR within the condition). */
+/**
+ * A DQL predicate for one condition (values OR within the condition). Used both
+ * for direct per-span injection and as the trace-scope resolver's countIf test.
+ *   - "in"     → `in(toString(attr), array("v1", "v2"))`
+ *   - "exists" → `(isNotNull(attr1) or isNotNull(attr2))` over the attribute
+ *                NAMES in `values` (each already validated against SAFE_ATTR_RE).
+ */
 const conditionPredicate = (c: FilterCondition): string =>
-  `in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`;
+  c.op === "exists"
+    ? `(${c.values.map((a) => `isNotNull(${a})`).join(" or ")})`
+    : `in(toString(${c.attribute}), array(${dqlIdArray(c.values)}))`;
 
 /**
  * True when the global filter has at least one valid attribute condition.
@@ -304,15 +317,29 @@ const conditionPredicate = (c: FilterCondition): string =>
 export const hasActiveFilter = (f?: GlobalFilters): boolean =>
   validConditions(f).length > 0;
 
-/** Filter conditions that are well-formed and carry at least one value. */
+/**
+ * Filter conditions that are well-formed and carry at least one value. For
+ * "exists" conditions the values are attribute NAMES interpolated bare into DQL,
+ * so every one must pass SAFE_ATTR_RE; for "in" conditions the values are string
+ * literals (safely quoted by dqlIdArray) and may be anything non-empty.
+ */
 export const validConditions = (f?: GlobalFilters): FilterCondition[] =>
-  (f?.conditions ?? []).filter(
-    (c) =>
-      c &&
-      SAFE_ATTR_RE.test(c.attribute) &&
-      Array.isArray(c.values) &&
-      c.values.length > 0,
-  );
+  (f?.conditions ?? []).filter((c) => {
+    if (
+      !c ||
+      !SAFE_ATTR_RE.test(c.attribute) ||
+      !Array.isArray(c.values) ||
+      c.values.length === 0
+    ) {
+      return false;
+    }
+    if (c.op === "exists") {
+      return c.values.every(
+        (v) => typeof v === "string" && SAFE_ATTR_RE.test(v),
+      );
+    }
+    return true;
+  });
 
 /**
  * Build the trace-scope resolver query for the SCOPE subset of conditions

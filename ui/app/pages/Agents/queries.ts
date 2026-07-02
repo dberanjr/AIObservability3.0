@@ -42,12 +42,18 @@ ${globalFilterClauses(filters)}
       else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "retrieval",
       else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and ${mcpNotLifecycleClause()}, "tool", else: "orch")))
 | summarize
-    invocations = count(),
+    // An invocation is one agent run, i.e. one trace — NOT one span. gen_ai.agent.name
+    // propagates to every child span in the run (tool calls, LangGraph nodes, task
+    // spans, …), so count() would tally the whole subtree (e.g. 49 spans for a single
+    // run). Count distinct traces instead. errors is likewise trace-grained: a run
+    // counts once if any of its spans errored, so error_rate_pct stays a 0–100% "share
+    // of runs that failed" rather than a per-span ratio that could exceed 100%.
+    invocations = countDistinct(trace.id),
     p50_ns = percentile(duration, 50),
     p90_ns = percentile(duration, 90),
     p99_ns = percentile(duration, 99),
     avg_ns = avg(duration),
-    errors = sum(is_error),
+    errors = countDistinct(if(is_error == 1, trace.id, else: null)),
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
     llm_spans = countIf(span_tier == "llm"),
@@ -401,7 +407,9 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
-| makeTimeseries invocations = count(), interval: ${intervalSec}s
+// One invocation = one trace, not one span (see buildAgentsQuery). countDistinct keeps
+// the hero chart consistent with the table's INV column.
+| makeTimeseries invocations = countDistinct(trace.id), interval: ${intervalSec}s
 `.trim();
 
 /**

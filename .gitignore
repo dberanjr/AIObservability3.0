@@ -10,6 +10,9 @@
 # Deployment artifact
 /out
 
+# Build-time generated metadata (rebuilt via prebuild/predeploy/prestart)
+/ui/app/generated
+
 # Dependencies
 /node_modules
 

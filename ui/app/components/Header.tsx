@@ -22,6 +22,7 @@ const NAV_ITEMS: { to: string; label: string }[] = [
   { to: "/prompts", label: "Prompts" },
   { to: "/models", label: "Models / FinOps" },
   { to: "/attributes", label: "Attributes" },
+  { to: "/about", label: "About" },
 ];
 
 export const Header = () => {

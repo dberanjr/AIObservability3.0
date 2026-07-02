@@ -19,25 +19,25 @@ describe("buildTraceSpansQuery — full trace fetch", () => {
     expect(q).toContain('toUid("7047d8bbdc8e032c358c75c5c1f4a473")');
   });
 
-  it("dedups by span id and sorts by timestamp", () => {
+  it("dedups by span id and sorts by start_time", () => {
     expect(q).toContain("| dedup {span.id}");
-    expect(q).toContain("| sort timestamp asc");
+    expect(q).toContain("| sort start_time asc");
   });
 
-  it("projects the error + langgraph + http attributes", () => {
-    expect(q).toContain("status_message = span.status_message");
-    expect(q).toContain("http_status = http.response.status_code");
-    expect(q).toContain(
-      "lg_node = traceloop.association.properties.langgraph_node",
-    );
-    expect(q).toContain(
-      "lg_checkpoint = traceloop.association.properties.langgraph_checkpoint_ns",
-    );
+  it("returns the FULL attribute set (no curated | fields projection)", () => {
+    // The panel groups every raw attribute by namespace, so the query must not
+    // project a fixed field list.
+    expect(q).not.toMatch(/\|\s*fields\b/);
+    // …but it still strips the large, unshown span.events column.
+    expect(q).toContain("| fieldsRemove span.events");
   });
 
-  it("keeps the has_error expression catching lowercase status_code error", () => {
+  it("adds the derived helper columns used by the waterfall", () => {
+    expect(q).toContain("dur_ms = duration / 1000000");
     expect(q).toContain(
       'has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false)',
     );
+    expect(q).toContain("in_tok = toLong(coalesce(gen_ai.usage.input_tokens");
+    expect(q).toContain("svc = coalesce(service.name, getNodeName(dt.smartscape.service))");
   });
 });
