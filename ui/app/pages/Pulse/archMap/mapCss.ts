@@ -286,7 +286,7 @@ export const ARCH_MAP_CSS = `
 .am-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -46%); width: 460px; max-width: 92vw; max-height: 86vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; z-index: 42; }
 .am-modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
 .am-modal-head { display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 10px; }
-.am-modal-sev { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex: 0 0 auto; }
+.am-modal-sev { font-size: 13px; line-height: 1; margin-top: 3px; flex: 0 0 auto; }
 .am-modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
 .am-modal-scope { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
 .am-modal-body { padding: 0 18px 18px; display: flex; flex-direction: column; gap: 14px; }

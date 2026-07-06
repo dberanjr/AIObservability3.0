@@ -12,6 +12,24 @@ import { median } from "./finopsLogic";
 import type { ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
 import { EmptyState } from "../../components/EmptyState";
+import { SR_ONLY } from "../../components/charts/AreaChart";
+
+/**
+ * Per-provider stroke dash pattern — a non-color identity channel so providers
+ * stay distinguishable in grayscale / colorblind mode and overlapping
+ * semi-transparent bubbles remain separable by their edge (UX report
+ * Models/FinOps-13). Mirrored in the legend so the mapping is learnable.
+ */
+const PROVIDER_DASH: Record<ProviderId, string> = {
+  anthropic: "0", // solid
+  openai: "5 3", // dashed
+  google: "1.5 3", // dotted
+  "aws-bedrock": "7 3", // long dash
+  azure: "4 3 1.5 3", // dash-dot
+  cohere: "2.5 2.5", // even dash
+  mistral: "9 3 2 3", // long dash-dot
+  unknown: "0",
+};
 
 /**
  * Top-level component (per DESIGN_HANDOFF §8 gotcha 1). Defining the chart
@@ -103,15 +121,19 @@ const ProviderLegend = ({ models }: { models: ModelRow[] }) => {
     <Flex gap={8} style={{ flexWrap: "wrap" }}>
       {Array.from(seen).map((id) => (
         <Flex key={id} alignItems="center" gap={4}>
-          <span
-            aria-hidden
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: PROVIDER_COLOR[id],
-            }}
-          />
+          {/* Colour + dash pattern together — the dash carries provider
+              identity when hue is unavailable (grayscale / colorblind). */}
+          <svg width={18} height={8} aria-hidden style={{ flex: "0 0 auto" }}>
+            <line
+              x1={0}
+              y1={4}
+              x2={18}
+              y2={4}
+              stroke={PROVIDER_COLOR[id]}
+              strokeWidth={2.5}
+              strokeDasharray={PROVIDER_DASH[id]}
+            />
+          </svg>
           <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
             {PROVIDER_DISPLAY[id]}
           </Text>
@@ -137,6 +159,9 @@ export const ModelBubbleChart = ({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<ModelRow | null>(null);
+  // Spoken readout of the keyboard-focused bubble, fed to an aria-live region
+  // so the tooltip's content is reachable without a pointer (Models/FinOps-13).
+  const [srText, setSrText] = useState("");
 
   const plotted = useMemo<{ scales: Scales; points: Plotted[] }>(() => {
     const scales = buildScales(models);
@@ -203,6 +228,71 @@ export const ModelBubbleChart = ({
     if (best !== -1) setSelected(points[best].model);
   };
 
+  // Keyboard traversal order: left-to-right by $/call (x), ties broken by
+  // latency (y). Arrow keys walk this order so movement feels spatial; the
+  // same hoverIndex drives the visual tooltip + highlight ring for keyboard
+  // users, and Enter/Space opens the model's detail modal.
+  const navOrder = useMemo(
+    () =>
+      points
+        .map((_, i) => i)
+        .sort((a, b) => points[a].cx - points[b].cx || points[a].cy - points[b].cy),
+    [points],
+  );
+
+  const readoutFor = (i: number): string => {
+    const p = points[i];
+    return `${p.model.model}, ${p.model.provider.label}, ${fmtUSD(
+      p.costPerCall,
+    )} per call, avg ${fmtMs(p.model.avgMs)} latency, ${fmtUSD(
+      p.model.cost,
+    )} spend. Press Enter to open detail.`;
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (points.length === 0) return;
+    if (e.key === "Enter" || e.key === " ") {
+      if (hoverIndex != null) {
+        e.preventDefault();
+        setSelected(points[hoverIndex].model);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      setHoverIndex(null);
+      setSrText("");
+      return;
+    }
+    let dir = 0;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") dir = 1;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") dir = -1;
+    else if (e.key === "Home") {
+      e.preventDefault();
+      const t = navOrder[0];
+      setHoverIndex(t);
+      setSrText(readoutFor(t));
+      return;
+    } else if (e.key === "End") {
+      e.preventDefault();
+      const t = navOrder[navOrder.length - 1];
+      setHoverIndex(t);
+      setSrText(readoutFor(t));
+      return;
+    } else return;
+    e.preventDefault();
+    const curPos = hoverIndex == null ? -1 : navOrder.indexOf(hoverIndex);
+    let nextPos = curPos === -1 ? (dir === 1 ? 0 : navOrder.length - 1) : curPos + dir;
+    nextPos = Math.max(0, Math.min(navOrder.length - 1, nextPos));
+    const target = navOrder[nextPos];
+    setHoverIndex(target);
+    setSrText(readoutFor(target));
+  };
+
+  const onBlur = () => {
+    setHoverIndex(null);
+    setSrText("");
+  };
+
   const xTicks = [0.0001, 0.001, 0.01, 0.1, 1, 10].filter(
     (v) => v >= scales.xLo && v <= scales.xHi,
   );
@@ -250,8 +340,11 @@ export const ModelBubbleChart = ({
               onMouseMove={onMouseMove}
               onMouseLeave={() => setHoverIndex(null)}
               onClick={onClick}
+              onKeyDown={onKeyDown}
+              onBlur={onBlur}
               role="img"
-              aria-label={ariaSummary}
+              tabIndex={0}
+              aria-label={`${ariaSummary}. Use arrow keys to move between models; Enter opens detail.`}
               style={{
                 display: "block",
                 width: "100%",
@@ -386,10 +479,26 @@ export const ModelBubbleChart = ({
                   stroke={p.model.providerColor}
                   strokeOpacity={0.95}
                   strokeWidth={hoverIndex === i ? 2 : 1}
+                  strokeDasharray={PROVIDER_DASH[p.model.provider.id]}
                   pointerEvents="none"
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
+
+              {/* Highlight ring on the active bubble — a visible focus cue for
+                  keyboard users (and emphasis for the mouse). */}
+              {hoverIndex != null && (
+                <circle
+                  cx={points[hoverIndex].cx}
+                  cy={points[hoverIndex].cy}
+                  r={points[hoverIndex].r + 3}
+                  fill="none"
+                  stroke="var(--text)"
+                  strokeWidth={1.5}
+                  pointerEvents="none"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
 
               {/* Direct labels on the largest-spend bubbles — a non-color
                   identity cue so the chart isn't legible by hue alone. */}
@@ -413,8 +522,9 @@ export const ModelBubbleChart = ({
 
             {hovered && (
               <div
-                role="status"
-                aria-live="polite"
+                // Visual echo of the SR_ONLY live readout below — hidden from
+                // AT so keyboard nav announces once, not twice.
+                aria-hidden
                 style={{
                   position: "absolute",
                   top: 8,
@@ -459,6 +569,10 @@ export const ModelBubbleChart = ({
                 </Flex>
               </div>
             )}
+            {/* Keyboard-cursor readout for the focused bubble. */}
+            <div aria-live="polite" style={SR_ONLY}>
+              {srText}
+            </div>
           </div>
         )}
       </Flex>

@@ -4,6 +4,7 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtUSDCompact } from "../../data/format";
 import { EmptyState } from "../../components/EmptyState";
+import { SR_ONLY } from "../../components/charts/AreaChart";
 import type { DailyCostSummary } from "./useFinOps";
 import { assignSeriesColors } from "./finopsLogic";
 
@@ -38,6 +39,10 @@ export const DailyCostStackedBar = ({
 }: DailyCostStackedBarProps) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [viewW, setViewW] = useState<number>(FALLBACK_VIEW_W);
+  // Spoken readout of the keyboard-focused day column, fed to an aria-live
+  // region so the hover tooltip's per-model breakdown is reachable without a
+  // pointer (Models/FinOps-13).
+  const [srText, setSrText] = useState("");
 
   // Callback ref: (re)attaches a ResizeObserver whenever the plotting div
   // mounts. A callback ref (rather than useEffect + useRef) is needed because
@@ -91,6 +96,48 @@ export const DailyCostStackedBar = ({
   const hoverLabel =
     hoverIndex != null ? daily.dayLabels[hoverIndex] : null;
 
+  // Non-visual readout of a day column: total plus its top models by spend
+  // (named, so identity survives without the colour swatches).
+  const readoutFor = (dayIdx: number): string => {
+    const stack = stacks[dayIdx];
+    if (!stack) return "";
+    const label = daily.dayLabels[dayIdx] ?? `Day ${dayIdx + 1}`;
+    const parts = [`${label}, total ${fmtUSDCompact(stack.total)}`];
+    stack.segments
+      .filter((s) => s.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 4)
+      .forEach((s) => parts.push(`${s.model} ${fmtUSDCompact(s.value)}`));
+    return parts.join(", ");
+  };
+
+  // Arrow keys walk the day columns; Home/End jump to the ends; Escape clears.
+  // Mirrors the pointer hover so keyboard users reach the same tooltip content.
+  const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    const n = stacks.length;
+    if (n === 0) return;
+    let next: number | null = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown")
+      next = Math.min(n - 1, (hoverIndex ?? -1) + 1);
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+      next = Math.max(0, (hoverIndex ?? n) - 1);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = n - 1;
+    else if (e.key === "Escape") {
+      setHoverIndex(null);
+      setSrText("");
+      return;
+    } else return;
+    e.preventDefault();
+    setHoverIndex(next);
+    setSrText(readoutFor(next));
+  };
+
+  const onBlur = () => {
+    setHoverIndex(null);
+    setSrText("");
+  };
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
@@ -139,10 +186,13 @@ export const DailyCostStackedBar = ({
               height={HEIGHT}
               viewBox={`0 0 ${viewW} ${HEIGHT}`}
               role="img"
+              tabIndex={0}
               aria-label={`Daily cost over the last 7 days, stacked by model, total ${fmtUSDCompact(
                 daily.totals.reduce((a, b) => a + b, 0),
-              )}`}
+              )}. Use arrow keys to move between days.`}
               onMouseLeave={() => setHoverIndex(null)}
+              onKeyDown={onKeyDown}
+              onBlur={onBlur}
             >
               {/* Y axis grid + ticks */}
               {[0, 0.25, 0.5, 0.75, 1].map((t) => {
@@ -226,8 +276,9 @@ export const DailyCostStackedBar = ({
 
             {hovered && hoverLabel && (
               <div
-                role="status"
-                aria-live="polite"
+                // Visual echo of the SR_ONLY live readout below — hidden from
+                // AT so keyboard nav announces once, not twice.
+                aria-hidden
                 style={{
                   position: "absolute",
                   top: 8,
@@ -293,6 +344,10 @@ export const DailyCostStackedBar = ({
                 </Flex>
               </div>
             )}
+            {/* Keyboard-cursor readout for the focused day column. */}
+            <div aria-live="polite" style={SR_ONLY}>
+              {srText}
+            </div>
           </div>
         )}
       </Flex>

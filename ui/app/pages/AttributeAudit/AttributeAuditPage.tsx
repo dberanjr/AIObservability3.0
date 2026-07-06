@@ -570,7 +570,7 @@ export const AttributeAuditPage = () => {
                     transition: "border-color 0.12s, background 0.12s",
                   }}
                 >
-                  <TierBadge tier={tier} compact />
+                  <TierBadge tier={tier} compact decorative />
                   <Text style={{ fontSize: 11, fontWeight: 600, color: "inherit" }}>
                     {meta.longLabel}
                   </Text>

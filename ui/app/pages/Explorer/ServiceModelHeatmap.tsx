@@ -95,9 +95,142 @@ const ServiceModelHeatmapBody = () => {
   const result = useExplorerHeatmap();
   const [selected, setSelected] = React.useState<SelectedCell | null>(null);
 
+  // Roving-tabindex position for the keyboard grid. Only ONE data cell is
+  // Tab-reachable; arrow keys then move a roving focus cell-to-cell (WAI-ARIA
+  // grid pattern) instead of the former hundreds of individual tab stops
+  // (UX report Accessibility-7). Zero-token cells are non-interactive and are
+  // skipped by arrow navigation.
+  const [active, setActive] = React.useState<{ r: number; c: number } | null>(
+    null,
+  );
+  const cellRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
+
   const total = result.rows.length;
   const visibleRows = result.rows.slice(0, ROW_CAP);
   const hiddenRows = total - visibleRows.length;
+  const cols = result.columns;
+
+  const tokensAt = React.useCallback(
+    (r: number, c: number): number => {
+      const row = visibleRows[r];
+      const col = cols[c];
+      if (!row || !col) return 0;
+      return row.cells.get(col.model)?.tokens ?? 0;
+    },
+    [visibleRows, cols],
+  );
+
+  // First non-zero cell (row-major) — the default Tab target before the user
+  // has moved the roving cursor.
+  const firstNavigable = React.useMemo(() => {
+    for (let r = 0; r < visibleRows.length; r += 1)
+      for (let c = 0; c < cols.length; c += 1)
+        if (tokensAt(r, c) > 0) return { r, c };
+    return null;
+  }, [visibleRows, cols, tokensAt]);
+
+  // The single Tab-reachable cell. Falls back to firstNavigable when the stored
+  // active cell is gone or became a zero cell after a scope change.
+  const roving = React.useMemo(() => {
+    if (active && tokensAt(active.r, active.c) > 0) return active;
+    return firstNavigable;
+  }, [active, firstNavigable, tokensAt]);
+
+  const openCell = (r: number, c: number) => {
+    const row = visibleRows[r];
+    const col = cols[c];
+    if (!row || !col || tokensAt(r, c) <= 0) return;
+    setSelected({
+      service: row.service,
+      // FULL list of raw variants folded into this canonical column so the
+      // modal aggregates exactly the cell (fall back to the label when no raw
+      // variants were collected).
+      rawModels: col.rawModels.length > 0 ? col.rawModels : [col.model],
+      modelLabel: col.model,
+    });
+  };
+
+  const focusCell = (r: number, c: number) => {
+    setActive({ r, c });
+    cellRefs.current.get(`${r}:${c}`)?.focus();
+  };
+
+  // Arrow keys skip zero cells so every landing cell carries data. Home/End
+  // jump to the row's first/last non-zero cell; Enter/Space opens the cell's
+  // detail modal.
+  const onCellKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+    r: number,
+    c: number,
+  ) => {
+    const findInRow = (from: number, dir: number): number | null => {
+      for (let cc = from; cc >= 0 && cc < cols.length; cc += dir)
+        if (tokensAt(r, cc) > 0) return cc;
+      return null;
+    };
+    const findInCol = (from: number, dir: number): number | null => {
+      for (let rr = from; rr >= 0 && rr < visibleRows.length; rr += dir)
+        if (tokensAt(rr, c) > 0) return rr;
+      return null;
+    };
+    switch (e.key) {
+      case "ArrowRight": {
+        const nc = findInRow(c + 1, 1);
+        if (nc != null) {
+          e.preventDefault();
+          focusCell(r, nc);
+        }
+        break;
+      }
+      case "ArrowLeft": {
+        const nc = findInRow(c - 1, -1);
+        if (nc != null) {
+          e.preventDefault();
+          focusCell(r, nc);
+        }
+        break;
+      }
+      case "ArrowDown": {
+        const nr = findInCol(r + 1, 1);
+        if (nr != null) {
+          e.preventDefault();
+          focusCell(nr, c);
+        }
+        break;
+      }
+      case "ArrowUp": {
+        const nr = findInCol(r - 1, -1);
+        if (nr != null) {
+          e.preventDefault();
+          focusCell(nr, c);
+        }
+        break;
+      }
+      case "Home": {
+        const nc = findInRow(0, 1);
+        if (nc != null) {
+          e.preventDefault();
+          focusCell(r, nc);
+        }
+        break;
+      }
+      case "End": {
+        const nc = findInRow(cols.length - 1, -1);
+        if (nc != null) {
+          e.preventDefault();
+          focusCell(r, nc);
+        }
+        break;
+      }
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        openCell(r, c);
+        break;
+      default:
+        break;
+    }
+  };
 
   // Nonzero cell token values (whole grid) → the legend's min/median/max anchors.
   const cellValues = React.useMemo(() => {
@@ -139,84 +272,103 @@ const ServiceModelHeatmapBody = () => {
       ) : (
         <div style={{ overflowX: "auto" }}>
           <div
-            role="table"
+            role="grid"
+            aria-readonly
+            aria-label="Service by model token usage. Use the arrow keys to move between cells; press Enter to open a cell's detail."
+            aria-rowcount={total + 1}
+            aria-colcount={cols.length + 1}
             style={{
               display: "grid",
-              gridTemplateColumns: `${SVC_COL_W}px repeat(${result.columns.length}, ${CELL_W}px)`,
+              gridTemplateColumns: `${SVC_COL_W}px repeat(${cols.length}, ${CELL_W}px)`,
               gap: 2,
-              minWidth: SVC_COL_W + CELL_W * result.columns.length + 8,
+              minWidth: SVC_COL_W + CELL_W * cols.length + 8,
             }}
           >
-            <div
-              style={{
-                position: "sticky",
-                left: 0,
-                background: "var(--surface)",
-                zIndex: 1,
-                padding: "6px 8px",
-                fontSize: 10.5,
-                fontWeight: 600,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-              }}
-            >
-              Service
-            </div>
-            {result.columns.map((col) => (
+            {/* Header row — display:contents keeps the cells as direct grid
+                items while still exposing a role="row" grouping to AT. */}
+            <div role="row" aria-rowindex={1} style={{ display: "contents" }}>
               <div
-                key={col.model}
+                role="columnheader"
+                aria-colindex={1}
                 style={{
-                  padding: "4px 4px",
-                  textAlign: "center",
-                  fontFamily: "var(--mono, monospace)",
+                  position: "sticky",
+                  left: 0,
+                  background: "var(--surface)",
+                  zIndex: 1,
+                  padding: "6px 8px",
                   fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
                   color: "var(--text-3)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
                 }}
-                title={col.model}
               >
-                <Flex
-                  alignItems="center"
-                  justifyContent="center"
-                  gap={4}
+                Service
+              </div>
+              {cols.map((col, ci) => (
+                <div
+                  key={col.model}
+                  role="columnheader"
+                  aria-colindex={ci + 2}
+                  style={{
+                    padding: "4px 4px",
+                    textAlign: "center",
+                    fontFamily: "var(--mono, monospace)",
+                    fontSize: 10.5,
+                    color: "var(--text-3)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={col.model}
                 >
-                  <span
-                    aria-hidden
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: col.color,
-                      flex: "0 0 auto",
-                    }}
-                  />
-                  <FilterTrigger
-                    attribute="gen_ai.request.model"
-                    value={col.rawModels.length > 0 ? col.rawModels : col.model}
-                    label="model"
+                  <Flex
+                    alignItems="center"
+                    justifyContent="center"
+                    gap={4}
                   >
                     <span
+                      aria-hidden
                       style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        maxWidth: CELL_W - 16,
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: col.color,
+                        flex: "0 0 auto",
                       }}
+                    />
+                    <FilterTrigger
+                      attribute="gen_ai.request.model"
+                      value={col.rawModels.length > 0 ? col.rawModels : col.model}
+                      label="model"
                     >
-                      {col.model}
-                    </span>
-                  </FilterTrigger>
-                </Flex>
-              </div>
-            ))}
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: CELL_W - 16,
+                        }}
+                      >
+                        {col.model}
+                      </span>
+                    </FilterTrigger>
+                  </Flex>
+                </div>
+              ))}
+            </div>
 
-            {visibleRows.map((row) => (
-              <React.Fragment key={row.serviceId}>
+            {visibleRows.map((row, rowIdx) => (
+              <div
+                role="row"
+                aria-rowindex={rowIdx + 2}
+                key={row.serviceId}
+                style={{ display: "contents" }}
+              >
                 <div
+                  role="rowheader"
+                  aria-colindex={1}
                   style={{
                     position: "sticky",
                     left: 0,
@@ -252,34 +404,55 @@ const ServiceModelHeatmapBody = () => {
                     </FilterTrigger>
                   </Flex>
                 </div>
-                {result.columns.map((col) => {
+                {cols.map((col, colIdx) => {
                   const cell = row.cells.get(col.model);
                   const tokens = cell?.tokens ?? 0;
-                  const open = () =>
-                    setSelected({
-                      service: row.service,
-                      // FULL list of raw variants folded into this canonical
-                      // column so the modal aggregates exactly the cell (fall
-                      // back to the label when no raw variants were collected).
-                      rawModels:
-                        col.rawModels.length > 0
-                          ? col.rawModels
-                          : [col.model],
-                      modelLabel: col.model,
-                    });
+                  const zero = tokens <= 0;
+                  const isRoving =
+                    roving?.r === rowIdx && roving?.c === colIdx;
                   return (
                     <div
                       key={col.model}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Details for ${row.service} · ${col.model}`}
-                      onClick={open}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          open();
-                        }
-                      }}
+                      role="gridcell"
+                      aria-colindex={colIdx + 2}
+                      ref={
+                        zero
+                          ? undefined
+                          : (node) => {
+                              const k = `${rowIdx}:${colIdx}`;
+                              if (node) cellRefs.current.set(k, node);
+                              else cellRefs.current.delete(k);
+                            }
+                      }
+                      // Roving tabindex: the active cell is the only Tab stop;
+                      // every other data cell is programmatically focusable
+                      // (-1). Zero cells are inert (no tabIndex / handlers).
+                      tabIndex={zero ? undefined : isRoving ? 0 : -1}
+                      aria-label={
+                        zero
+                          ? `${row.service}, ${col.model}: no usage`
+                          : `${row.service}, ${col.model}: ${fmtTokens(
+                              tokens,
+                            )} tokens, ${cell?.requests ?? 0} requests. Press Enter for detail.`
+                      }
+                      onClick={
+                        zero
+                          ? undefined
+                          : () => {
+                              setActive({ r: rowIdx, c: colIdx });
+                              openCell(rowIdx, colIdx);
+                            }
+                      }
+                      onKeyDown={
+                        zero
+                          ? undefined
+                          : (e) => onCellKeyDown(e, rowIdx, colIdx)
+                      }
+                      onFocus={
+                        zero
+                          ? undefined
+                          : () => setActive({ r: rowIdx, c: colIdx })
+                      }
                       title={
                         cell
                           ? `${row.service} · ${col.model}: ${fmtTokens(tokens)} tokens (${cell.requests} req)`
@@ -295,33 +468,32 @@ const ServiceModelHeatmapBody = () => {
                         fontFamily: "var(--mono, monospace)",
                         fontSize: 10.5,
                         color: "var(--text-2)",
-                        cursor: "pointer",
+                        cursor: zero ? "default" : "pointer",
                       }}
                     >
                       {tokens > 0 ? fmtTokens(tokens) : ""}
                     </div>
                   );
                 })}
-              </React.Fragment>
-            ))}
-            {hiddenRows > 0 && (
-              <div
-                style={{
-                  gridColumn: "1 / -1",
-                  position: "sticky",
-                  left: 0,
-                  padding: "6px 8px",
-                  borderTop: "1px solid var(--border)",
-                  fontSize: 11,
-                  color: "var(--text-3)",
-                }}
-              >
-                {hiddenRows} more{" "}
-                {hiddenRows === 1 ? "service" : "services"} not shown (ranked by
-                tokens) — narrow the scope to see them.
               </div>
-            )}
+            ))}
           </div>
+          {hiddenRows > 0 && (
+            <div
+              style={{
+                position: "sticky",
+                left: 0,
+                padding: "6px 8px",
+                borderTop: "1px solid var(--border)",
+                fontSize: 11,
+                color: "var(--text-3)",
+              }}
+            >
+              {hiddenRows} more{" "}
+              {hiddenRows === 1 ? "service" : "services"} not shown (ranked by
+              tokens) — narrow the scope to see them.
+            </div>
+          )}
         </div>
       )}
     </Flex>

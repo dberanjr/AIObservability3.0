@@ -22,7 +22,13 @@ import {
 import { useScope } from "../../scope/ScopeContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useTweaks } from "../../tweaks/TweaksContext";
+import {
+  STATUS_CUE,
+  statusColor,
+  type SemanticStatus,
+} from "../../theme/statusColor";
 import type { AgentRow } from "./useAgents";
+import { errorTileStatus } from "./tileStatus";
 import { summarizeAgentTtft, TTFT_ATTRIBUTES } from "./ttft";
 import { useInvocationsChart } from "./useInvocationsChart";
 import { useAgentLoops, LOOP_REPEAT_RATIO, LOOP_MAX_STEP } from "./useAgentLoops";
@@ -30,6 +36,51 @@ import { useAgentLoopSeries } from "./useAgentLoopSeries";
 import { SLOW_P90_MS } from "./constants";
 
 /* ----------------------------- shared bits ----------------------------- */
+
+/** Visually-hidden text: announced by screen readers, invisible on screen. */
+const SR_ONLY: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
+/**
+ * A numeric table-cell value that carries a severity. Pairs the color with a
+ * leading status glyph (a non-color *shape* cue for colour-blind readers) and
+ * an sr-only status word (announced by screen readers) — so severity in these
+ * detail tables is never encoded by colour alone (Agents-9 / a11y). Renders
+ * plainly for `neutral`/`info` so unremarkable cells stay quiet.
+ */
+const CueValue = ({
+  status,
+  children,
+}: {
+  status: SemanticStatus;
+  children: React.ReactNode;
+}) => {
+  if (status === "neutral" || status === "info") return <>{children}</>;
+  const cue = STATUS_CUE[status];
+  return (
+    <span style={{ color: statusColor(status), fontWeight: 600, whiteSpace: "nowrap" }}>
+      <span aria-hidden style={{ marginRight: 4, fontSize: 9 }}>
+        {cue.glyph}
+      </span>
+      {children}
+      <span style={SR_ONLY}>{` — ${cue.label}`}</span>
+    </span>
+  );
+};
+
+/** Loop-rate severity: matches the red/amber/green thresholds the loop table
+ *  has always used (≥50% critical, ≥15% warning, otherwise good). */
+const loopRateStatus = (pct: number): SemanticStatus =>
+  pct >= 50 ? "critical" : pct >= 15 ? "warning" : "good";
 
 export interface Stat {
   label: string;
@@ -321,7 +372,9 @@ export const SlowAgentsBody = ({ agents }: { agents: AgentRow[] }) => {
             header: "P90",
             width: 90,
             align: "right",
-            render: (r) => <span style={{ color: "var(--amber)" }}>{fmtMs(r.p90Ms)}</span>,
+            // Every row here is above the slow threshold → warning severity,
+            // paired with a glyph + sr-only word so it isn't amber-colour alone.
+            render: (r) => <CueValue status="warning">{fmtMs(r.p90Ms)}</CueValue>,
           },
           { key: "p99", header: "P99", width: 90, align: "right", render: (r) => fmtMs(r.p99Ms) },
           {
@@ -377,10 +430,13 @@ export const ErrorRateBody = ({ agents }: { agents: AgentRow[] }) => {
             header: "Error rate",
             width: 110,
             align: "right",
+            // Same >5% critical / >1% warning thresholds as the fleet tile, now
+            // routed through the shared status cue (glyph + sr-only word) so the
+            // red/amber isn't the only signal.
             render: (r) => (
-              <span style={{ color: r.errorRatePct > 5 ? "var(--red)" : r.errorRatePct > 1 ? "var(--amber)" : undefined }}>
+              <CueValue status={errorTileStatus(r.errorRatePct)}>
                 {fmtPercent(r.errorRatePct)}
-              </span>
+              </CueValue>
             ),
           },
         ]}
@@ -573,9 +629,6 @@ export const TtftBody = ({
 
 /* -------------------------- Looping agents ----------------------------- */
 
-const rateColor = (pct: number): string =>
-  pct >= 50 ? "var(--red)" : pct >= 15 ? "var(--amber)" : "var(--green-2)";
-
 export const LoopingAgentsBody = () => {
   const { rows, loopingCount, isLoading, isEmpty } = useAgentLoops();
   const series = useAgentLoopSeries(true);
@@ -652,9 +705,9 @@ export const LoopingAgentsBody = () => {
               width: 100,
               align: "right",
               render: (r) => (
-                <span style={{ fontWeight: 600, color: rateColor(r.loopRatePct) }}>
+                <CueValue status={loopRateStatus(r.loopRatePct)}>
                   {r.loopRatePct.toFixed(1)}%
-                </span>
+                </CueValue>
               ),
             },
             {
@@ -670,9 +723,9 @@ export const LoopingAgentsBody = () => {
               width: 110,
               align: "right",
               render: (r) => (
-                <span style={{ color: r.maxRepeat >= LOOP_REPEAT_RATIO ? "var(--amber)" : undefined }}>
+                <CueValue status={r.maxRepeat >= LOOP_REPEAT_RATIO ? "warning" : "neutral"}>
                   {r.maxRepeat.toFixed(1)}×
-                </span>
+                </CueValue>
               ),
             },
             {
@@ -681,9 +734,9 @@ export const LoopingAgentsBody = () => {
               width: 100,
               align: "right",
               render: (r) => (
-                <span style={{ color: r.maxSteps >= LOOP_MAX_STEP ? "var(--amber)" : undefined }}>
+                <CueValue status={r.maxSteps >= LOOP_MAX_STEP ? "warning" : "neutral"}>
                   {fmtCount(r.maxSteps)}
-                </span>
+                </CueValue>
               ),
             },
           ]}

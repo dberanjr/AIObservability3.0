@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { useModalA11y } from "./useModalA11y";
 
 /**
  * Shared presentational primitives for the centered detail modals (model row,
@@ -129,13 +130,11 @@ export const DetailModalShell = ({
   footer,
   children,
 }: DetailModalShellProps) => {
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const closeBtnRef = React.useRef<HTMLButtonElement>(null);
+
+  // Focus management (move focus in, trap Tab, Esc-to-close, restore on close).
+  useModalA11y(dialogRef, onClose, { initialFocusRef: closeBtnRef });
 
   return (
     <div
@@ -155,6 +154,8 @@ export const DetailModalShell = ({
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -189,12 +190,12 @@ export const DetailModalShell = ({
             )}
           </Flex>
           <button
+            ref={closeBtnRef}
             type="button"
             aria-label="Close"
+            className="aiobs-icon-btn"
             onClick={onClose}
             style={{
-              all: "unset",
-              cursor: "pointer",
               padding: "2px 8px",
               borderRadius: 6,
               fontSize: 18,

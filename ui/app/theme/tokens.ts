@@ -57,8 +57,11 @@ const lightSurfaces = {
   "--border": "#e8e7e1",
   "--text": "#1a1a1a",
   "--text-2": "#4a4a48",
-  "--text-3": "#6b695f",
-  "--text-4": "#87857b",
+  // text-3 / text-4 raised for WCAG AA on small captions (~10-11px): on white
+  // text-3 ≈ 5.9:1 and text-4 ≈ 4.6:1, both clearing 4.5:1, while keeping the
+  // text > text-2 > text-3 > text-4 contrast hierarchy intact.
+  "--text-3": "#67655b",
+  "--text-4": "#77756b",
   "--intel-soft": brand.intelSoftLight,
 };
 
@@ -70,8 +73,11 @@ const darkSurfaces = {
   "--border": "#25252b",
   "--text": "#f0efea",
   "--text-2": "#b6b4ad",
-  "--text-3": "#928f89",
-  "--text-4": "#75746e",
+  // text-3 / text-4 raised for WCAG AA on small captions (~10-11px): on the
+  // dark surface text-3 ≈ 6.0:1 and text-4 ≈ 4.6:1, both clearing 4.5:1, while
+  // keeping the text > text-2 > text-3 > text-4 contrast hierarchy intact.
+  "--text-3": "#96938d",
+  "--text-4": "#807f77",
   "--intel-soft": brand.intelSoftDark,
 };
 
@@ -392,6 +398,16 @@ ${accentForegroundCss}
 .aiobs-clickable-tile:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
+}
+
+/* A11Y: unstyled icon/close buttons. Resetting via this CLASS (instead of an
+   inline 'all: unset', which would out-specify the stylesheet ring below and
+   leave the button with no focus indicator) lets the global button:focus-visible
+   rule — higher specificity than this single-class selector — still paint the
+   keyboard ring. Used by the bespoke modal close (×) buttons. */
+.aiobs-icon-btn {
+  all: unset;
+  cursor: pointer;
 }
 
 /* A11Y: global keyboard focus ring. Many interactive elements use

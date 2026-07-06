@@ -16,12 +16,40 @@ const CLASS_COLOR: Record<ProblemPatternCount["cls"], string> = {
   "cross-span": "var(--purple-2)",
 };
 
-const LegendDot = ({ color, label }: { color: string; label: string }) => (
+// Distinct shape per pattern class so the same-span / cross-span distinction
+// survives grayscale / colour-blind viewing — it is no longer carried by hue
+// alone (a11y). Mirrored in the legend and on every row.
+const CLASS_GLYPH: Record<ProblemPatternCount["cls"], string> = {
+  "same-span": "▪", // ▪ filled square
+  "cross-span": "◆", // ◆ diamond
+};
+
+/** Visually-hidden text: announced by screen readers, invisible on screen. */
+const SR_ONLY: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
+const LegendDot = ({
+  color,
+  glyph,
+  label,
+}: {
+  color: string;
+  glyph: string;
+  label: string;
+}) => (
   <Flex alignItems="center" gap={6}>
-    <span
-      aria-hidden
-      style={{ width: 8, height: 8, borderRadius: "50%", background: color }}
-    />
+    <span aria-hidden style={{ color, fontSize: 10, lineHeight: 1 }}>
+      {glyph}
+    </span>
     <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>{label}</Text>
   </Flex>
 );
@@ -45,7 +73,7 @@ const PatternRow = ({
       type="button"
       onClick={() => onDrive(p)}
       className="aiobs-pattern-row"
-      title={`${p.label}: ${fmtCount(p.count)} match${p.count === 1 ? "" : "es"} · click to drive the board`}
+      title={`${p.label} (${p.cls}): ${fmtCount(p.count)} match${p.count === 1 ? "" : "es"} · click to drive the board`}
       style={{
         all: "unset",
         cursor: "pointer",
@@ -57,23 +85,32 @@ const PatternRow = ({
       }}
     >
       <Flex justifyContent="space-between" alignItems="baseline" gap={8}>
-        <Text
-          style={{
-            fontSize: 12.5,
-            color: "var(--text-2)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {p.label}
-          {p.approximate && (
-            <Text as="span" style={{ color: "var(--text-3)" }} title="approximate (proxy signal)">
-              {" "}
-              ≈
-            </Text>
-          )}
-        </Text>
+        <Flex alignItems="baseline" gap={6} style={{ minWidth: 0, flex: 1 }}>
+          {/* Shape cue for the pattern class (non-colour), colour-matched to
+              the bar; the class word is exposed to screen readers below. */}
+          <span aria-hidden style={{ color, fontSize: 9, lineHeight: 1, flex: "0 0 auto" }}>
+            {CLASS_GLYPH[p.cls]}
+          </span>
+          <Text
+            style={{
+              fontSize: 12.5,
+              color: "var(--text-2)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
+          >
+            {p.label}
+            {p.approximate && (
+              <Text as="span" style={{ color: "var(--text-3)" }} title="approximate (proxy signal)">
+                {" "}
+                ≈
+              </Text>
+            )}
+            <span style={SR_ONLY}>{` (${p.cls})`}</span>
+          </Text>
+        </Flex>
         <Text
           style={{
             fontSize: 12.5,
@@ -149,8 +186,8 @@ export const ProblemPatternsCard = () => {
       drill={{ label: "Prompts", to: "/prompts" }}
       headerRight={
         <Flex gap={12}>
-          <LegendDot color={CLASS_COLOR["same-span"]} label="same-span" />
-          <LegendDot color={CLASS_COLOR["cross-span"]} label="cross-span" />
+          <LegendDot color={CLASS_COLOR["same-span"]} glyph={CLASS_GLYPH["same-span"]} label="same-span" />
+          <LegendDot color={CLASS_COLOR["cross-span"]} glyph={CLASS_GLYPH["cross-span"]} label="cross-span" />
         </Flex>
       }
     >

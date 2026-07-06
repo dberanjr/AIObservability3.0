@@ -12,6 +12,7 @@ import {
   type ToolsMode,
 } from "./TweaksContext";
 import { ACCENT_HEX } from "../theme/palette";
+import { useModalA11y } from "../components/useModalA11y";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <Text
@@ -286,8 +287,16 @@ const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
 export const TweaksPanel = () => {
   const t = useTweaks();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Click outside or Esc closes the panel.
+  // Focus management: move focus into the panel, trap Tab, Esc-to-close, and
+  // restore focus to the trigger on close.
+  useModalA11y(panelRef, t.closePanel, {
+    initialFocusRef: closeBtnRef,
+    active: t.isPanelOpen,
+  });
+
+  // Click outside closes the panel (Esc is handled by useModalA11y above).
   useEffect(() => {
     if (!t.isPanelOpen) return;
     const onClick = (e: MouseEvent) => {
@@ -300,14 +309,9 @@ export const TweaksPanel = () => {
         t.closePanel();
       }
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") t.closePanel();
-    };
     document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
     };
   }, [t.isPanelOpen, t]);
 
@@ -318,6 +322,7 @@ export const TweaksPanel = () => {
       ref={panelRef}
       role="dialog"
       aria-label="Tweaks"
+      tabIndex={-1}
       style={{
         position: "fixed",
         top: 64,
@@ -341,12 +346,12 @@ export const TweaksPanel = () => {
               Tweaks
             </Heading>
             <button
+              ref={closeBtnRef}
               type="button"
               aria-label="Close tweaks"
+              className="aiobs-icon-btn"
               onClick={t.closePanel}
               style={{
-                all: "unset",
-                cursor: "pointer",
                 padding: "2px 6px",
                 borderRadius: 6,
                 fontSize: 18,

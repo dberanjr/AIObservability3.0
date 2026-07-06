@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { useModalA11y } from "../useModalA11y";
 
 /**
  * "Maximize" icon button. Used as the trigger for ChartModal.
@@ -68,14 +69,11 @@ export const ChartModal = ({
   children,
   stats,
 }: ChartModalProps) => {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const closeBtnRef = React.useRef<HTMLButtonElement>(null);
+
+  // Focus management (move focus in, trap Tab, Esc-to-close, restore on close).
+  useModalA11y(dialogRef, onClose, { initialFocusRef: closeBtnRef, active: open });
 
   if (!open) return null;
   return (
@@ -96,6 +94,8 @@ export const ChartModal = ({
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -123,12 +123,12 @@ export const ChartModal = ({
             )}
           </Flex>
           <button
+            ref={closeBtnRef}
             type="button"
             aria-label="Close"
+            className="aiobs-icon-btn"
             onClick={onClose}
             style={{
-              all: "unset",
-              cursor: "pointer",
               padding: "2px 8px",
               borderRadius: 6,
               fontSize: 18,

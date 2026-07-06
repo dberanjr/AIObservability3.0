@@ -49,10 +49,28 @@ export const TIER_META: Record<string, { label: string; color: string; title: st
   D: { label: "O", longLabel: "Other",        color: "var(--text-4)",  title: "Other — deprecated, anti-pattern, or low practical value" },
 };
 
-export const TierBadge = ({ tier, compact }: { tier: string; compact?: boolean }) => {
+export const TierBadge = ({
+  tier,
+  compact,
+  decorative,
+}: {
+  tier: string;
+  compact?: boolean;
+  /** Mark the badge aria-hidden when an adjacent text label already names the
+   *  tier, so screen readers don't announce it twice. */
+  decorative?: boolean;
+}) => {
   const meta = TIER_META[tier] ?? TIER_META.D;
+  // The single letter (M/I/N/O) is meaningless to a screen reader on its own —
+  // expose the full tier name so the cell's priority is not conveyed only
+  // visually (a11y). Where a sibling text label already names the tier, callers
+  // pass `decorative` to suppress the duplicate announcement.
+  const a11yProps = decorative
+    ? ({ "aria-hidden": true } as const)
+    : ({ role: "img", "aria-label": `${meta.longLabel} tier` } as const);
   return (
     <span
+      {...a11yProps}
       title={meta.title}
       style={{
         display: "inline-flex",
@@ -96,6 +114,7 @@ const TierStatsRow = ({
         <button
           key={t}
           type="button"
+          aria-pressed={active}
           title={`${active ? "Hide" : "Show only"} tier ${t}: ${meta.longLabel}`}
           onClick={(e) => { e.stopPropagation(); onTierClick(t); }}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onTierClick(t); } }}
