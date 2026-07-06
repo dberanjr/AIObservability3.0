@@ -198,7 +198,13 @@ export const FinOpsCard = () => {
         )}
 
         <div style={{ flex: 1, minHeight: 96 }}>
-          <StackedDailyBars daily={finops.daily} isLoading={finops.isLoading} />
+          {finops.error ? (
+            // The daily-cost bars have their own query — surface its error
+            // rather than rendering an empty bar band as if spend were $0 (SUM-3).
+            <ErrorState bare error={finops.error} />
+          ) : (
+            <StackedDailyBars daily={finops.daily} isLoading={finops.isLoading} />
+          )}
         </div>
 
         {!finops.isLoading && finops.possibleSavings > 0 && (

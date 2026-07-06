@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState } from "../../components/EmptyState";
 import { TIER_COLORS } from "./constants";
 import {
   useLatencyDecomposition,
@@ -42,11 +43,11 @@ const LatencyTierBody = () => {
             <Skeleton style={{ height: 80 }} />
           </Flex>
         ) : tiers.length === 0 ? (
-          <Flex style={{ padding: "28px 16px" }}>
-            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-              No AI spans in the current scope.
-            </Text>
-          </Flex>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No AI spans in the current scope."
+          />
         ) : (
           <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
             {/* Stacked share-of-total-time bar */}

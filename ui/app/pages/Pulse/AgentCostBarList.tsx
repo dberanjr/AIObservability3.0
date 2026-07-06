@@ -5,6 +5,7 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList } from "../../components/charts/BarList";
 import type { BarListItem } from "../../components/charts/BarList";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { fmtTokens, fmtUSD } from "../../data/format";
 import { useAgentCosts } from "./useAgentCosts";
 
@@ -12,6 +13,7 @@ const TOP_N = 8;
 
 const AgentCostBody = () => {
   const result = useAgentCosts();
+  const emptyKind = emptyCause({ error: result.error });
   const items: BarListItem[] = result.rows.slice(0, TOP_N).map((r) => ({
     key: r.agent,
     label: r.agent,
@@ -35,9 +37,16 @@ const AgentCostBody = () => {
             ))}
           </Flex>
         ) : items.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No agent spans with usage attributes in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No agent spans with usage attributes in the current scope."
+                : undefined
+            }
+            hint="gen_ai.usage.input_tokens · gen_ai.usage.output_tokens"
+          />
         ) : (
           <BarList items={items} color="var(--purple)" />
         )}

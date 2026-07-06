@@ -36,46 +36,54 @@ export const EfficiencyMixCard = () => {
           so the tile reads as two deliberate blocks rather than a gauge with a
           donut floating in dead space. */}
       <Flex flexDirection="column" style={{ height: "100%" }}>
-        <Flex alignItems="center" gap={16} style={{ paddingBottom: 16 }}>
-          {eff.isLoading && eff.score == null ? (
-            <Skeleton style={{ height: 80, width: 80, borderRadius: "50%" }} />
-          ) : (
-            // Caption the gauge as a /100 score + track ring so it reads as a
-            // distinct metric from the output-per-dollar figure beside it, not
-            // a second scale of the same number (SUM-12).
-            <Flex flexDirection="column" alignItems="center" gap={2} style={{ flex: "0 0 auto" }}>
-              <MiniPartialDonut
-                size={80}
-                thickness={12}
-                track
-                percent={eff.score ?? 0}
-                color="var(--primary, var(--blue))"
-                centerValue={eff.score != null ? String(Math.round(eff.score)) : "—"}
-                ariaLabel={`Token-efficiency score ${eff.score != null ? Math.round(eff.score) : "unavailable"} of 100`}
-              />
-              <Text style={{ fontSize: 9.5, color: "var(--text-3)" }}>score / 100</Text>
+        {eff.error ? (
+          // Surface the efficiency query's own error instead of silently
+          // rendering the "—" placeholders as if the score were absent (SUM-3).
+          <div style={{ paddingBottom: 16 }}>
+            <ErrorState bare error={eff.error} />
+          </div>
+        ) : (
+          <Flex alignItems="center" gap={16} style={{ paddingBottom: 16 }}>
+            {eff.isLoading && eff.score == null ? (
+              <Skeleton style={{ height: 80, width: 80, borderRadius: "50%" }} />
+            ) : (
+              // Caption the gauge as a /100 score + track ring so it reads as a
+              // distinct metric from the output-per-dollar figure beside it, not
+              // a second scale of the same number (SUM-12).
+              <Flex flexDirection="column" alignItems="center" gap={2} style={{ flex: "0 0 auto" }}>
+                <MiniPartialDonut
+                  size={80}
+                  thickness={12}
+                  track
+                  percent={eff.score ?? 0}
+                  color="var(--primary, var(--blue))"
+                  centerValue={eff.score != null ? String(Math.round(eff.score)) : "—"}
+                  ariaLabel={`Token-efficiency score ${eff.score != null ? Math.round(eff.score) : "unavailable"} of 100`}
+                />
+                <Text style={{ fontSize: 9.5, color: "var(--text-3)" }}>score / 100</Text>
+              </Flex>
+            )}
+            <Flex flexDirection="column" gap={4}>
+              <Text
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: "var(--text-3)",
+                }}
+              >
+                Token efficiency
+              </Text>
+              <Text style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+                {eff.outputPerDollar != null ? `${fmtCount(eff.outputPerDollar)}` : "—"}
+              </Text>
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                output tokens per dollar
+              </Text>
             </Flex>
-          )}
-          <Flex flexDirection="column" gap={4}>
-            <Text
-              style={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-              }}
-            >
-              Token efficiency
-            </Text>
-            <Text style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
-              {eff.outputPerDollar != null ? `${fmtCount(eff.outputPerDollar)}` : "—"}
-            </Text>
-            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-              output tokens per dollar
-            </Text>
           </Flex>
-        </Flex>
+        )}
 
         <Flex
           flexDirection="column"

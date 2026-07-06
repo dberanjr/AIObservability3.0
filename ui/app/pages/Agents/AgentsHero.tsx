@@ -4,6 +4,7 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
 import { InfoTooltip } from "../../components/InfoTooltip";
+import { EmptyState } from "../../components/EmptyState";
 import { BarList } from "../../components/charts/BarList";
 import { fmtCount, fmtMs } from "../../data/format";
 import { InvocationsChart } from "./InvocationsChart";
@@ -83,9 +84,12 @@ export const AgentsHero = ({ agents, isLoading }: AgentsHeroProps) => {
           {!p90Open ? null : isLoading && topByP90.length === 0 ? (
             <Skeleton style={{ height: 200 }} />
           ) : topByP90.length === 0 ? (
-            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-              No agent data in the current scope.
-            </Text>
+            <EmptyState
+              bare
+              cause="no-activity"
+              title="No agent data in the current scope."
+              hint="gen_ai.agent.name"
+            />
           ) : (
             <div style={{ maxHeight: 200, overflowY: "auto", paddingRight: 4 }}>
               <BarList

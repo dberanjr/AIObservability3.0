@@ -65,6 +65,12 @@ export const SummaryPage = () => {
   const { editLayout } = useEditLayout();
 
   const firstError = summary.error ?? posture.error ?? null;
+  // Retry re-runs both hero data sources — the banner surfaces whichever of the
+  // two errored, so a single Retry covers both (SUM-3).
+  const retryHero = () => {
+    summary.refetch();
+    posture.refetch();
+  };
 
   // Each tile is wrapped once: ScanScope (attributes DQL scan cost to the tile)
   // → CollapsibleTile (tuck-away + lazy queries). The customizable grid then
@@ -114,7 +120,7 @@ export const SummaryPage = () => {
         gap={24}
         style={{ padding: "18px 20px 28px" }}
       >
-        {firstError && <ErrorBanner error={firstError} />}
+        {firstError && <ErrorBanner error={firstError} onRetry={retryHero} />}
 
         {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}
         <ScanScope name="posture">

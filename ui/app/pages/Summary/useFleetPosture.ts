@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import {
@@ -42,6 +42,8 @@ export interface FleetPosture {
   pillars: Pillar[];
   isLoading: boolean;
   error?: Error;
+  /** Re-run the fleet-count query and every underlying health query. */
+  refetch: () => void;
 }
 
 const statusWord = (index: number | null): string => {
@@ -66,6 +68,14 @@ export const useFleetPosture = (): FleetPosture => {
     canQuery ? buildFleetCountsQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
+
+  const refetch = useCallback(() => {
+    void counts.refetch();
+    health.refetch();
+    // react-query refetch identities are stable; depending on the whole result
+    // objects would rebuild this callback every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [counts.refetch, health.refetch]);
 
   return useMemo<FleetPosture>(() => {
     const pillarScores = {
@@ -116,6 +126,7 @@ export const useFleetPosture = (): FleetPosture => {
       pillars,
       isLoading: health.isLoading || counts.isLoading,
       error: health.error ?? counts.error ?? undefined,
+      refetch,
     };
   }, [
     health.operational,
@@ -126,5 +137,6 @@ export const useFleetPosture = (): FleetPosture => {
     counts.data,
     counts.isLoading,
     counts.error,
+    refetch,
   ]);
 };

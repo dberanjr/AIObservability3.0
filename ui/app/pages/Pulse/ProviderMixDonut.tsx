@@ -5,11 +5,13 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { Donut } from "../../components/charts/Donut";
 import type { DonutSlice } from "../../components/charts/Donut";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { fmtCountCompact } from "../../data/format";
 import { useProviderMix } from "./useProviderMix";
 
 const ProviderMixBody = () => {
   const result = useProviderMix();
+  const emptyKind = emptyCause({ error: result.error });
   const slices: DonutSlice[] = result.shares.map((s) => ({
     key: s.provider,
     label: s.displayName,
@@ -34,9 +36,16 @@ const ProviderMixBody = () => {
         {result.isLoading ? (
           <Skeleton style={{ height: 160 }} />
         ) : slices.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No provider data in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No provider data in the current scope."
+                : undefined
+            }
+            hint="gen_ai.provider.name"
+          />
         ) : (
           <Donut
             slices={slices}

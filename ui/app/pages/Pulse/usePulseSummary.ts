@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
@@ -67,6 +67,8 @@ export interface PulseSummary {
   };
   isLoading: boolean;
   error?: Error;
+  /** Re-run every underlying summary query (bound to the useDql refetches). */
+  refetch: () => void;
 }
 
 interface McpCountRecord {
@@ -166,6 +168,15 @@ export const usePulseSummary = (): PulseSummary => {
     canQuery ? buildMcpCountQuery(serviceIds, scope.timeframe) : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
+
+  const refetch = useCallback(() => {
+    void summary.refetch();
+    void spark.refetch();
+    void mcpCounts.refetch();
+    // react-query refetch identities are stable; depending on the whole result
+    // objects would rebuild this callback every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary.refetch, spark.refetch, mcpCounts.refetch]);
 
   return useMemo<PulseSummary>(() => {
     const row = summary.data?.records?.[0];
@@ -276,6 +287,7 @@ export const usePulseSummary = (): PulseSummary => {
         mcpCounts.isLoading,
       error:
         summary.error ?? spark.error ?? mcpCounts.error ?? undefined,
+      refetch,
     };
   }, [
     samplingRatio,
@@ -290,5 +302,6 @@ export const usePulseSummary = (): PulseSummary => {
     mcpCounts.error,
     mcpCounts.isLoading,
     sparkIntervalSec,
+    refetch,
   ]);
 };

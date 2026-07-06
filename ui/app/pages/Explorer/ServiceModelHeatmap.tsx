@@ -6,6 +6,7 @@ import { fmtTokens } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ErrorState } from "../../components/ErrorState";
+import { EmptyState } from "../../components/EmptyState";
 import { useExplorerHeatmap } from "./useExplorerHeatmap";
 import { ServiceModelModal } from "./ServiceModelModal";
 
@@ -129,9 +130,12 @@ const ServiceModelHeatmapBody = () => {
           bare
         />
       ) : result.rows.length === 0 ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No usage data in the current scope.
-        </Text>
+        <EmptyState
+          bare
+          cause="no-activity"
+          title="No usage data in the current scope."
+          hint="gen_ai.usage.input_tokens · gen_ai.usage.output_tokens"
+        />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <div

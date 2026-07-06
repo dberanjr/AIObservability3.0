@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
-import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { FindingCard } from "../../components/FindingCard";
+import { EmptyState } from "../../components/EmptyState";
 import {
   DEFAULT_FINDING_INTENTS,
   type Finding,
@@ -120,11 +119,11 @@ export const FinOpsFindings = ({
 
   if (findings.length === 0) {
     return (
-      <Flex style={{ padding: "4px 4px" }}>
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No FinOps findings surfaced in the current scope.
-        </Text>
-      </Flex>
+      <EmptyState
+        bare
+        cause="no-activity"
+        title="No FinOps findings surfaced in the current scope."
+      />
     );
   }
 

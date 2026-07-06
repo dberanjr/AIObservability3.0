@@ -9,6 +9,7 @@ import {
   useChartExpander,
 } from "../../components/charts/ChartExpander";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
+import { EmptyState } from "../../components/EmptyState";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
@@ -97,9 +98,12 @@ export const InvocationsChart = () => {
           (model.isLoading ? (
             <Skeleton style={{ height: 200 }} />
           ) : model.isEmpty ? (
-            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-              No agent invocations in the current scope.
-            </Text>
+            <EmptyState
+              bare
+              cause="no-activity"
+              title="No agent invocations in the current scope."
+              hint="gen_ai.agent.name"
+            />
           ) : (
             chart(200)
           ))}

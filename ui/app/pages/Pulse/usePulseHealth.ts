@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
@@ -270,6 +270,21 @@ export const usePulseHealth = (): PulseHealth => {
     { enabled: canQuery, staleTime: 5 * 60_000 },
   );
 
+  const refetch = useCallback(() => {
+    void opResult.refetch();
+    void qualityResult.refetch();
+    void costResult.refetch();
+    void costBaselineResult.refetch();
+    // react-query refetch identities are stable; depending on the whole result
+    // objects would rebuild this callback every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    opResult.refetch,
+    qualityResult.refetch,
+    costResult.refetch,
+    costBaselineResult.refetch,
+  ]);
+
   return useMemo<PulseHealth>(() => {
     const scopeHours = parseScopeHours(scope.timeframe.from);
     const operational = operationalPillar(
@@ -302,6 +317,7 @@ export const usePulseHealth = (): PulseHealth => {
         qualityResult.isLoading ||
         costResult.isLoading,
       error: error ?? undefined,
+      refetch,
     };
   }, [
     scope.timeframe.from,
@@ -318,5 +334,6 @@ export const usePulseHealth = (): PulseHealth => {
     costResult.isLoading,
     costBaselineResult.data,
     costBaselineResult.error,
+    refetch,
   ]);
 };

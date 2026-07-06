@@ -30,6 +30,21 @@ export const useResolvedServices = (): UseResolvedServicesResult => ({
   isFleetWide: true,
 });
 
-/** Always true now — segments handle scoping at the request level. */
+/** Always true now — segments handle scoping at the request level. The param is
+ *  kept for the defensive future case described on the hook below. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const canQueryScope = (_result: UseResolvedServicesResult): boolean =>
   true;
+
+/**
+ * Convenience hook: can the current scope be resolved into a query at all?
+ *
+ * Always `true` today (segments handle scoping at the request level), so the
+ * no-scope branch it feeds is DEFENSIVE — it lights up only if scope-derived
+ * service resolution is re-introduced and leaves the page with nothing to
+ * query. Summary cards key their `cause='no-scope'` EmptyState off this so an
+ * unresolved scope reads as "select a scope", never a false zero from an
+ * `enabled:false` query that never ran (SUM-9).
+ */
+export const useCanQueryScope = (): boolean =>
+  canQueryScope(useResolvedServices());

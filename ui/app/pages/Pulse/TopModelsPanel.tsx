@@ -1,10 +1,10 @@
 import React, { useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList } from "../../components/charts/BarList";
 import type { BarListItem } from "../../components/charts/BarList";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState } from "../../components/EmptyState";
 import { fmtTokens } from "../../data/format";
 import { useModels, type ModelRow } from "../Models/useModels";
 
@@ -51,9 +51,12 @@ export const TopModelsPanel = ({ models, isLoading }: TopModelsPanelProps) => {
             ))}
           </Flex>
         ) : items.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No model data in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No model data in the current scope."
+            hint="gen_ai.request.model"
+          />
         ) : (
           <BarList items={items} color={colorFor} />
         )}

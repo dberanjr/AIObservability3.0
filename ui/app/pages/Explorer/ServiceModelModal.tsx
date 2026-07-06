@@ -12,6 +12,7 @@ import {
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useSampling } from "../../scope/SamplingContext";
 import { ErrorState } from "../../components/ErrorState";
+import { EmptyState } from "../../components/EmptyState";
 import { useServiceModelDetail } from "./useServiceModelDetail";
 import { costTrioStats, isEstimatedCost } from "./serviceModelCost";
 
@@ -310,9 +311,11 @@ export const ServiceModelModal = ({
             bare
           />
         ) : empty ? (
-          <Text style={{ fontSize: 13, color: "var(--text-3)" }}>
-            No data for this service / model pair in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No data for this service / model pair in the current scope."
+          />
         ) : (
           metrics &&
           cost && (

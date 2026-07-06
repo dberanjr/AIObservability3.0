@@ -11,6 +11,7 @@ import {
 import { median } from "./finopsLogic";
 import type { ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
+import { EmptyState } from "../../components/EmptyState";
 
 /**
  * Top-level component (per DESIGN_HANDOFF §8 gotcha 1). Defining the chart
@@ -235,9 +236,12 @@ export const ModelBubbleChart = ({
         {isLoading && points.length === 0 ? (
           <Skeleton style={{ height: VIEW_H, borderRadius: 8 }} />
         ) : points.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No models in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No models in the current scope."
+            hint="gen_ai.request.model"
+          />
         ) : (
           <div style={{ position: "relative" }}>
             <svg

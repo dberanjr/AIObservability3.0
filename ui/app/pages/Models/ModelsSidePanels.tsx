@@ -14,6 +14,7 @@ import {
 } from "../../detection/attributes";
 import type { ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
+import { EmptyState } from "../../components/EmptyState";
 
 const Panel = ({
   title,
@@ -97,9 +98,12 @@ export const ModelsSidePanels = ({
             ))}
           </Flex>
         ) : topSpenders.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No priced models in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No priced models in the current scope."
+            hint="gen_ai.request.model"
+          />
         ) : (
           <BarList
             items={topSpenders}
@@ -119,9 +123,12 @@ export const ModelsSidePanels = ({
         {isLoading && providerShares.length === 0 ? (
           <Skeleton style={{ height: 160 }} />
         ) : providerShares.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No provider data in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No provider data in the current scope."
+            hint="gen_ai.provider.name"
+          />
         ) : (
           <Donut
             slices={providerShares}

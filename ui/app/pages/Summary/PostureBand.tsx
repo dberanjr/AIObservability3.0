@@ -198,6 +198,9 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
 interface KpiTileProps {
   label: string;
   value: string;
+  /** Show a skeleton in place of the value while the tile's data loads, so the
+   *  hero uses the same loading idiom as the cards — no bare "…" (SUM-10). */
+  loading?: boolean;
   sub?: string;
   delta?: Delta;
   spark?: number[];
@@ -221,6 +224,7 @@ interface KpiTileProps {
 const KpiTile = ({
   label,
   value,
+  loading,
   sub,
   delta,
   spark,
@@ -300,18 +304,22 @@ const KpiTile = ({
         style={{ flex: 1, minHeight: 0 }}
       >
         <Flex alignItems="baseline" gap={6} style={{ minWidth: 0 }}>
-          <Text
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              lineHeight: 1,
-              fontVariantNumeric: "tabular-nums",
-              color: risk ? "var(--red)" : "var(--text)",
-            }}
-          >
-            {value}
-          </Text>
-          {delta && (
+          {loading ? (
+            <Skeleton style={{ height: 20, width: 72, borderRadius: 4 }} />
+          ) : (
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+                color: risk ? "var(--red)" : "var(--text)",
+              }}
+            >
+              {value}
+            </Text>
+          )}
+          {!loading && delta && (
             <Text
               style={{
                 fontSize: 11,
@@ -554,14 +562,23 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-hidden",
       <KpiTile
         label="Hidden risk"
-        value={hidden.isLoading ? "…" : fmtCount(hidden.total)}
+        loading={hidden.isLoading}
+        // On error, show "—" instead of a fmtCount(0) that reads as a reassuring
+        // "0 hidden failures" when the query actually failed (SUM-3).
+        value={hidden.error ? "—" : fmtCount(hidden.total)}
         sub={
-          !hidden.isLoading && hiddenRate != null
-            ? `${fmtPercent(hiddenRate)} of LLM responses`
-            : "200-OK failures"
+          hidden.error
+            ? "couldn't load"
+            : !hidden.isLoading && hiddenRate != null
+              ? `${fmtPercent(hiddenRate)} of LLM responses`
+              : "200-OK failures"
         }
         tone="risk"
-        footer={<CompositionBar segments={hidden.categories} />}
+        footer={
+          hidden.error ? undefined : (
+            <CompositionBar segments={hidden.categories} />
+          )
+        }
       />,
     ),
   ];
@@ -585,6 +602,11 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
 
           <Flex alignItems="center" gap={16}>
             <Flex flexDirection="column" alignItems="center" gap={4} style={{ flex: "0 0 auto" }}>
+              {posture.isLoading && posture.trustIndex == null ? (
+                // Skeleton the gauge during load — the same idiom the cards use,
+                // so the hero no longer shows a bare "—" grade mid-load (SUM-10).
+                <Skeleton style={{ width: 104, height: 104, borderRadius: "50%" }} />
+              ) : (
               <div style={{ position: "relative" }}>
                 <MiniPartialDonut
                   size={104}
@@ -618,6 +640,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
                   </span>
                 )}
               </div>
+              )}
               <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>trust index</Text>
               {posture.pillarsScored > 0 &&
                 posture.pillarsScored < posture.pillarsTotal && (

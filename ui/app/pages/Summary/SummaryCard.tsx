@@ -3,6 +3,8 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { useTabNav, type FocusParam } from "../../lib/nav";
 import { useScanScope } from "../../scope/ScanReportContext";
+import { useCanQueryScope } from "../../scope/useResolvedServices";
+import { EmptyState } from "../../components/EmptyState";
 import { TileScanFooter } from "../../scope/TileScanFooter";
 import { SUMMARY_SCAN_OPTS } from "./summaryScanGroups";
 import { CollapseButton, useTileCollapse } from "./CollapsibleTile";
@@ -46,6 +48,12 @@ export const SummaryCard = ({
   const goToTab = useTabNav();
   const scanGroup = useScanScope();
   const collapse = useTileCollapse();
+  // Shared no-scope guard (SUM-9): when the scope can't be resolved into a
+  // query, every card shows one consistent "select a scope" state instead of
+  // its own "No X in scope" one-liner — which would read as a real zero even
+  // though nothing was ever queried. Defensive today (canQueryScope is always
+  // true), but keeps the whole page honest if scope resolution returns.
+  const canQuery = useCanQueryScope();
   // Summary cards render as comfortable floating cards (see the Summary
   // floating-card shadow in tokens.ts) with a fixed padding.
   const pad = 16;
@@ -122,7 +130,9 @@ export const SummaryCard = ({
           )}
         </Flex>
       </Flex>
-      <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {canQuery ? children : <EmptyState bare cause="no-scope" fill />}
+      </div>
       <TileScanFooter group={scanGroup} opts={SUMMARY_SCAN_OPTS} />
     </Surface>
   );

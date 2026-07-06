@@ -14,6 +14,7 @@ import {
 } from "../../components/charts/ChartExpander";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
 import { intervalPhraseFromMs } from "../../scope/chartInterval";
@@ -86,6 +87,7 @@ const buildAxisTicks = (
 
 const TokenConsumptionBody = () => {
   const result = useTokenConsumption();
+  const emptyKind = emptyCause({ error: result.error });
   const [forecastEnabled, onToggleForecast] = usePersistedState<boolean>(
     "ai-obs.pulse.forecast-enabled",
     false,
@@ -259,9 +261,16 @@ const TokenConsumptionBody = () => {
         {result.isLoading ? (
           <Skeleton style={{ height: 220 }} />
         ) : result.points.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No data in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No data in the current scope."
+                : undefined
+            }
+            hint="gen_ai.usage.input_tokens · gen_ai.usage.output_tokens"
+          />
         ) : (
           <AreaChart
             height={220}
