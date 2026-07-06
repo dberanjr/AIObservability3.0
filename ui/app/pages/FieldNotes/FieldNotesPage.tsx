@@ -11,6 +11,15 @@ import React, { useEffect, useState } from "react";
  * there's no HTTP response to frame, so the block doesn't apply, and the
  * iframe still gives the document its own isolated html/body context so its
  * styling can't leak into the app. A direct link is offered as a fallback.
+ *
+ * The iframe is `sandbox="allow-scripts"` WITHOUT `allow-same-origin`: the doc
+ * has an interactive diagram driven by inline <script> + inline onclick
+ * handlers, which the app's strict CSP (inherited by a same-origin srcdoc
+ * frame) blocks. Sandboxing without allow-same-origin gives the frame an
+ * opaque origin, so it does NOT inherit the parent CSP and its inline scripts
+ * run. The doc uses no same-origin APIs (no localStorage/cookies/parent), so
+ * allow-scripts alone suffices — and we deliberately omit allow-same-origin
+ * (the two together would defeat the sandbox and re-inherit the CSP).
  */
 const ASSET_URL = "./assets/field-notes.html";
 
@@ -74,6 +83,9 @@ export const FieldNotesPage = () => {
         <iframe
           srcDoc={html ?? LOADING_DOC}
           title="AI Observability Field Notes"
+          // allow-scripts (no allow-same-origin) → opaque origin → the frame
+          // doesn't inherit the app CSP, so the doc's inline diagram scripts run.
+          sandbox="allow-scripts allow-popups"
           style={{ flex: 1, width: "100%", minHeight: "80vh", border: 0 }}
         />
       )}
