@@ -3,6 +3,7 @@ import { buildServiceModelDetailQuery } from "./queries";
 import {
   computeServiceModelCost,
   costTrioStats,
+  estimateServiceRowCost,
   isEstimatedCost,
   THIRTY_DAYS_MS,
   type ServiceModelCost,
@@ -241,6 +242,66 @@ describe("isEstimatedCost", () => {
 
   it("true when the pricing is flagged blended", () => {
     expect(isEstimatedCost({ ...known, blended: true })).toBe(true);
+  });
+});
+
+describe("estimateServiceRowCost", () => {
+  it("prices a single known model exactly (not estimated)", () => {
+    // gpt-4o: in $2.5/M, out $10/M → 1M in + 1M out = 12.5
+    const c = estimateServiceRowCost({
+      inTok: 1_000_000,
+      outTok: 1_000_000,
+      models: ["gpt-4o"],
+    });
+    expect(c.usd).toBeCloseTo(12.5, 6);
+    expect(c.estimated).toBe(false);
+  });
+
+  it("blends rates across multiple models and marks the figure estimated", () => {
+    // gpt-4o (2.5/10) + claude-sonnet-4-5 (3/15) → avgIn 2.75, avgOut 12.5
+    const c = estimateServiceRowCost({
+      inTok: 1_000_000,
+      outTok: 1_000_000,
+      models: ["gpt-4o", "claude-sonnet-4-5"],
+    });
+    expect(c.usd).toBeCloseTo(2.75 + 12.5, 6);
+    expect(c.estimated).toBe(true);
+  });
+
+  it("uses the blended fallback for an unknown single model (estimated, non-zero)", () => {
+    const c = estimateServiceRowCost({
+      inTok: 1_000_000,
+      outTok: 1_000_000,
+      models: ["totally-made-up-model"],
+    });
+    expect(c.estimated).toBe(true);
+    expect(c.usd).toBeGreaterThan(0);
+  });
+
+  it("returns zero cost (estimated) when the row has no models", () => {
+    const c = estimateServiceRowCost({ inTok: 1000, outTok: 1000, models: [] });
+    expect(c.usd).toBe(0);
+    expect(c.estimated).toBe(true);
+  });
+
+  it("ignores null/empty model entries when pricing", () => {
+    const c = estimateServiceRowCost({
+      inTok: 1_000_000,
+      outTok: 1_000_000,
+      // @ts-expect-error — exercise the runtime guard against null entries
+      models: ["gpt-4o", null, ""],
+    });
+    expect(c.usd).toBeCloseTo(12.5, 6);
+    expect(c.estimated).toBe(false);
+  });
+
+  it("clamps non-finite token inputs to a finite cost", () => {
+    const c = estimateServiceRowCost({
+      inTok: Number.NaN,
+      outTok: Number.POSITIVE_INFINITY,
+      models: ["gpt-4o"],
+    });
+    expect(Number.isFinite(c.usd)).toBe(true);
   });
 });
 

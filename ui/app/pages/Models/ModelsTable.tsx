@@ -32,7 +32,12 @@ type SortKey =
   | "tokensPerSec"
   | "contextUtilizationPct"
   | "cost"
+  | "costPerRequest"
   | "costPerMTok";
+
+/** $ per LLM call — unit economics, derived from the row's total cost. */
+const costPerCall = (m: ModelRow): number =>
+  m.requests > 0 ? m.cost / m.requests : 0;
 
 interface Column {
   id: string;
@@ -60,12 +65,18 @@ const colStyle = (c: Pick<Column, "width" | "grow" | "minWidth">): React.CSSProp
 
 /** Min width of the table body; below this the horizontal scroller kicks in so
  *  columns keep their widths and stay aligned instead of collapsing. */
-const TABLE_MIN_WIDTH = 1450;
+const TABLE_MIN_WIDTH = 1540;
 
+// FinOps focus: money sits right after the model/provider identity columns so
+// $/call / Cost / $/1M are visible before the horizontal scroll reaches the
+// latency percentiles.
 const COLS: Column[] = [
   { id: "model", label: "Model", grow: true, minWidth: 200, sortBy: "model" },
   { id: "type", label: "Type", width: 100 },
   { id: "provider", label: "Provider", width: 130 },
+  { id: "cost", label: "Cost", width: 90, align: "right", sortBy: "cost" },
+  { id: "percall", label: "$/call", width: 90, align: "right", sortBy: "costPerRequest" },
+  { id: "per1m", label: "$/1M", width: 90, align: "right", sortBy: "costPerMTok" },
   { id: "req", label: "Req", width: 80, align: "right", sortBy: "requests" },
   { id: "in", label: "In tok", width: 80, align: "right", sortBy: "inputTokens" },
   { id: "out", label: "Out tok", width: 80, align: "right", sortBy: "outputTokens" },
@@ -76,8 +87,6 @@ const COLS: Column[] = [
   { id: "p99", label: "P99", width: 80, align: "right", sortBy: "p99Ms" },
   { id: "err", label: "Err", width: 70, align: "right", sortBy: "errorRatePct" },
   { id: "timeout", label: "Timeout", width: 80, align: "right", sortBy: "timeoutRatePct" },
-  { id: "cost", label: "Cost", width: 90, align: "right", sortBy: "cost" },
-  { id: "per1m", label: "$/1M", width: 90, align: "right", sortBy: "costPerMTok" },
 ];
 
 const ProviderChip = ({ model }: { model: ModelRow }) => (
@@ -246,6 +255,10 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
         const cmp = a.model.localeCompare(b.model);
         return sort.dir === "asc" ? cmp : -cmp;
       }
+      if (k === "costPerRequest") {
+        const cmp = costPerCall(a) - costPerCall(b);
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
       const av = (a[k] as number | null | undefined) ?? 0;
       const bv = (b[k] as number | null | undefined) ?? 0;
       const cmp = av - bv;
@@ -376,6 +389,23 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
               <Cell width={130}>
                 <ProviderChip model={m} />
               </Cell>
+              <Cell width={90} align="right" mono>
+                {fmtUSD(m.cost)}
+                {m.pricingUnknown && <BlendedBadge />}
+              </Cell>
+              <Cell width={90} align="right" mono>
+                {fmtUSD(costPerCall(m))}
+                {m.pricingUnknown && <BlendedBadge />}
+              </Cell>
+              <Cell
+                width={90}
+                align="right"
+                mono
+                color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
+              >
+                {fmtUSD(m.costPerMTok)}
+                {m.pricingUnknown && <BlendedBadge />}
+              </Cell>
               <Cell width={80} align="right" mono>
                 {fmtCount(m.requests)}
               </Cell>
@@ -442,19 +472,6 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                   )}
                 </Cell>
               )}
-              <Cell width={90} align="right" mono>
-                {fmtUSD(m.cost)}
-                {m.pricingUnknown && <BlendedBadge />}
-              </Cell>
-              <Cell
-                width={90}
-                align="right"
-                mono
-                color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
-              >
-                {fmtUSD(m.costPerMTok)}
-                {m.pricingUnknown && <BlendedBadge />}
-              </Cell>
             </div>
           ))
         )}

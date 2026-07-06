@@ -3,7 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { FindingCard } from "../../components/FindingCard";
 import { DEFAULT_FINDING_INTENTS, type Finding } from "../../components/drawers/types";
-import { fmtCount, fmtUSD } from "../../data/format";
+import { fmtCount } from "../../data/format";
 import type { ModelRow } from "./useModels";
 
 export interface ModelsFindingsProps {
@@ -49,45 +49,10 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
       });
     }
 
-    const expensiveModel = [...models]
-      .filter((m) => !m.pricingUnknown && m.costPerMTok > 0)
-      .sort((a, b) => b.costPerMTok - a.costPerMTok)[0];
-    const cheapPeer = [...models]
-      .filter((m) => !m.pricingUnknown && m.costPerMTok > 0)
-      .sort((a, b) => a.costPerMTok - b.costPerMTok)[0];
-    if (
-      expensiveModel &&
-      cheapPeer &&
-      expensiveModel.modelKey !== cheapPeer.modelKey &&
-      expensiveModel.costPerMTok > cheapPeer.costPerMTok * 3
-    ) {
-      out.push({
-        id: "downgrade-candidate",
-        severity: "info",
-        category: "Downgrade candidate",
-        entity: expensiveModel.model,
-        metric: fmtUSD(expensiveModel.costPerMTok),
-        context: `${expensiveModel.model} costs ${(expensiveModel.costPerMTok / cheapPeer.costPerMTok).toFixed(1)}× ${cheapPeer.model}. Pilot ${cheapPeer.model} on lower-stakes prompts and compare quality.`,
-        intents: DEFAULT_FINDING_INTENTS,
-        promptsFilter: { models: [expensiveModel.model] },
-      });
-    }
-
-    const bedrockModels = models.filter((m) => m.provider.viaBedrock);
-    if (bedrockModels.length > 0) {
-      const totalCost = bedrockModels.reduce((acc, m) => acc + m.cost, 0);
-      out.push({
-        id: "bedrock-proxy-markup",
-        severity: "info",
-        category: "Bedrock proxy markup",
-        entity: `${bedrockModels.length} models via Bedrock`,
-        metric: fmtUSD(totalCost),
-        context:
-          "Anthropic / Cohere / Mistral served via AWS Bedrock typically carry a proxy markup. Compare to direct vendor pricing when sizing the FinOps story.",
-        intents: DEFAULT_FINDING_INTENTS,
-        promptsFilter: { models: bedrockModels.map((m) => m.model) },
-      });
-    }
+    // Downgrade-candidate and Bedrock-markup findings live in the FinOps
+    // findings row (they are cost/spend insights). Keeping them here too showed
+    // the same insight twice on one scroll — this block now focuses on
+    // model-mix risks (single-vendor concentration, Opus under-use).
 
     const opus = models.find((m) => /opus/i.test(m.model));
     if (opus && opus.requests > 0) {

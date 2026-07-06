@@ -8,6 +8,7 @@ import {
   PROVIDER_DISPLAY,
   type ProviderId,
 } from "../../detection/attributes";
+import { median } from "./finopsLogic";
 import type { ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
 
@@ -15,6 +16,12 @@ import { ModelDetailModal } from "./ModelDetailModal";
  * Top-level component (per DESIGN_HANDOFF §8 gotcha 1). Defining the chart
  * nested inside ModelsPage would cause React to remount it on every parent
  * state change, which produces visible tooltip flicker on overlap.
+ *
+ * This is the page's primary cost-efficiency lens: x = $/call (log), y = avg
+ * latency (log), bubble size = total spend. The old encoding (x = tokens, size
+ * = requests) put volume on two channels and left cost — the page's headline
+ * metric — in the tooltip only. Median quadrant guides make the top-right
+ * "expensive AND slow" quadrant read at a glance.
  */
 
 const VIEW_W = 720;
@@ -24,43 +31,60 @@ const PAD_R = 28;
 const PAD_T = 16;
 const PAD_B = 36;
 
+const costPerCall = (m: ModelRow): number =>
+  m.requests > 0 ? m.cost / m.requests : 0;
+
 interface Plotted {
   model: ModelRow;
   cx: number;
   cy: number;
   r: number;
+  costPerCall: number;
 }
 
 interface Scales {
-  xToPx: (tokens: number) => number;
+  xToPx: (costPerCall: number) => number;
   yToPx: (avgMs: number) => number;
-  tokensMax: number;
+  xLo: number;
+  xHi: number;
   msMax: number;
+  medianCostPx: number | null;
+  medianMsPx: number | null;
 }
 
 const buildScales = (models: ModelRow[]): Scales => {
   const innerW = VIEW_W - PAD_L - PAD_R;
   const innerH = VIEW_H - PAD_T - PAD_B;
-  const tokensMax = Math.max(
-    1_000,
-    ...models.map((m) => m.inputTokens + m.outputTokens),
-  );
+  const costs = models.map(costPerCall).filter((c) => c > 0);
+  const xLo = Math.max(1e-5, costs.length ? Math.min(...costs) : 0.001);
+  const xHi = Math.max(xLo * 10, costs.length ? Math.max(...costs) : 1);
+  const logXLo = Math.log10(xLo);
+  const logXHi = Math.log10(xHi);
+  const xSpan = logXHi - logXLo || 1;
   const msMax = Math.max(100, ...models.map((m) => m.avgMs));
-  const logTokensMax = Math.log10(tokensMax + 1);
   const logMsMax = Math.log10(msMax + 1);
+  const xToPx = (c: number): number => {
+    const cc = Math.max(xLo, c);
+    return PAD_L + ((Math.log10(cc) - logXLo) / xSpan) * innerW;
+  };
+  const yToPx = (ms: number): number =>
+    PAD_T + innerH - (Math.log10(ms + 1) / logMsMax) * innerH;
+  const medianCost = median(costs);
+  const medianMs = median(models.map((m) => m.avgMs).filter((v) => v > 0));
   return {
-    tokensMax,
+    xToPx,
+    yToPx,
+    xLo,
+    xHi,
     msMax,
-    xToPx: (tokens) =>
-      PAD_L + (Math.log10(tokens + 1) / logTokensMax) * innerW,
-    yToPx: (ms) =>
-      PAD_T + innerH - (Math.log10(ms + 1) / logMsMax) * innerH,
+    medianCostPx: medianCost > 0 ? xToPx(medianCost) : null,
+    medianMsPx: medianMs > 0 ? yToPx(medianMs) : null,
   };
 };
 
-const bubbleRadius = (requests: number, maxRequests: number): number => {
-  if (maxRequests <= 0) return 4;
-  const ratio = Math.log10(requests + 1) / Math.log10(maxRequests + 1);
+const bubbleRadius = (spend: number, maxSpend: number): number => {
+  if (maxSpend <= 0) return 4;
+  const ratio = Math.log10(spend + 1) / Math.log10(maxSpend + 1);
   return Math.max(4, Math.min(22, 4 + ratio * 18));
 };
 
@@ -96,6 +120,10 @@ const ProviderLegend = ({ models }: { models: ModelRow[] }) => {
   );
 };
 
+/** Short label for direct on-bubble annotation (non-color identity cue). */
+const shortLabel = (model: string): string =>
+  model.length > 16 ? `${model.slice(0, 15)}…` : model;
+
 export interface ModelBubbleChartProps {
   models: ModelRow[];
   isLoading: boolean;
@@ -111,28 +139,36 @@ export const ModelBubbleChart = ({
 
   const plotted = useMemo<{ scales: Scales; points: Plotted[] }>(() => {
     const scales = buildScales(models);
-    const maxRequests = models.reduce((m, r) => Math.max(m, r.requests), 0);
+    const maxSpend = models.reduce((m, r) => Math.max(m, r.cost), 0);
     const points: Plotted[] = models.map((model) => ({
       model,
-      cx: scales.xToPx(model.inputTokens + model.outputTokens),
+      cx: scales.xToPx(costPerCall(model)),
       cy: scales.yToPx(model.avgMs),
-      r: bubbleRadius(model.requests, maxRequests),
+      r: bubbleRadius(model.cost, maxSpend),
+      costPerCall: costPerCall(model),
     }));
     return { scales, points };
   }, [models]);
 
   const { scales, points } = plotted;
 
+  /** Indices of the largest-spend bubbles, for direct labelling. */
+  const labelledIndices = useMemo(() => {
+    return points
+      .map((p, i) => ({ i, spend: p.model.cost }))
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 4)
+      .map((e) => e.i);
+  }, [points]);
+
   /**
    * Resolve which bubble the cursor maps to. Containment wins first: among the
    * bubbles whose circle actually contains the point we keep the LAST-drawn one
    * (highest index = rendered on top), so hovering inside a bubble always
    * selects THAT bubble — not a neighbour whose center happens to be closer.
-   * (The previous "nearest center within +12px" rule mismatched the tooltip to
-   * an adjacent bubble whenever two overlapped.) Only when the cursor is inside
-   * no bubble do we fall back to the nearest center within a small tolerance, so
-   * near-misses still surface something. Per the overlap gotcha, the single
-   * handler lives on the svg; circles/labels carry pointer-events: none.
+   * Only when the cursor is inside no bubble do we fall back to the nearest
+   * center within a small tolerance. Per the overlap gotcha, the single handler
+   * lives on the svg; circles/labels carry pointer-events: none.
    */
   const bubbleAt = (e: React.MouseEvent<SVGSVGElement>): number => {
     const svg = svgRef.current;
@@ -166,19 +202,32 @@ export const ModelBubbleChart = ({
     if (best !== -1) setSelected(points[best].model);
   };
 
-  const xTicks = [1_000, 10_000, 100_000, 1_000_000, 10_000_000].filter(
-    (v) => v <= scales.tokensMax,
+  const xTicks = [0.0001, 0.001, 0.01, 0.1, 1, 10].filter(
+    (v) => v >= scales.xLo && v <= scales.xHi,
   );
   const yTicks = [100, 1_000, 10_000, 60_000].filter((v) => v <= scales.msMax);
   const hovered = hoverIndex != null ? points[hoverIndex] : null;
+
+  /** Non-visual summary of the plotted models for screen readers. */
+  const ariaSummary = useMemo(() => {
+    const top = [...models]
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 5)
+      .map(
+        (m) =>
+          `${m.model}: ${fmtUSD(costPerCall(m))} per call, avg ${fmtMs(m.avgMs)}, ${fmtUSD(m.cost)} spend`,
+      )
+      .join("; ");
+    return `Model cost-efficiency scatter, ${models.length} models. Top by spend — ${top}`;
+  }, [models]);
 
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
         <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Models · tokens vs latency · log-log axes · bubble size = requests ·
-            click for detail
+            Models · $/call vs latency · log-log axes · bubble size = spend ·
+            dashed guides = fleet medians · click for detail
           </Text>
           <ProviderLegend models={models} />
         </Flex>
@@ -198,7 +247,7 @@ export const ModelBubbleChart = ({
               onMouseLeave={() => setHoverIndex(null)}
               onClick={onClick}
               role="img"
-              aria-label="Model bubble chart"
+              aria-label={ariaSummary}
               style={{
                 display: "block",
                 width: "100%",
@@ -209,6 +258,46 @@ export const ModelBubbleChart = ({
                 aspectRatio: `${VIEW_W} / ${VIEW_H}`,
               }}
             >
+              {/* Median quadrant guides */}
+              {scales.medianCostPx != null && (
+                <g pointerEvents="none">
+                  <line
+                    x1={scales.medianCostPx}
+                    x2={scales.medianCostPx}
+                    y1={PAD_T}
+                    y2={VIEW_H - PAD_B}
+                    stroke="var(--text-4)"
+                    strokeDasharray="4 4"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              )}
+              {scales.medianMsPx != null && (
+                <g pointerEvents="none">
+                  <line
+                    x1={PAD_L}
+                    x2={VIEW_W - PAD_R}
+                    y1={scales.medianMsPx}
+                    y2={scales.medianMsPx}
+                    stroke="var(--text-4)"
+                    strokeDasharray="4 4"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              )}
+              {scales.medianCostPx != null && scales.medianMsPx != null && (
+                <text
+                  x={VIEW_W - PAD_R - 4}
+                  y={PAD_T + 12}
+                  fontSize={9}
+                  textAnchor="end"
+                  fill="var(--text-4)"
+                  pointerEvents="none"
+                >
+                  expensive &amp; slow →
+                </text>
+              )}
+
               {/* Axis ticks */}
               {xTicks.map((t) => {
                 const x = scales.xToPx(t);
@@ -230,7 +319,7 @@ export const ModelBubbleChart = ({
                       fill="var(--text-3)"
                       fontFamily="var(--mono, monospace)"
                     >
-                      {fmtTokens(t)}
+                      {fmtUSD(t)}
                     </text>
                   </g>
                 );
@@ -269,7 +358,7 @@ export const ModelBubbleChart = ({
                 fill="var(--text-2)"
                 pointerEvents="none"
               >
-                Tokens →
+                $/call →
               </text>
               <text
                 x={PAD_L - 40}
@@ -297,6 +386,25 @@ export const ModelBubbleChart = ({
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
+
+              {/* Direct labels on the largest-spend bubbles — a non-color
+                  identity cue so the chart isn't legible by hue alone. */}
+              {labelledIndices.map((i) => {
+                const p = points[i];
+                return (
+                  <text
+                    key={`label-${p.model.modelKey}`}
+                    x={p.cx}
+                    y={p.cy - p.r - 3}
+                    fontSize={9.5}
+                    textAnchor="middle"
+                    fill="var(--text-2)"
+                    pointerEvents="none"
+                  >
+                    {shortLabel(p.model.model)}
+                  </text>
+                );
+              })}
             </svg>
 
             {hovered && (
@@ -327,16 +435,22 @@ export const ModelBubbleChart = ({
                     {hovered.model.model}
                   </Text>
                   <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-                    {hovered.model.provider.label} ·{" "}
-                    {hovered.model.type}
+                    {hovered.model.provider.label} · {hovered.model.type}
+                  </Text>
+                  <Text style={{ fontSize: 11.5 }}>
+                    {fmtUSD(hovered.costPerCall)}/call ·{" "}
+                    {fmtUSD(hovered.model.cost)} spend
                   </Text>
                   <Text style={{ fontSize: 11.5 }}>
                     {fmtCount(hovered.model.requests)} req ·{" "}
-                    {fmtTokens(hovered.model.inputTokens + hovered.model.outputTokens)} tok
+                    {fmtTokens(
+                      hovered.model.inputTokens + hovered.model.outputTokens,
+                    )}{" "}
+                    tok
                   </Text>
                   <Text style={{ fontSize: 11.5 }}>
                     avg {fmtMs(hovered.model.avgMs)} · P95{" "}
-                    {fmtMs(hovered.model.p95Ms)} · {fmtUSD(hovered.model.cost)}
+                    {fmtMs(hovered.model.p95Ms)}
                   </Text>
                 </Flex>
               </div>

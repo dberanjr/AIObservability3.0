@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { XmarkIcon } from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
-import { DataGapNote } from "../../components/DataGapNote";
+import { AgentsCaveatNote } from "./AgentsCaveatNote";
 import {
   DegradedTrendPanel,
   IntelligenceDetectorDrawer,
@@ -34,8 +34,7 @@ import { useUpstreamServices } from "./useUpstreamServices";
 import { agentsFocusPreset, applyAgentsFocus, type FocusContext } from "./focus";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
-
-const SLOW_VIEW_P90_MS = 2000;
+import { SLOW_P90_MS } from "./constants";
 
 const AgentsPageBody = () => {
   const { hasActive } = useSLA();
@@ -108,7 +107,7 @@ const AgentsPageBody = () => {
       rows = rows.filter((r) => r.operations.includes(operation));
     }
     if (view === "slow") {
-      rows = rows.filter((r) => r.p90Ms > SLOW_VIEW_P90_MS);
+      rows = rows.filter((r) => r.p90Ms > SLOW_P90_MS);
     } else if (view === "expensive") {
       rows = [...rows].sort((a, b) => b.cost - a.cost).slice(0, 50);
     } else if (view === "used") {
@@ -217,14 +216,7 @@ const AgentsPageBody = () => {
           />
         </ScanScopedTile>
 
-        <DataGapNote
-          tone="warn"
-          message="TTFT is blank and per-agent cost is often unattributed (—) in this scope: no time-to-first-token attribute is emitted, and LLM calls run on a separate proxy trace so tokens can't be joined to the agent. Error rate now also includes logical failures (refusals / content-filter)."
-          attributes={["gen_ai.response.ttft", "gen_ai.usage.cost", "gen_ai.agent.name (on LLM spans)"]}
-          bestPractice="Propagate W3C trace context across the LLM proxy so agent and LLM spans share a trace (enables cost attribution), and emit a TTFT attribute on streamed responses. See INSTRUMENTATION-REQUIREMENTS.md P0.1 and P1.5."
-          href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
-          hrefLabel="OTel GenAI spans"
-        />
+        <AgentsCaveatNote />
 
         <DegradedTrendPanel
           items={degraded.items}

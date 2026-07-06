@@ -23,6 +23,7 @@ import { useSampling, extrapolate } from "../../scope/SamplingContext";
 import { toNum } from "../../data/format";
 import { SECTIONS, TOTAL_ATTRIBUTES, type AttrSpec, type AuditSection, type AttrTier } from "./catalog";
 import { buildSectionQuery } from "./queries";
+import { classifyVerdict, type Verdict } from "./coverage";
 
 interface SectionRecord {
   section_spans?: number | string;
@@ -37,6 +38,12 @@ export interface AttrResult {
   present: boolean;
   /** Share of the section population carrying the attribute (0..1). */
   share: number;
+  /**
+   * Three-way verdict: missing / sparse (present but < 1% of the population) /
+   * present. Distinguishes a genuinely covered attribute from one that appears
+   * on a single span in millions.
+   */
+  verdict: Verdict;
 }
 
 /** Per-tier presence counts for a section or the full audit. */
@@ -53,6 +60,8 @@ export interface SectionResult {
   sectionSpans: number;
   attributes: AttrResult[];
   presentCount: number;
+  /** Attributes present but below the sparse-share threshold. */
+  sparseCount: number;
   totalCount: number;
   /** presentCount / totalCount as a percentage (0..100). */
   coveragePct: number;
@@ -60,6 +69,8 @@ export interface SectionResult {
   noData: boolean;
   isLoading: boolean;
   error?: Error;
+  /** Re-run this section's query (bound to the underlying useDql refetch). */
+  refetch: () => void;
   /** Attribute counts broken down by tier. */
   tierStats: TierStats;
 }
@@ -76,8 +87,19 @@ export interface AuditOverview {
   /** Sum of all section populations (note: sections overlap, so this is a
    *  coarse activity indicator, not a unique span count). */
   spansScanned: number;
+  /** A defensible single-population estimate of AI spans in the window — the
+   *  largest section population (populations overlap heavily, so summing them
+   *  double-counts; the max is the closest honest "AI spans seen" figure). */
+  aiSpansInWindow: number;
   /** Percentage of tier-A (Mandatory) attributes present across all sections. */
   mandatoryCoveragePct: number;
+  /** Percentage of A–C attributes present (excludes tier D, where presence is
+   *  the *negative* signal, from any coverage numerator). */
+  coverageExDPct: number;
+  /** Attributes present but below the sparse-share threshold (all tiers). */
+  sparseTotal: number;
+  /** Deprecated attributes (any tier) currently emitting — a migration worklist. */
+  deprecatedEmitting: number;
   /** Tier-by-tier attribute counts across all sections. */
   tierStats: TierStats;
 }
@@ -169,15 +191,19 @@ export const useAttributeAudit = (
 
       const attributes: AttrResult[] = section.attributes.map((spec, ai) => {
         const raw = num(record?.[`a${ai}`]);
+        const present = raw > 0;
+        const share = rawSpans > 0 ? Math.min(1, raw / rawSpans) : 0;
         return {
           spec,
           spans: ex(record?.[`a${ai}`]),
-          present: raw > 0,
-          share: rawSpans > 0 ? Math.min(1, raw / rawSpans) : 0,
+          present,
+          share,
+          verdict: classifyVerdict(present, share),
         };
       });
 
       const presentCount = attributes.filter((a) => a.present).length;
+      const sparseCount = attributes.filter((a) => a.verdict === "sparse").length;
       const totalCount = attributes.length;
       const tierStats = computeTierStats(attributes);
 
@@ -186,11 +212,13 @@ export const useAttributeAudit = (
         sectionSpans,
         attributes,
         presentCount,
+        sparseCount,
         totalCount,
         coveragePct: totalCount > 0 ? (presentCount / totalCount) * 100 : 0,
         noData: !res.isLoading && rawSpans === 0,
         isLoading: res.isLoading,
         error: res.error ?? undefined,
+        refetch: res.refetch,
         tierStats,
       };
     });
@@ -204,6 +232,11 @@ export const useAttributeAudit = (
         ? (mandatoryA.present / mandatoryA.total) * 100
         : 0;
 
+    // Coverage excluding tier D — for D, presence is the *negative* signal, so
+    // it must never inflate a "% covered" number.
+    const exDPresent = tierStats.A.present + tierStats.B.present + tierStats.C.present;
+    const exDTotal = tierStats.A.total + tierStats.B.total + tierStats.C.total;
+
     const overview: AuditOverview = {
       presentTotal,
       total,
@@ -216,7 +249,14 @@ export const useAttributeAudit = (
       ).length,
       sectionCount: sections.length,
       spansScanned: sections.reduce((a, s) => a + s.sectionSpans, 0),
+      aiSpansInWindow: sections.reduce((m, s) => Math.max(m, s.sectionSpans), 0),
       mandatoryCoveragePct,
+      coverageExDPct: exDTotal > 0 ? (exDPresent / exDTotal) * 100 : 0,
+      sparseTotal: sections.reduce((a, s) => a + s.sparseCount, 0),
+      deprecatedEmitting: sections.reduce(
+        (a, s) => a + s.attributes.filter((x) => x.spec.deprecated && x.present).length,
+        0,
+      ),
       tierStats,
     };
 

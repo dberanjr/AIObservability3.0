@@ -10,6 +10,7 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { MiniStat } from "../../components/MiniStat";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { ErrorState } from "../../components/ErrorState";
 import { fmtCount } from "../../data/format";
 import { useRag } from "./useRag";
 
@@ -31,6 +32,12 @@ const RagPanelBody = () => {
     <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
       {r.isLoading ? (
         <Skeleton style={{ height: 84, borderRadius: 6 }} />
+      ) : r.error ? (
+        <ErrorState
+          title="Couldn't load retrieval data"
+          error={r.error}
+          bare
+        />
       ) : (
         <Flex flexDirection="column" gap={12}>
           <div

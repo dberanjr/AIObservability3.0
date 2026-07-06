@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
+import { ChevronDownIcon, ChevronRightIcon, WarningIcon } from "@dynatrace/strato-icons";
 import { fmtCount, fmtMs, fmtPercent, fmtUSD } from "../../data/format";
 import {
   agentHealthScore,
@@ -11,6 +11,7 @@ import {
 import { useSLA } from "../../components/SLAConfig/SLAContext";
 import { useTweaks } from "../../tweaks/TweaksContext";
 import { FilterTrigger } from "../../components/FilterTrigger";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ChartModal } from "../../components/charts/ChartExpander";
 import { StageBreakdownBar } from "./StageBreakdownBar";
@@ -18,6 +19,10 @@ import { AgentToolsSubview } from "./AgentToolsSubview";
 import { AgentTopologySubview } from "./AgentTopologySubview";
 import { AgentContextStoresSubview } from "./AgentContextStoresSubview";
 import { useHighFrequencyAgents } from "./useHighFrequencyAgents";
+import { useAgentLoops } from "./useAgentLoops";
+import { latencySeverity, type LatencySeverity } from "./latency";
+import { buildAgentVerdict } from "./verdict";
+import { agentsViewSummary } from "./viewSummary";
 import {
   AgentsSegmentedControls,
   type AgentOperation,
@@ -37,7 +42,16 @@ const STATUS_LABEL: Record<AgentHealthStatus, string> = {
   breached: "Breached",
 };
 
-const SLOW_ROW_P90_MS = 5000;
+// Non-"ok" latency tiers drive both the row text color and the raised-contrast
+// row tint, so the table agrees with the Slow tile / View that produced it.
+const SEV_TEXT: Record<Exclude<LatencySeverity, "ok">, string> = {
+  slow: "var(--amber)",
+  runaway: "var(--red)",
+};
+const SEV_TINT: Record<Exclude<LatencySeverity, "ok">, string> = {
+  slow: "color-mix(in oklab, var(--amber) 12%, transparent)",
+  runaway: "color-mix(in oklab, var(--red) 12%, transparent)",
+};
 
 type SortKey =
   | "agent"
@@ -212,11 +226,41 @@ const FullScreenButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 );
 
+/** One-line synthesized "why this agent is flagged" verdict, combining P90
+ * severity, dominant tier, error rate, loop rate and high-tool-frequency so the
+ * user doesn't have to join four separate panels. Hidden when nothing is
+ * notable. */
+const AgentVerdict = ({ parts }: { parts: string[] }) => {
+  if (parts.length === 0) return null;
+  return (
+    <Flex
+      alignItems="center"
+      gap={6}
+      style={{
+        padding: "6px 10px",
+        borderRadius: 6,
+        background: "color-mix(in oklab, var(--amber) 10%, var(--surface))",
+        border: "1px solid color-mix(in oklab, var(--amber) 30%, transparent)",
+        flexWrap: "wrap",
+      }}
+    >
+      <WarningIcon size={13} style={{ color: "var(--amber)", flex: "0 0 auto" }} aria-hidden />
+      <Text style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
+        Why flagged:
+      </Text>
+      <Text style={{ fontSize: 12, color: "var(--text-2)" }}>
+        {parts.join(" · ")}
+      </Text>
+    </Flex>
+  );
+};
+
 /** The expandable / full-screen detail body: stage mix, percentiles, cost + tabs. */
-const AgentDetailContent = ({ row }: { row: AgentRow }) => {
+const AgentDetailContent = ({ row, verdict }: { row: AgentRow; verdict: string[] }) => {
   const [tab, setTab] = useState<DetailTab>("tools");
   return (
     <Flex flexDirection="column" gap={8}>
+      <AgentVerdict parts={verdict} />
       <Flex justifyContent="space-between" gap={12} style={{ flexWrap: "wrap" }}>
         <Flex flexDirection="column" gap={4} style={{ minWidth: 220 }}>
           <Text style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)" }}>
@@ -274,7 +318,15 @@ const AgentDetailContent = ({ row }: { row: AgentRow }) => {
   );
 };
 
-const ExpandedDetail = ({ row, onFullScreen }: { row: AgentRow; onFullScreen: () => void }) => (
+const ExpandedDetail = ({
+  row,
+  verdict,
+  onFullScreen,
+}: {
+  row: AgentRow;
+  verdict: string[];
+  onFullScreen: () => void;
+}) => (
   <Flex
     flexDirection="column"
     gap={8}
@@ -283,7 +335,7 @@ const ExpandedDetail = ({ row, onFullScreen }: { row: AgentRow; onFullScreen: ()
     <Flex justifyContent="flex-end">
       <FullScreenButton onClick={onFullScreen} />
     </Flex>
-    <AgentDetailContent row={row} />
+    <AgentDetailContent row={row} verdict={verdict} />
   </Flex>
 );
 
@@ -308,6 +360,22 @@ export const AgentsTable = ({
   const { pageConfig } = useTweaks();
   const showTtft = pageConfig.agentsShowTtft;
   const highFreqAgents = useHighFrequencyAgents();
+  const loops = useAgentLoops();
+  const loopRateByAgent = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const lr of loops.rows) {
+      if (!lr.unattributed) m.set(lr.agent, lr.loopRatePct);
+    }
+    return m;
+  }, [loops.rows]);
+  const verdictFor = (r: AgentRow): string[] =>
+    buildAgentVerdict({
+      p90Ms: r.p90Ms,
+      errorRatePct: r.errorRatePct,
+      stage: r.stage,
+      loopRatePct: loopRateByAgent.get(r.agent),
+      highFrequency: highFreqAgents.has(r.agent),
+    });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [fullScreen, setFullScreen] = useState<AgentRow | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("invocations");
@@ -354,7 +422,7 @@ export const AgentsTable = ({
             onOperationChange={onOperationChange}
           />
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            {rows.length} {rows.length === 1 ? "agent" : "agents"}
+            {agentsViewSummary(view, rows.length)}
           </Text>
         </Flex>
       }
@@ -374,7 +442,12 @@ export const AgentsTable = ({
         )}
         <HeaderCell width={70} align="right" sortCol="errorRatePct" sortKey={sortKey} dir={dir} onSort={onSort}>Err</HeaderCell>
         <HeaderCell width={100} align="right" sortCol="costPerInvocation" sortKey={sortKey} dir={dir} onSort={onSort}>$/inv</HeaderCell>
-        <HeaderCell width={140}>Stages</HeaderCell>
+        <HeaderCell width={140}>
+          <Flex alignItems="center" gap={4}>
+            Span mix
+            <InfoTooltip text="Share of this agent's own child spans by tier — LLM=purple, Tool=amber, Retrieval=cyan, Orchestration=slate. LLM is ~0 by design because model calls run on the shared proxy in a separate trace, so this is a span-count mix, not where time goes. See 'Latency by execution tier' for the time view." />
+          </Flex>
+        </HeaderCell>
         {hasActive && <HeaderCell width={100}>SLA health</HeaderCell>}
       </Flex>
 
@@ -396,7 +469,12 @@ export const AgentsTable = ({
           {sortedRows.map((r) => {
             const id = `${r.serviceId}-${r.agent}`;
             const isExpanded = expanded === id;
-            const slow = r.p90Ms > SLOW_ROW_P90_MS;
+            const sev = latencySeverity(r.p90Ms);
+            const slow = sev !== "ok";
+            const rowTint = sev === "ok" ? undefined : SEV_TINT[sev];
+            const p90Color = sev === "ok" ? undefined : SEV_TEXT[sev];
+            const highError = r.errorRatePct > 5;
+            const verdict = verdictFor(r);
             const health = hasActive
               ? agentHealthScore(
                   {
@@ -426,9 +504,7 @@ export const AgentsTable = ({
                     padding: "0 10px",
                     borderTop: "1px solid var(--border)",
                     cursor: "pointer",
-                    background: slow
-                      ? "color-mix(in oklab, var(--amber) 6%, transparent)"
-                      : undefined,
+                    background: rowTint,
                   }}
                 >
                   <Cell width={24}>
@@ -488,7 +564,14 @@ export const AgentsTable = ({
                   <Cell width={80} align="right" mono>
                     {fmtCount(r.invocations)}
                   </Cell>
-                  <Cell width={80} align="right" mono color={slow ? "var(--amber)" : undefined}>
+                  <Cell width={80} align="right" mono color={p90Color}>
+                    {slow && (
+                      <WarningIcon
+                        size={11}
+                        aria-hidden
+                        style={{ verticalAlign: "-1px", marginRight: 3 }}
+                      />
+                    )}
                     {fmtMs(r.p90Ms)}
                   </Cell>
                   <Cell width={80} align="right" mono>
@@ -499,8 +582,21 @@ export const AgentsTable = ({
                       <TTFTValue value={r.ttftMs} />
                     </Cell>
                   )}
-                  <Cell width={70} align="right" mono color={r.errorRatePct > 5 ? "var(--red)" : undefined}>
-                    {r.errors > 0 ? fmtPercent(r.errorRatePct) : "0%"}
+                  <Cell width={70} align="right" mono color={highError ? "var(--red)" : undefined}>
+                    {r.errors > 0 ? (
+                      <>
+                        {highError && (
+                          <WarningIcon
+                            size={11}
+                            aria-hidden
+                            style={{ verticalAlign: "-1px", marginRight: 3 }}
+                          />
+                        )}
+                        {fmtPercent(r.errorRatePct)}
+                      </>
+                    ) : (
+                      "0%"
+                    )}
                   </Cell>
                   <Cell width={100} align="right" mono>
                     {r.costAttributed ? (
@@ -534,7 +630,13 @@ export const AgentsTable = ({
                     </Cell>
                   )}
                 </div>
-                {isExpanded && <ExpandedDetail row={r} onFullScreen={() => setFullScreen(r)} />}
+                {isExpanded && (
+                  <ExpandedDetail
+                    row={r}
+                    verdict={verdict}
+                    onFullScreen={() => setFullScreen(r)}
+                  />
+                )}
               </React.Fragment>
             );
           })}
@@ -553,7 +655,7 @@ export const AgentsTable = ({
       >
         {fullScreen && (
           <Surface elevation="raised" padding={16}>
-            <AgentDetailContent row={fullScreen} />
+            <AgentDetailContent row={fullScreen} verdict={verdictFor(fullScreen)} />
           </Surface>
         )}
       </ChartModal>

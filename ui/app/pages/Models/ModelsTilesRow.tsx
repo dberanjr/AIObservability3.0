@@ -2,7 +2,7 @@ import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtCount, fmtTokens, fmtUSD, fmtUSDCompact } from "../../data/format";
+import { fmtCount, fmtTokens, fmtUSD } from "../../data/format";
 import type { ModelRow } from "./useModels";
 
 const Tile = ({
@@ -90,7 +90,7 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
     (acc, m) => acc + m.inputTokens + m.outputTokens,
     0,
   );
-  const spend = models.reduce((acc, m) => acc + m.cost, 0);
+  const providerCount = new Set(models.map((m) => m.provider.id)).size;
   const priced = models.filter((m) => !m.pricingUnknown && m.costPerMTok > 0);
   const cheapest = priced.reduce<ModelRow | null>(
     (best, m) => (best == null || m.costPerMTok < best.costPerMTok ? m : best),
@@ -110,9 +110,9 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
       }}
     >
       <Tile label="Models" value={fmtCount(models.length)} />
+      <Tile label="Providers" value={fmtCount(providerCount)} />
       <Tile label="Requests" value={fmtCount(requests)} />
       <Tile label="Tokens" value={fmtTokens(tokens)} />
-      <Tile label="Spend" value={fmtUSDCompact(spend)} sub="blended est." />
       <Tile
         label="Cheapest / 1M"
         value={cheapest ? fmtUSD(cheapest.costPerMTok) : "—"}

@@ -8,6 +8,7 @@ import {
   fmtTokens,
 } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import type { ExplorerSummary } from "./useExplorerSummary";
 import { tileAction, type TileAction } from "./tileActions";
@@ -17,6 +18,8 @@ interface TileProps {
   value: string;
   sub?: string;
   emphasis?: "default" | "amber" | "red";
+  /** Optional one-line definition shown via an info icon next to the label. */
+  info?: string;
   /** When provided, the tile becomes clickable (filter or scroll). */
   onActivate?: () => void;
   /** Accessible description of the click action (required when onActivate set). */
@@ -34,6 +37,7 @@ const Tile = ({
   value,
   sub,
   emphasis = "default",
+  info,
   onActivate,
   actionLabel,
 }: TileProps) => {
@@ -59,20 +63,32 @@ const Tile = ({
       : {})}
   >
     <Flex flexDirection="column" gap={4}>
-      <Text
-        style={{
-          fontSize: 10.5,
-          fontWeight: 600,
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          color: "var(--text-3)",
-          minHeight: 28,
-          whiteSpace: "normal",
-          lineHeight: 1.2,
-        }}
-      >
-        {label}
-      </Text>
+      <Flex alignItems="center" gap={4} style={{ minHeight: 28 }}>
+        <Text
+          style={{
+            fontSize: 10.5,
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            color: "var(--text-3)",
+            whiteSpace: "normal",
+            lineHeight: 1.2,
+          }}
+        >
+          {label}
+        </Text>
+        {info && (
+          // Stop clicks/keys on the tooltip from also triggering the tile's
+          // scroll/filter action.
+          <span
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            style={{ display: "inline-flex", flex: "0 0 auto" }}
+          >
+            <InfoTooltip text={info} size={12} />
+          </span>
+        )}
+      </Flex>
       <Text
         style={{
           fontSize: 22,
@@ -95,18 +111,26 @@ const Tile = ({
 export interface ExplorerTilesProps {
   summary: ExplorerSummary;
   isLoading: boolean;
+  /** Force a target section open and scroll to it (falls back to a plain
+   *  scroll). Provided by ExplorerPage, which owns the sections' open state. */
+  onRevealSection?: (id: string) => void;
 }
 
-/** Smooth-scroll to a section by element id, expanding nothing (cards manage
- *  their own collapse state; the wrapper div is always in the DOM). */
+/** Fallback smooth-scroll to a section by element id when no reveal handler is
+ *  supplied (the wrapper div is always in the DOM regardless of collapse). */
 const scrollToSection = (id: string) => {
   document
     .getElementById(id)
     ?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
-const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
+const ExplorerTilesBody = ({
+  summary,
+  isLoading,
+  onRevealSection,
+}: ExplorerTilesProps) => {
   const { upsertCondition } = useGlobalFilters();
+  const reveal = onRevealSection ?? scrollToSection;
 
   /** Convert a tile action into Tile activation props (or none). */
   const activation = (
@@ -121,11 +145,18 @@ const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
     if (action.kind === "scroll") {
       return {
         actionLabel: action.aria,
-        onActivate: () => scrollToSection(action.section),
+        onActivate: () => reveal(action.section),
       };
     }
     return {};
   };
+
+  // Fleet error rate drives both the value and the severity emphasis, so a large
+  // absolute count with a tiny rate no longer reads as alarming (Explorer-6).
+  const errorRatePct =
+    summary.llmRequests > 0 ? (summary.errors / summary.llmRequests) * 100 : 0;
+  const errorEmphasis: TileProps["emphasis"] =
+    errorRatePct > 5 ? "red" : errorRatePct > 1 ? "amber" : "default";
 
   if (isLoading && summary.tokens === 0) {
     return (
@@ -176,6 +207,7 @@ const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
       <Tile
         label="Active models"
         value={fmtCount(summary.activeModels)}
+        info="Distinct models (canonicalized) seen across all AI services in scope."
         {...activation(tileAction("activeModels", summary))}
       />
       <Tile
@@ -183,12 +215,15 @@ const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
         value={fmtPercent(summary.concentrationPct, 0)}
         sub={summary.topServiceShare?.service}
         emphasis={summary.concentrationPct > 50 ? "amber" : "default"}
+        info="Share of fleet tokens consumed by the single largest service — high values mean spend is concentrated in one service."
         {...activation(tileAction("concentration", summary))}
       />
       <Tile
         label="Errors"
-        value={fmtCount(summary.errors)}
-        emphasis={summary.errors > 0 ? "amber" : "default"}
+        value={fmtPercent(errorRatePct)}
+        sub={`${fmtCount(summary.errors)} ${summary.errors === 1 ? "error" : "errors"}`}
+        emphasis={errorEmphasis}
+        info="Share of LLM spans in scope with an error status. Neutral <1%, amber 1–5%, red >5% — matching the per-service status dots."
         {...activation(tileAction("errors", summary))}
       />
       <Tile
@@ -196,6 +231,7 @@ const ExplorerTilesBody = ({ summary, isLoading }: ExplorerTilesProps) => {
         value={fmtCount(summary.logicalErrors)}
         sub="HTTP 200, payload-level"
         emphasis={summary.logicalErrors > 0 ? "amber" : "default"}
+        info="HTTP 200 responses that still failed at the payload level — truncated output (max_tokens), content filter, or refusal."
         {...activation(tileAction("logicalErrors", summary))}
       />
     </div>

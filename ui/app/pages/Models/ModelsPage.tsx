@@ -96,8 +96,14 @@ export const ModelsPage = () => {
           <ModelsTable models={filtered} isLoading={isLoading} />
         </CollapsibleCard>
         {/* FinOps merged in as collapsible sections below the bubble chart +
-            table. Cost figures flow through the section-G cost model. */}
-        <ModelsFinOpsSections models={models} onSelectFinding={setSelectedFinding} />
+            table. Cost figures flow through the section-G cost model. The FinOps
+            rollups are always fleet-wide (all model types); typeFilter is passed
+            only so the section can flag when the top filter doesn't apply. */}
+        <ModelsFinOpsSections
+          models={models}
+          typeFilter={typeFilter}
+          onSelectFinding={setSelectedFinding}
+        />
       </Flex>
       <FindingDrawer
         finding={selectedFinding}

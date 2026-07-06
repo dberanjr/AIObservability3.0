@@ -13,6 +13,7 @@ import {
 } from "./finopsQueries";
 import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
+import { computePossibleSavings } from "./finopsLogic";
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -286,22 +287,10 @@ export const useFinOps = (): FinOpsData => {
       totalTokens > 0 ? (totalCost / totalTokens) * 1_000_000 : 0;
 
     // ---- Possible savings ----
-    // For each service: if its blended $/MTok is more than 3× the cheapest
-    // service's $/MTok, assume it could halve its blended rate. Sum those
-    // half-savings across services as a rough "Possible savings" headline.
-    const pricedServices = services.filter((s) => s.costPerMTok > 0);
-    let possibleSavings = 0;
-    if (pricedServices.length >= 2) {
-      const cheapest = pricedServices.reduce((best, s) =>
-        s.costPerMTok < best.costPerMTok ? s : best,
-      );
-      for (const svc of pricedServices) {
-        if (svc.costPerMTok > cheapest.costPerMTok * 3) {
-          const targetCost = (svc.tokens / 1_000_000) * cheapest.costPerMTok * 2;
-          possibleSavings += Math.max(0, svc.cost - targetCost);
-        }
-      }
-    }
+    // Within-type only: an expensive generative service is compared to the
+    // cheapest generative peer, never to an embedding service (which is cheap by
+    // nature and would inflate the headline with an incoherent swap).
+    const possibleSavings = computePossibleSavings(services);
 
     return {
       daily: { dayLabels, series: trimmedSeries, totals },

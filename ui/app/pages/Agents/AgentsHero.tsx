@@ -7,7 +7,15 @@ import { InfoTooltip } from "../../components/InfoTooltip";
 import { BarList } from "../../components/charts/BarList";
 import { fmtCount, fmtMs } from "../../data/format";
 import { InvocationsChart } from "./InvocationsChart";
+import { latencySeverity, winsorizedMax, type LatencySeverity } from "./latency";
 import type { AgentRow } from "./useAgents";
+
+// One severity ramp, shared with the table row highlight via latencySeverity.
+const SEVERITY_COLOR: Record<LatencySeverity, string> = {
+  ok: "var(--blue)",
+  slow: "var(--amber)",
+  runaway: "var(--red)",
+};
 
 export interface AgentsHeroProps {
   agents: AgentRow[];
@@ -23,6 +31,15 @@ export const AgentsHero = ({ agents, isLoading }: AgentsHeroProps) => {
         .sort((a, b) => b.p90Ms - a.p90Ms)
         .slice(0, 25),
     [agents],
+  );
+
+  // Clamp the bar scale to the P95 of P90s so a single runaway/looping agent
+  // (which can be 100x the fleet) saturates its own bar instead of crushing
+  // every normal agent to an invisible sliver. True values still show in the
+  // right-aligned displayValue, and runaways stay red.
+  const scaleMax = useMemo(
+    () => winsorizedMax(topByP90.map((a) => a.p90Ms), 95),
+    [topByP90],
   );
 
   return (
@@ -72,11 +89,8 @@ export const AgentsHero = ({ agents, isLoading }: AgentsHeroProps) => {
           ) : (
             <div style={{ maxHeight: 200, overflowY: "auto", paddingRight: 4 }}>
               <BarList
-                color={(item) => {
-                  if (item.value > 600_000) return "var(--red)";
-                  if (item.value > 2000) return "var(--amber)";
-                  return "var(--blue)";
-                }}
+                max={scaleMax}
+                color={(item) => SEVERITY_COLOR[latencySeverity(item.value)]}
                 items={topByP90.map((a) => ({
                   key: a.agent,
                   label: a.agent,

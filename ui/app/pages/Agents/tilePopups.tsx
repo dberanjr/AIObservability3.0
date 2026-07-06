@@ -27,8 +27,7 @@ import { summarizeAgentTtft, TTFT_ATTRIBUTES } from "./ttft";
 import { useInvocationsChart } from "./useInvocationsChart";
 import { useAgentLoops, LOOP_REPEAT_RATIO, LOOP_MAX_STEP } from "./useAgentLoops";
 import { useAgentLoopSeries } from "./useAgentLoopSeries";
-
-const SLOW_P90_MS = 2000;
+import { SLOW_P90_MS } from "./constants";
 
 /* ----------------------------- shared bits ----------------------------- */
 
@@ -271,7 +270,7 @@ export const InvocationsBody = () => {
           series={[
             {
               label: "Invocations",
-              color: "var(--purple)",
+              color: "var(--blue)",
               values: model.values,
               axis: "left",
             },
@@ -520,7 +519,7 @@ export const TtftBody = ({
           height={260}
           formatLeft={(n) => fmtMs(n)}
           series={[
-            { label: "Avg TTFT by agent", color: "var(--purple)", values: summary.values },
+            { label: "Avg TTFT by agent", color: "var(--blue)", values: summary.values },
           ]}
         />
       </Flex>
@@ -539,7 +538,7 @@ export const TtftBody = ({
       <AreaChart
         height={260}
         formatLeft={(n) => fmtMs(n)}
-        series={[{ label: "TTFT (example)", color: "var(--purple)", values: EXAMPLE_TTFT }]}
+        series={[{ label: "TTFT (example)", color: "var(--blue)", values: EXAMPLE_TTFT }]}
       />
     </Flex>
   );
@@ -613,7 +612,7 @@ export const LoopingAgentsBody = () => {
           <AreaChart
             height={200}
             formatLeft={(n) => fmtCount(Math.round(n))}
-            series={[{ label: "Node executions", color: "var(--purple)", values: series.values }]}
+            series={[{ label: "Node executions", color: "var(--blue)", values: series.values }]}
           />
         )}
       </Flex>

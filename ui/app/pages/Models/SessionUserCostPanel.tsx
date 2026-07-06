@@ -9,8 +9,8 @@
  * propagation, rather than a fabricated table.
  */
 import React, { useMemo } from "react";
-import { Surface } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
+import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import {
@@ -106,12 +106,22 @@ const SessionUserCostInner = () => {
     });
   }, [data, samplingRatio]);
 
-  if (isLoading) return null;
+  if (isLoading && rows.length === 0)
+    return (
+      <Flex flexDirection="column" gap={4}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} style={{ height: 32, borderRadius: 6 }} />
+        ))}
+      </Flex>
+    );
   if (rows.length === 0)
     return (
-      <Text style={{ fontSize: 12.5, color: "var(--text-2)" }}>
-        No session/user activity in the current scope.
-      </Text>
+      <EmptyState
+        bare
+        title="No session/user activity in this scope"
+        description="Spans carrying both session.id and gen_ai.user exist for this capability, but none fall inside the current scope and timeframe."
+        hint="Widen the timeframe or broaden the scope to roll cost up per session and user."
+      />
     );
 
   return (

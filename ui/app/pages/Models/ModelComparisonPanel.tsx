@@ -66,16 +66,38 @@ const Picker = ({
  *  so absolute magnitudes don't matter — only the ratios between dimensions. */
 const WeightSliders = ({
   weights,
+  edited,
   onChange,
   onReset,
 }: {
   weights: Record<ScoreDimension, number>;
+  edited?: boolean;
   onChange: (dim: ScoreDimension, value: number) => void;
   onReset: () => void;
 }) => (
   <Flex flexDirection="column" gap={8}>
     <Flex alignItems="center" justifyContent="space-between">
-      <Text style={LABEL_STYLE}>Scoring weights</Text>
+      <Flex alignItems="center" gap={6}>
+        <Text style={LABEL_STYLE}>Scoring weights</Text>
+        {edited && (
+          <span
+            title="Weights differ from the use-case preset"
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: "var(--amber)",
+              background: "color-mix(in oklab, var(--amber) 16%, transparent)",
+              border: "1px solid color-mix(in oklab, var(--amber) 45%, transparent)",
+              borderRadius: 4,
+              padding: "0 4px",
+            }}
+          >
+            edited
+          </span>
+        )}
+      </Flex>
       <button
         type="button"
         onClick={onReset}
@@ -156,13 +178,14 @@ const UpstreamBand = ({
   >
     <Flex flexDirection="column" gap={2} style={{ flex: 1, minWidth: 220 }}>
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-        Driving upstream service
+        Typical caller for this profile · context only
       </Text>
       <Text
         style={{
           fontSize: 13,
           fontWeight: 600,
           fontFamily: "var(--mono, monospace)",
+          color: "var(--text-2)",
         }}
       >
         {upstream || "—"}
@@ -170,6 +193,10 @@ const UpstreamBand = ({
       <Text style={{ fontSize: 12, color: "var(--text-2)" }}>
         {profile.description} · min quality:{" "}
         <strong>{profile.minQuality}</strong>
+      </Text>
+      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+        For context only — the scored metrics below reflect the service being
+        compared, not this caller.
       </Text>
     </Flex>
   </Flex>
@@ -207,13 +234,29 @@ export const ModelComparisonPanel = ({
   const [selectedService, setSelectedService] = useState<string>("");
   const { models, isLoading } = useModels(selectedService || undefined);
 
-  // Editable weights, seeded from the profile and reset whenever it changes.
+  // Editable weights, seeded from the profile. Switching the use case discards
+  // edits, but only after an explicit confirm (see handleProfileChange) so an
+  // incidental dropdown change can't silently wipe carefully tuned sliders.
   const [weights, setWeights] = useState<Record<ScoreDimension, number>>(
     profile.weights,
   );
-  useEffect(() => {
-    setWeights(findProfile(profileId).weights);
-  }, [profileId]);
+  const weightsEdited = useMemo(
+    () => DIMENSIONS.some((d) => weights[d] !== profile.weights[d]),
+    [weights, profile],
+  );
+
+  const handleProfileChange = (nextId: string) => {
+    if (
+      weightsEdited &&
+      !window.confirm(
+        "Switching the use case will discard your edited scoring weights. Continue?",
+      )
+    ) {
+      return;
+    }
+    setProfileId(nextId);
+    setWeights(findProfile(nextId).weights);
+  };
 
   // Driving upstream service — seeded from the profile, overridable. Reset to
   // the profile's named upstream when the profile changes.
@@ -311,7 +354,7 @@ export const ModelComparisonPanel = ({
 
         {/* Selectors: use case · service being compared · driving upstream */}
         <Flex gap={12} style={{ flexWrap: "wrap" }}>
-          <Picker label="Use case" value={profileId} onChange={setProfileId}>
+          <Picker label="Use case" value={profileId} onChange={handleProfileChange}>
             {USE_CASE_PROFILES.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
@@ -331,7 +374,7 @@ export const ModelComparisonPanel = ({
             ))}
           </Picker>
           <Picker
-            label="Driving upstream service"
+            label="Typical caller (context only)"
             value={selectedUpstream}
             onChange={setSelectedUpstream}
           >
@@ -352,6 +395,7 @@ export const ModelComparisonPanel = ({
 
         <WeightSliders
           weights={weights}
+          edited={weightsEdited}
           onChange={(dim, value) =>
             setWeights((w) => ({ ...w, [dim]: value }))
           }

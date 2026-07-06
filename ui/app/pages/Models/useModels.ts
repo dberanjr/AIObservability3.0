@@ -14,6 +14,9 @@ import {
   type ProviderId,
 } from "../../detection/attributes";
 import { toNum } from "../../data/format";
+import { inferModelType, MODEL_TYPE_LABEL, type ModelType } from "./finopsLogic";
+
+export { inferModelType, MODEL_TYPE_LABEL, type ModelType };
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -38,32 +41,6 @@ interface ModelRecord {
   error_rate_pct?: number;
   timeout_rate_pct?: number;
 }
-
-export type ModelType = "generative" | "embedding" | "reranking";
-
-export const MODEL_TYPE_LABEL: Record<ModelType, string> = {
-  generative: "Generative",
-  embedding: "Embedding",
-  reranking: "Reranking",
-};
-
-/**
- * Per Session 11 handoff: infer type from gen_ai.operation.name first, then
- * model-name substring. gen_ai.operation.name is not consistently set in BOS
- * data so the name-based fallback is load-bearing.
- */
-export const inferModelType = (
-  modelName: string,
-  operationName?: string | null,
-): ModelType => {
-  const op = (operationName ?? "").trim().toLowerCase();
-  if (op === "embeddings" || op === "embedding") return "embedding";
-  if (op === "rerank" || op === "reranking") return "reranking";
-  const m = modelName.toLowerCase();
-  if (m.includes("embed")) return "embedding";
-  if (m.includes("rerank")) return "reranking";
-  return "generative";
-};
 
 export interface ModelRow {
   model: string;

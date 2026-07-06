@@ -201,10 +201,10 @@ export const useAgents = (): UseAgentsResult => {
         ),
       );
       const inputTokens = costAttributed
-        ? join!.inputTokens
+        ? join.inputTokens
         : num(r.input_tokens);
       const outputTokens = costAttributed
-        ? join!.outputTokens
+        ? join.outputTokens
         : num(r.output_tokens);
       // Price with the dominant linked model (raw id), via the cache-aware
       // cost model — blended fallback so an unknown model estimates, not $0.

@@ -235,6 +235,13 @@ export interface ComparisonResult {
   reasoning: string;
   /** Estimated monthly savings if all volume swapped from loser → winner. */
   estimatedMonthlySavings: number;
+  /** True when neither model carried a real gen_ai.evaluation.* score, so the
+   *  Quality dimension is a static tier proxy rather than a measured value. */
+  qualityEstimated: boolean;
+  /** True when Quality is the single largest weighted contributor to the
+   *  winner's margin — i.e. the verdict leans on the (possibly estimated)
+   *  quality score. Consumers should soften the recommendation wording. */
+  qualityDriven: boolean;
 }
 
 const fmtCurrencyShort = (v: number): string => {
@@ -310,6 +317,28 @@ export const compareModels = (
   const perRequestDelta = loserInput.costPerRequest - winnerInput.costPerRequest;
   const estimatedMonthlySavings = Math.max(0, perRequestDelta * monthlyRequests);
 
+  const qualityEstimated =
+    aInput.realEvalScore == null && bInput.realEvalScore == null;
+
+  // Which dimension contributes most to the winner's weighted margin?
+  let qualityDriven = false;
+  if (winner !== "tie") {
+    const w = profile.weights;
+    const weightSum =
+      DIMENSIONS.reduce((acc, d) => acc + w[d], 0) || 1;
+    let topDim: ScoreDimension = "latency";
+    let topContrib = -Infinity;
+    for (const d of DIMENSIONS) {
+      const contrib =
+        ((winnerModel.scores[d] - loserModel.scores[d]) * w[d]) / weightSum;
+      if (contrib > topContrib) {
+        topContrib = contrib;
+        topDim = d;
+      }
+    }
+    qualityDriven = topDim === "quality" && topContrib > 0;
+  }
+
   return {
     profile,
     a,
@@ -319,6 +348,8 @@ export const compareModels = (
     verdict,
     reasoning: buildReasoning(profile, winnerModel, loserModel, margin),
     estimatedMonthlySavings,
+    qualityEstimated,
+    qualityDriven,
   };
 };
 

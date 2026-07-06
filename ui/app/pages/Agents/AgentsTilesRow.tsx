@@ -6,6 +6,7 @@ import { InfoTooltip } from "../../components/InfoTooltip";
 import { ChartModal } from "../../components/charts/ChartExpander";
 import { MissingDataHint } from "../../components/displayHints";
 import { fmtCount, fmtMs, fmtPercent, fmtUSDCompact } from "../../data/format";
+import { SLOW_P90_MS } from "./constants";
 import { useAgentLoops } from "./useAgentLoops";
 import { summarizeAgentTtft } from "./ttft";
 import {
@@ -42,10 +43,12 @@ interface TileProps {
   sub?: React.ReactNode;
   info: string;
   emphasis?: Emphasis;
+  /** Demote a tile whose metric isn't instrumented (dashed, dimmed). */
+  muted?: boolean;
   onClick: () => void;
 }
 
-const Tile = ({ label, value, sub, info, emphasis = "default", onClick }: TileProps) => (
+const Tile = ({ label, value, sub, info, emphasis = "default", muted = false, onClick }: TileProps) => (
   <Surface elevation="raised" padding={0}>
     <button
       type="button"
@@ -59,6 +62,8 @@ const Tile = ({ label, value, sub, info, emphasis = "default", onClick }: TilePr
         boxSizing: "border-box",
         padding: 12,
         borderRadius: "inherit",
+        opacity: muted ? 0.72 : undefined,
+        border: muted ? "1px dashed var(--border)" : undefined,
       }}
     >
       <Flex flexDirection="column" gap={4}>
@@ -99,11 +104,11 @@ const Tile = ({ label, value, sub, info, emphasis = "default", onClick }: TilePr
   </Surface>
 );
 
-const SLOW_P90_MS = 2000;
-
+// Wrap responsively instead of forcing 7 equal columns, so labels don't wrap to
+// two lines and values stay legible on narrower viewports.
 const GRID: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 10,
 };
 
@@ -225,6 +230,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         <Tile
           label="TTFT"
           value={ttft ? fmtMs(ttft.medianMs) : "—"}
+          muted={!ttft}
           sub={
             ttft ? (
               `median · ${ttft.agentsWithTtft} agent${ttft.agentsWithTtft === 1 ? "" : "s"}`

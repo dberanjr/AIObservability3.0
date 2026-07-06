@@ -49,23 +49,32 @@ const Eyebrow = () => (
   </Flex>
 );
 
-const VerdictPill = ({ result }: { result: ComparisonResult }) => (
-  <span
-    style={{
-      padding: "4px 10px",
-      borderRadius: 999,
-      fontSize: 10.5,
-      fontWeight: 700,
-      letterSpacing: "0.06em",
-      textTransform: "uppercase",
-      background: `color-mix(in oklab, ${VERDICT_COLOR[result.verdict]} 16%, transparent)`,
-      border: `1px solid color-mix(in oklab, ${VERDICT_COLOR[result.verdict]} 50%, transparent)`,
-      color: VERDICT_COLOR[result.verdict],
-    }}
-  >
-    {VERDICT_LABEL[result.verdict]}
-  </span>
-);
+const VerdictPill = ({ result }: { result: ComparisonResult }) => {
+  // When the margin leans on the (estimated) Quality dimension, downgrade the
+  // wording so a partly-synthetic score can't read as a confident verdict.
+  const directional = result.qualityDriven && result.qualityEstimated;
+  const color = directional ? "var(--text-3)" : VERDICT_COLOR[result.verdict];
+  const label = directional
+    ? "Directional · quality estimated"
+    : VERDICT_LABEL[result.verdict];
+  return (
+    <span
+      style={{
+        padding: "4px 10px",
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        background: `color-mix(in oklab, ${color} 16%, transparent)`,
+        border: `1px solid color-mix(in oklab, ${color} 50%, transparent)`,
+        color,
+      }}
+    >
+      {label}
+    </span>
+  );
+};
 
 const WinnerMark = ({ winner }: { winner: "a" | "b" | "tie" }) => {
   const label = winner === "tie" ? "=" : winner.toUpperCase();
@@ -97,11 +106,14 @@ const ScoreBar = ({
   color,
   faded,
   winnerChip,
+  estimated,
 }: {
   score: number;
   color: string;
   faded?: boolean;
   winnerChip?: string;
+  /** Render a hatched fill to signal a modeled (not measured) score. */
+  estimated?: boolean;
 }) => (
   <Flex alignItems="center" gap={6}>
     <div
@@ -119,7 +131,9 @@ const ScoreBar = ({
           position: "absolute",
           inset: 0,
           width: `${Math.max(0, Math.min(100, score))}%`,
-          background: color,
+          background: estimated
+            ? `repeating-linear-gradient(45deg, ${color}, ${color} 3px, color-mix(in oklab, ${color} 40%, transparent) 3px, color-mix(in oklab, ${color} 40%, transparent) 6px)`
+            : color,
           opacity: faded ? 0.3 : 1,
         }}
       />
@@ -167,22 +181,44 @@ const DimensionRow = ({
   const bScore = result.b.scores[dim];
   const winner = aScore > bScore ? "a" : bScore > aScore ? "b" : "tie";
   const weight = result.profile.weights[dim];
+  const estimated = dim === "quality" && result.qualityEstimated;
   return (
     <>
-      <Text style={{ fontSize: 12, color: "var(--text-2)" }}>
-        {DIMENSION_LABEL[dim]}
-      </Text>
+      <Flex alignItems="center" gap={4}>
+        <Text style={{ fontSize: 12, color: "var(--text-2)" }}>
+          {DIMENSION_LABEL[dim]}
+        </Text>
+        {estimated && (
+          <span
+            title="Modeled from the model's quality tier — no gen_ai.evaluation.* score yet"
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+              background: "var(--surface-3)",
+              borderRadius: 4,
+              padding: "0 4px",
+            }}
+          >
+            est.
+          </span>
+        )}
+      </Flex>
       <ScoreBar
         score={aScore}
         color={ACCENT_A}
         faded={winner === "b"}
         winnerChip={winner === "a" ? "A" : undefined}
+        estimated={estimated}
       />
       <ScoreBar
         score={bScore}
         color={ACCENT_B}
         faded={winner === "a"}
         winnerChip={winner === "b" ? "B" : undefined}
+        estimated={estimated}
       />
       <Text
         style={{

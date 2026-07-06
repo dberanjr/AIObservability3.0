@@ -6,8 +6,11 @@
  */
 import React, { useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import type { Finding } from "../../components/drawers/types";
 import { CollapsibleSection } from "../../components/CollapsibleSection";
+import { MODEL_TYPE_LABEL } from "./useModels";
+import type { ModelTypeFilter } from "./ModelTypeSegmented";
 import { CapabilityGate } from "../../components/CapabilityGate";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useUpstreamServices } from "../Agents/useUpstreamServices";
@@ -24,11 +27,14 @@ import { SessionUserCostPanel } from "./SessionUserCostPanel";
 
 export interface ModelsFinOpsSectionsProps {
   models: ModelRow[];
+  /** The page's active model-type filter, for the scope-mismatch caption. */
+  typeFilter?: ModelTypeFilter;
   onSelectFinding: (f: Finding) => void;
 }
 
 export const ModelsFinOpsSections = ({
   models,
+  typeFilter = "all",
   onSelectFinding,
 }: ModelsFinOpsSectionsProps) => {
   const finOps = useFinOps();
@@ -50,10 +56,26 @@ export const ModelsFinOpsSections = ({
     <Flex flexDirection="column" gap={12}>
       <CollapsibleSection
         title="Cost & spend overview"
-        subtitle="24h · 7d · projected 30d"
+        subtitle="24h · 7d · projected 30d · fleet · all model types"
         defaultOpen
       >
         <Flex flexDirection="column" gap={16}>
+          {typeFilter !== "all" && (
+            <Text
+              style={{
+                fontSize: 11.5,
+                color: "var(--text-3)",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "6px 10px",
+              }}
+            >
+              Showing fleet spend across <strong>all model types</strong>. The
+              &ldquo;{MODEL_TYPE_LABEL[typeFilter]}&rdquo; filter above applies to
+              the model inventory only, not to these cost rollups.
+            </Text>
+          )}
           <FinOpsTilesRow data={finOps} />
           <FinOpsFindings
             data={finOps}

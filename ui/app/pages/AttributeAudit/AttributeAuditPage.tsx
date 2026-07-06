@@ -10,11 +10,12 @@ import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
 import { tenantLabel } from "../../lib/tenant";
 import { useScope } from "../../scope/ScopeContext";
-import { GROUPS, COMMUNITY_ATTRS, type AuditSection } from "./catalog";
+import { GROUPS, SECTIONS, COMMUNITY_ATTRS, type AuditSection } from "./catalog";
 import { useAttributeAudit, type AttrResult, type SectionResult } from "./useAttributeAudit";
 import { useBucketDetection } from "./useBucketDetection";
 import { SectionCard, TierBadge, TIER_META } from "./SectionCard";
 import { AttributeDetailModal } from "./AttributeDetailModal";
+import { coverageRampColor } from "./coverage";
 
 const timeframeLabel = (from: string, to?: string): string => {
   const m = /^now\(\)-(\d+)([smhd])$/i.exec(from);
@@ -31,8 +32,10 @@ const timeframeLabel = (from: string, to?: string): string => {
 const coverageTone = (pct: number): string =>
   pct >= 80 ? "var(--green-2)" : pct >= 40 ? "var(--amber)" : "var(--red)";
 
-/** Overall coverage ring (inline SVG donut). */
-const CoverageRing = ({ pct }: { pct: number }) => {
+/** Overall coverage ring (inline SVG donut). Defaults to labelling the value
+ *  "mandatory" — it measures Tier-A (Mandatory) coverage, the actionable number
+ *  that can legitimately reach 100%. */
+const CoverageRing = ({ pct, label = "mandatory" }: { pct: number; label?: string }) => {
   const size = 116;
   const stroke = 12;
   const r = (size - stroke) / 2;
@@ -40,8 +43,12 @@ const CoverageRing = ({ pct }: { pct: number }) => {
   const tone = coverageTone(pct);
   const dash = (Math.max(0, Math.min(100, pct)) / 100) * c;
   return (
-    <div style={{ position: "relative", width: size, height: size, flex: "0 0 auto" }}>
-      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+    <div
+      role="img"
+      aria-label={`Mandatory attribute coverage ${Math.round(pct)} percent`}
+      style={{ position: "relative", width: size, height: size, flex: "0 0 auto" }}
+    >
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={stroke} />
         <circle
           cx={size / 2}
@@ -68,7 +75,7 @@ const CoverageRing = ({ pct }: { pct: number }) => {
           {`${Math.round(pct)}%`}
         </Text>
         <Text style={{ fontSize: 9.5, color: "var(--text-3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-          coverage
+          {label}
         </Text>
       </div>
     </div>
@@ -115,7 +122,7 @@ const HeroStat = ({
       {value}
     </Text>
     {sub && (
-      <Text style={{ fontSize: 10, color: "var(--text-4)", lineHeight: 1.2 }}>
+      <Text style={{ fontSize: 10.5, color: "var(--text-3)", lineHeight: 1.2 }}>
         {sub}
       </Text>
     )}
@@ -123,23 +130,37 @@ const HeroStat = ({
 );
 
 /** Compact, clickable "coverage by section" list shown in the hero. Clicking
- *  a row expands and scrolls to that section — a live table of contents. */
+ *  a row expands and scrolls to that section — a live table of contents.
+ *
+ *  Bars measure Mandatory + Important (A+B) coverage — the actionable tiers that
+ *  can legitimately reach 100% — rather than all-tier coverage (which can never
+ *  go green while rare C/D attributes sit missing). When a search is active the
+ *  bars instead mirror the filtered counts so the TOC agrees with the section
+ *  headers the user scrolls to. */
 const SectionOverview = ({
   sections,
+  filteredById,
+  mirrorFilter,
   onJump,
 }: {
   sections: SectionResult[];
+  filteredById: Map<string, SectionResult>;
+  mirrorFilter: boolean;
   onJump: (id: string) => void;
 }) => (
   <Flex flexDirection="column" gap={4} style={{ flex: 1, minWidth: 240 }}>
     {sections.map((s) => {
-      const pct = s.totalCount > 0 ? (s.presentCount / s.totalCount) * 100 : 0;
-      const tone =
-        s.presentCount === s.totalCount && s.totalCount > 0
-          ? "var(--green-2)"
-          : s.presentCount === 0
-            ? "var(--red)"
-            : "var(--amber)";
+      const f = filteredById.get(s.section.id);
+      // Mirror the filtered counts during search; otherwise show A+B coverage.
+      const present = mirrorFilter
+        ? (f?.presentCount ?? 0)
+        : s.tierStats.A.present + s.tierStats.B.present;
+      const total = mirrorFilter
+        ? (f?.totalCount ?? 0)
+        : s.tierStats.A.total + s.tierStats.B.total;
+      const hidden = mirrorFilter && !f;
+      const pct = total > 0 ? (present / total) * 100 : 0;
+      const tone = coverageRampColor(present, total);
       return (
         <button
           key={s.section.id}
@@ -159,6 +180,7 @@ const SectionOverview = ({
             padding: "3px 6px",
             borderRadius: 6,
             width: "100%",
+            opacity: hidden ? 0.55 : 1,
           }}
         >
           <Text
@@ -197,7 +219,7 @@ const SectionOverview = ({
               flex: "0 0 auto",
             }}
           >
-            {`${s.presentCount}/${s.totalCount}`}
+            {hidden ? "—" : `${present}/${total}`}
           </Text>
         </button>
       );
@@ -212,17 +234,30 @@ export const AttributeAuditPage = () => {
   const detection = useBucketDetection();
   const subtitle = `${tenantLabel()} · ${timeframeLabel(scope.timeframe.from, scope.timeframe.to)}`;
   const { overview } = audit;
+  // Staggered-load progress: how many of the 10 category queries have resolved.
+  const sectionCount = audit.sections.length;
+  const sectionsLoaded = audit.sections.filter((s) => !s.isLoading).length;
 
-  // Per-section collapse state (default: all expanded) and the attribute
-  // selected for the detail modal.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Per-section collapse state and the attribute selected for the detail modal.
+  // Default: the first pillar (Model & inference core) is expanded; everything
+  // below it starts collapsed so the first paint foregrounds the core section
+  // instead of a ~110-cell wall.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const firstPillar = new Set(GROUPS[0].sectionIds);
+    return Object.fromEntries(
+      SECTIONS.filter((s) => !firstPillar.has(s.id)).map((s) => [s.id, true]),
+    );
+  });
   const [selected, setSelected] = useState<{ section: AuditSection; attr: AttrResult } | null>(
     null,
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [communityOpen, setCommunityOpen] = useState(false);
-  // Tier filter — all 4 active by default. Search overrides this.
-  const [activeTiers, setActiveTiers] = useState<Set<string>>(() => new Set(["A", "B", "C", "D"]));
+  // Show only the attributes that are missing — a gaps-first audit path.
+  const [gapsOnly, setGapsOnly] = useState(false);
+  // Tier filter — default to the actionable Mandatory + Important tiers; users
+  // opt into Nice-to-Have / Other explicitly. Search overrides this.
+  const [activeTiers, setActiveTiers] = useState<Set<string>>(() => new Set(["A", "B"]));
 
   const toggleTier = (tier: string) =>
     setActiveTiers((prev) => {
@@ -244,9 +279,16 @@ export const AttributeAuditPage = () => {
       Object.fromEntries(audit.sections.map((s) => [s.section.id, true])),
     );
 
-  // Jump from the hero TOC: expand the target section, then scroll to it.
+  // Jump from the hero TOC: expand the target section, then scroll to it. If a
+  // tier / gaps filter currently hides the whole section (e.g. an all-Tier-D
+  // section under the default A+B view), reveal all tiers so the jump lands on
+  // real content instead of a missing anchor.
   const jumpToSection = (id: string) => {
     setCollapsed((prev) => ({ ...prev, [id]: false }));
+    if (!filteredById.has(id)) {
+      resetTiers();
+      setGapsOnly(false);
+    }
     requestAnimationFrame(() => {
       document
         .getElementById(`aaa-section-${id}`)
@@ -278,19 +320,42 @@ export const AttributeAuditPage = () => {
           attrs = attrs.filter((a) => activeTiers.has(a.spec.tier));
         }
 
+        // Gaps-first: keep only the missing attributes.
+        if (gapsOnly) attrs = attrs.filter((a) => !a.present);
+
         if (attrs.length === 0) return null;
         const presentCount = attrs.filter((a) => a.present).length;
+        const sparseCount = attrs.filter((a) => a.verdict === "sparse").length;
         return {
           ...section,
           attributes: attrs,
           presentCount,
+          sparseCount,
           totalCount: attrs.length,
           coveragePct: attrs.length > 0 ? (presentCount / attrs.length) * 100 : 0,
           // tierStats stays unfiltered so section header shows full tier context
         };
       })
       .filter((s): s is SectionResult => s !== null);
-  }, [audit.sections, searchQuery, activeTiers]);
+  }, [audit.sections, searchQuery, activeTiers, gapsOnly]);
+
+  // Lookup for the hero TOC so it can mirror the filtered counts on search.
+  const filteredById = useMemo(
+    () => new Map(filteredSections.map((s) => [s.section.id, s])),
+    [filteredSections],
+  );
+
+  // Missing Tier-A (Mandatory) attributes across the whole audit — the single
+  // most actionable "what am I missing?" list, surfaced as a top-of-page callout.
+  const missingMandatory = useMemo(
+    () =>
+      audit.sections.flatMap((s) =>
+        s.attributes
+          .filter((a) => a.spec.tier === "A" && !a.present)
+          .map((a) => ({ name: a.spec.name, sectionId: s.section.id, short: s.section.short })),
+      ),
+    [audit.sections],
+  );
 
   // Community / emerging attributes also respect the search box (by name, description,
   // or source), so a query like "token_count" surfaces e.g. llm.token_count.completion.
@@ -305,15 +370,23 @@ export const AttributeAuditPage = () => {
     );
   }, [searchQuery]);
 
+  // Total attributes currently shown — announced via an aria-live region so
+  // screen-reader users get feedback when search / tier / gaps filters change.
+  const visibleAttrCount =
+    filteredSections.reduce((a, s) => a + s.totalCount, 0) +
+    (searchQuery.trim() ? communityMatches.length : 0);
+
   // While searching, force-open the community section so matches are visible.
   const communitySearchActive = !!searchQuery.trim();
   const communityShown =
     communityOpen || (communitySearchActive && communityMatches.length > 0);
 
-  // Force-expand sections that have visible content when search or tier filter is active.
+  // A search or a gaps-only view force-reveals matching sections so results are
+  // visible; a plain tier filter does NOT, so the default collapsed layout is
+  // preserved. (Tier filtering just re-scopes what shows inside open sections.)
+  const forceOpen = !!searchQuery.trim() || gapsOnly;
   const isSectionCollapsed = (id: string): boolean => {
-    const isFiltering = searchQuery.trim() || activeTiers.size < 4;
-    if (isFiltering && filteredSections.some((s) => s.section.id === id)) {
+    if (forceOpen && filteredSections.some((s) => s.section.id === id)) {
       return false;
     }
     return !!collapsed[id];
@@ -469,6 +542,7 @@ export const AttributeAuditPage = () => {
                 <button
                   key={tier}
                   type="button"
+                  aria-pressed={active}
                   title={active ? `Hide ${meta.label}: ${meta.longLabel}` : `Show ${meta.label}: ${meta.longLabel}`}
                   onClick={() => toggleTier(tier)}
                   style={{
@@ -478,22 +552,25 @@ export const AttributeAuditPage = () => {
                     gap: 5,
                     padding: "3px 10px 3px 6px",
                     borderRadius: 999,
-                    border: `1px solid ${active ? meta.color : "var(--border)"}`,
+                    // Inactive state reads through a dashed border + muted fill,
+                    // not a blanket opacity, so the count stays legible (a11y).
+                    border: active
+                      ? `1px solid ${meta.color}`
+                      : "1px dashed var(--text-4)",
                     background: active
                       ? `color-mix(in oklab, ${meta.color} 10%, var(--surface))`
-                      : "var(--surface)",
-                    color: active ? meta.color : "var(--text-4)",
+                      : "var(--surface-2)",
+                    color: active ? meta.color : "var(--text-3)",
                     cursor: "pointer",
                     font: "inherit",
-                    opacity: active ? 1 : 0.5,
-                    transition: "opacity 0.12s, border-color 0.12s, background 0.12s",
+                    transition: "border-color 0.12s, background 0.12s",
                   }}
                 >
                   <TierBadge tier={tier} compact />
                   <Text style={{ fontSize: 11, fontWeight: 600, color: "inherit" }}>
                     {meta.longLabel}
                   </Text>
-                  <Text style={{ fontSize: 9.5, color: "var(--text-3)", marginLeft: 1, fontVariantNumeric: "tabular-nums" }}>
+                  <Text style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 1, fontVariantNumeric: "tabular-nums" }}>
                     {`${ts.present}/${ts.total}`}
                   </Text>
                 </button>
@@ -519,10 +596,40 @@ export const AttributeAuditPage = () => {
               </button>
             )}
 
-            {/* Expand / collapse every section. Disabled while a search or tier
-                filter is active, since those force matching sections open. */}
+            {/* Gaps-first: show only the missing attributes. */}
+            <button
+              type="button"
+              aria-pressed={gapsOnly}
+              onClick={() => setGapsOnly((v) => !v)}
+              title="Show only attributes that are missing"
+              style={{
+                appearance: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "3px 10px",
+                borderRadius: 999,
+                border: gapsOnly
+                  ? "1px solid var(--red)"
+                  : "1px dashed var(--text-4)",
+                background: gapsOnly
+                  ? "color-mix(in oklab, var(--red) 10%, var(--surface))"
+                  : "var(--surface-2)",
+                color: gapsOnly ? "var(--red)" : "var(--text-3)",
+                cursor: "pointer",
+                font: "inherit",
+                fontSize: 11,
+                fontWeight: 600,
+                transition: "border-color 0.12s, background 0.12s",
+              }}
+            >
+              Show gaps only
+            </button>
+
+            {/* Expand / collapse every section. Disabled while a search or
+                gaps-only view is active, since those force matching sections open. */}
             {(() => {
-              const isFiltering = !!searchQuery.trim() || activeTiers.size < 4;
+              const isFiltering = forceOpen;
               const linkStyle = (disabled: boolean) => ({
                 appearance: "none" as const,
                 background: "transparent",
@@ -575,6 +682,25 @@ export const AttributeAuditPage = () => {
 
         {audit.error && <ErrorBanner error={audit.error} />}
 
+        {/* Screen-reader announcement of how many attributes match the active
+            search / tier / gaps filter (silent otherwise). */}
+        <span
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: "hidden",
+            clip: "rect(0 0 0 0)",
+            whiteSpace: "nowrap",
+            border: 0,
+          }}
+        >
+          {`${visibleAttrCount} attribute${visibleAttrCount === 1 ? "" : "s"} shown`}
+        </span>
+
         {audit.isEmpty && !audit.error ? (
           <EmptyState
             title="No AI spans found in this window"
@@ -586,17 +712,32 @@ export const AttributeAuditPage = () => {
             {/* Hero */}
             <Surface elevation="raised" padding={16}>
               <Flex gap={24} alignItems="center" style={{ flexWrap: "wrap" }}>
-                {audit.isLoading && overview.presentTotal === 0 ? (
-                  <Skeleton style={{ height: 116, width: 116, borderRadius: "50%" }} />
-                ) : (
-                  <CoverageRing pct={overview.coveragePct} />
-                )}
+                {/* Ring + progress + secondary all-tier caption. The ring is
+                    gated on the full audit finishing (not the first section) so
+                    the number never settles at a misleading partial value. */}
+                <Flex flexDirection="column" alignItems="center" gap={4} style={{ flex: "0 0 auto" }}>
+                  {audit.isLoading ? (
+                    <Skeleton style={{ height: 116, width: 116, borderRadius: "50%" }} />
+                  ) : (
+                    <CoverageRing pct={overview.mandatoryCoveragePct} />
+                  )}
+                  {audit.isLoading ? (
+                    <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                      {`${sectionsLoaded} of ${sectionCount} categories loaded…`}
+                    </Text>
+                  ) : (
+                    <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                      {`${Math.round(overview.coverageExDPct)}% of A–C attributes seen`}
+                    </Text>
+                  )}
+                </Flex>
 
                 {(() => {
-                  // While the first section queries are still loading, the
-                  // coverage counts are all-zero and would misleadingly read
-                  // "0 complete / 10 gaps". Show an em-dash until data lands.
-                  const loadingCounts = audit.isLoading && overview.presentTotal === 0;
+                  // Gate the aggregate ring + tier KPIs on the WHOLE audit
+                  // finishing — otherwise the moment the first of 10 staggered
+                  // queries lands, the numbers flip to a settled-looking but
+                  // still-climbing partial value.
+                  const loadingCounts = audit.isLoading;
                   const { tierStats } = overview;
 
                   return (
@@ -615,7 +756,7 @@ export const AttributeAuditPage = () => {
                               ? undefined
                               : `${overview.mandatoryCoveragePct.toFixed(0)}% covered`
                           }
-                          color="#D97706"
+                          color={TIER_META.A.color}
                           info="Tier A attributes: core AI observability breaks without these — model/provider attribution, token economics, error detection, finish reason."
                         />
                         {/* Tier B — Important */}
@@ -637,35 +778,114 @@ export const AttributeAuditPage = () => {
                               ? "—"
                               : `${tierStats.C.present}/${tierStats.C.total}`
                           }
-                          color="#7C3AED"
+                          color="var(--purple)"
                           info="Tier C attributes: deep debugging or specialized use cases — sampling hyperparameters, evaluation scores, PII/guardrails."
                         />
-                        {/* Tier D — Unnecessary */}
+                        {/* Tier D — Other. Lead with how many are actually
+                            EMITTING (each is concrete migrate/suppress work),
+                            not the constant catalog size. */}
                         <HeroStat
                           label="Other (O)"
                           value={
                             loadingCounts
                               ? "—"
-                              : `${tierStats.D.total} total`
+                              : `${tierStats.D.present} emitting`
                           }
-                          sub="migrate or suppress"
-                          color="var(--text-4)"
-                          info="Tier D attributes: deprecated patterns, content capture anti-patterns (PII risk + storage bloat). These should be migrated to their canonical replacements or suppressed."
+                          sub={
+                            loadingCounts
+                              ? undefined
+                              : `of ${tierStats.D.total} · migrate or suppress`
+                          }
+                          color={tierStats.D.present > 0 ? "var(--amber)" : "var(--text-4)"}
+                          info="Tier D attributes: deprecated patterns, content capture anti-patterns (PII risk + storage bloat). Any that are emitting are concrete work — migrate to the canonical replacement or suppress."
                         />
-                        {/* Span activity */}
+                        {/* AI spans in window — a single defensible population,
+                            not the sum of overlapping category populations. */}
                         <HeroStat
-                          label="Span activity"
-                          value={fmtCount(overview.spansScanned)}
-                          info="Sum of all category span populations (categories overlap, so this is an activity indicator, not a unique span count). Extrapolated for sampling."
+                          label="AI spans in window"
+                          value={loadingCounts ? "—" : fmtCount(overview.aiSpansInWindow)}
+                          info="The largest single category span population — a defensible lower-bound estimate of AI spans in the window. (Summing categories would double-count the spans they share.) Extrapolated for sampling."
                         />
                       </Flex>
+
+                      {!loadingCounts && overview.deprecatedEmitting > 0 && (
+                        <Text style={{ fontSize: 11, color: "var(--amber)", lineHeight: 1.4 }}>
+                          {`${overview.deprecatedEmitting} deprecated attribute${overview.deprecatedEmitting === 1 ? "" : "s"} still emitting across all tiers — migrate to canonical spellings.`}
+                        </Text>
+                      )}
+
+                      {forceOpen && (
+                        <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
+                          Ring and tier counts reflect the full audit — the list below is filtered.
+                        </Text>
+                      )}
                     </Flex>
                   );
                 })()}
 
-                <SectionOverview sections={audit.sections} onJump={jumpToSection} />
+                <SectionOverview
+                  sections={audit.sections}
+                  filteredById={filteredById}
+                  mirrorFilter={!!searchQuery.trim()}
+                  onJump={jumpToSection}
+                />
               </Flex>
             </Surface>
+
+            {/* Gaps-first callout: which Mandatory (Tier A) attributes are
+                missing, and where — the single most actionable answer to
+                "what am I missing?". Each chip jumps to its section. */}
+            {!audit.isLoading && missingMandatory.length > 0 && (
+              <Surface elevation="flat" padding={12}>
+                <Flex flexDirection="column" gap={8}>
+                  <Flex alignItems="center" gap={8} style={{ flexWrap: "wrap" }}>
+                    <Text style={{ fontSize: 12.5, fontWeight: 700, color: TIER_META.A.color }}>
+                      {`${missingMandatory.length} Mandatory attribute${missingMandatory.length === 1 ? "" : "s"} missing`}
+                    </Text>
+                    <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                      core observability is degraded until these emit — jump to fix:
+                    </Text>
+                  </Flex>
+                  <Flex gap={6} style={{ flexWrap: "wrap" }}>
+                    {missingMandatory.map((m) => (
+                      <button
+                        key={`${m.sectionId}-${m.name}`}
+                        type="button"
+                        onClick={() => jumpToSection(m.sectionId)}
+                        title={`Missing in ${m.short} — jump to section`}
+                        style={{
+                          appearance: "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          border: `1px solid color-mix(in oklab, ${TIER_META.A.color} 40%, transparent)`,
+                          background: `color-mix(in oklab, ${TIER_META.A.color} 8%, var(--surface))`,
+                          cursor: "pointer",
+                          font: "inherit",
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red)", flex: "0 0 auto" }}
+                        />
+                        <Text
+                          style={{
+                            fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                            fontSize: 11,
+                            color: "var(--text-2)",
+                          }}
+                        >
+                          {m.name}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: "var(--text-4)" }}>{m.short}</Text>
+                      </button>
+                    ))}
+                  </Flex>
+                </Flex>
+              </Surface>
+            )}
 
             {/* Grouped sections */}
             {filteredSections.length === 0 ? (
@@ -677,6 +897,29 @@ export const AttributeAuditPage = () => {
                       ? ` ${communityMatches.length} community / emerging attribute${communityMatches.length === 1 ? "" : "s"} match below.`
                       : " Try a shorter or different term."}
                   </Text>
+                ) : gapsOnly ? (
+                  <Flex alignItems="center" gap={8} style={{ flexWrap: "wrap" }}>
+                    <Text style={{ fontSize: 13, color: "var(--green-2)", fontWeight: 600 }}>
+                      No gaps — every attribute in the selected tiers is present.
+                    </Text>
+                    <button
+                      type="button"
+                      onClick={() => setGapsOnly(false)}
+                      style={{
+                        appearance: "none",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        font: "inherit",
+                        fontSize: 13,
+                        color: "var(--blue)",
+                        textDecoration: "underline",
+                        padding: 0,
+                      }}
+                    >
+                      Show all attributes
+                    </button>
+                  </Flex>
                 ) : (
                   <Flex alignItems="center" gap={8} style={{ flexWrap: "wrap" }}>
                     <Text style={{ fontSize: 13, color: "var(--text-3)" }}>

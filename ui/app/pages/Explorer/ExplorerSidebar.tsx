@@ -43,12 +43,17 @@ export const ExplorerSidebar = ({
 
       <FacetGroup
         label="Provider"
-        options={facets.providers.map((p) => ({
-          value: p.id,
-          label: p.label,
-          count: p.count,
-          color: p.color,
-        }))}
+        // All providers are listed (per the Session-6 handoff), but the ones
+        // with no services in scope are pushed to the bottom so the useful,
+        // non-empty facets lead (Explorer-12). Stable within each group.
+        options={[...facets.providers]
+          .sort((a, b) => (a.count > 0 ? 0 : 1) - (b.count > 0 ? 0 : 1))
+          .map((p) => ({
+            value: p.id,
+            label: p.label,
+            count: p.count,
+            color: p.color,
+          }))}
         selected={filter.providers ?? []}
         onChange={(next) =>
           onFilterChange({

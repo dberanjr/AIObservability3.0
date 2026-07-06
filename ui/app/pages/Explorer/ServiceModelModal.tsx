@@ -11,6 +11,7 @@ import {
 } from "../../data/format";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useSampling } from "../../scope/SamplingContext";
+import { ErrorState } from "../../components/ErrorState";
 import { useServiceModelDetail } from "./useServiceModelDetail";
 import { costTrioStats, isEstimatedCost } from "./serviceModelCost";
 
@@ -144,14 +145,57 @@ export const ServiceModelModal = ({
   modelLabel,
   onClose,
 }: ServiceModelModalProps) => {
-  const { metrics, cost, isLoading } = useServiceModelDetail(service, rawModels);
+  const { metrics, cost, isLoading, error } = useServiceModelDetail(
+    service,
+    rawModels,
+  );
   const { upsertCondition } = useGlobalFilters();
   const { samplingRatio } = useSampling();
 
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const closeBtnRef = React.useRef<HTMLButtonElement>(null);
+  const [closeFocused, setCloseFocused] = React.useState(false);
+
+  // Focus management (a11y), mount-only so the restore target stays the
+  // ORIGINAL triggering cell (onClose is recreated each render): move focus
+  // into the dialog on open and return it to the trigger on close.
+  React.useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
+
+  // Esc to dismiss + Tab trapped within the dialog. Kept separate so it can
+  // depend on onClose without re-running the focus capture above.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !root.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -174,8 +218,9 @@ export const ServiceModelModal = ({
   const serviceLabel = service.replace(/(?:\s*[-–—]\s*)+$/, "").replace(/^(?:\s*[-–—]\s*)+/, "").trim() || service;
   const title = `${serviceLabel} × ${modelLabel}`;
   const estimated = cost ? isEstimatedCost(cost.pricing) : false;
-  // "No data" only after loading settles; while loading we show a skeleton.
-  const empty = !isLoading && !metrics;
+  // "No data" only after loading settles and no error; while loading we show a
+  // skeleton, and a query failure gets its own error branch.
+  const empty = !isLoading && !error && !metrics;
 
   return (
     <div
@@ -195,6 +240,7 @@ export const ServiceModelModal = ({
       }}
     >
       <div
+        ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -228,17 +274,27 @@ export const ServiceModelModal = ({
             </Text>
           </Flex>
           <button
+            ref={closeBtnRef}
             type="button"
             aria-label="Close"
             onClick={onClose}
+            onFocus={() => setCloseFocused(true)}
+            onBlur={() => setCloseFocused(false)}
             style={{
               all: "unset",
               cursor: "pointer",
-              padding: "2px 8px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 28,
+              height: 28,
               borderRadius: 6,
               fontSize: 18,
               lineHeight: 1,
               color: "var(--text-3)",
+              boxShadow: closeFocused
+                ? "0 0 0 2px var(--blue)"
+                : "none",
             }}
           >
             ×
@@ -247,6 +303,12 @@ export const ServiceModelModal = ({
 
         {isLoading ? (
           <Skeleton style={{ height: 320 }} />
+        ) : error ? (
+          <ErrorState
+            title="Couldn't load this service / model pair"
+            error={error}
+            bare
+          />
         ) : empty ? (
           <Text style={{ fontSize: 13, color: "var(--text-3)" }}>
             No data for this service / model pair in the current scope.
@@ -330,7 +392,7 @@ export const ServiceModelModal = ({
                   <Stat label="Latency p95" value={fmtMs(metrics.p95Ms)} />
                   <Stat
                     label="Tokens / req"
-                    value={fmtCount(metrics.tokensPerReq)}
+                    value={fmtTokens(metrics.tokensPerReq)}
                   />
                   <Stat label="Total tokens in" value={fmtTokens(metrics.inTok)} />
                   <Stat

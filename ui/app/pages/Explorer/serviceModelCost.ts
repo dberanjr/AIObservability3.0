@@ -7,7 +7,12 @@
  *   - monthlyRunRate: the extrapolated spend projected to a 30-day month, so a
  *                    short window reads as a comparable run-rate.
  */
-import { costOf, getPricing, type ModelPricing } from "../../data/pricing";
+import {
+  costOf,
+  getPricing,
+  resolveModelPricing,
+  type ModelPricing,
+} from "../../data/pricing";
 
 /** 30 days in milliseconds — the run-rate projection window. */
 export const THIRTY_DAYS_MS = 30 * 24 * 3600 * 1000;
@@ -75,6 +80,46 @@ export const computeServiceModelCost = (args: {
  */
 export const isEstimatedCost = (pricing: ModelPricing): boolean =>
   pricing.blended === true || pricing.provider === "Unknown";
+
+/** Estimated USD for one AI-services table row. */
+export interface ServiceRowCost {
+  usd: number;
+  /**
+   * True when the figure is an approximation rather than an exact billed sum:
+   * the service spans more than one model (so the aggregate in/out token split
+   * is priced at the mean of the models' rates) OR any model priced via the
+   * blended fallback. A single known model prices exactly → false.
+   */
+  estimated: boolean;
+}
+
+/**
+ * Estimate a service's spend from its aggregate input/output tokens and the set
+ * of models it used. The AI-services query only carries per-service token sums
+ * (not a per-model split), so with multiple models we price the aggregate at
+ * the MEAN of the models' input/output rates — a deliberate estimate flagged via
+ * `estimated`. A single known model prices exactly. Pure — unit-tested.
+ */
+export const estimateServiceRowCost = (row: {
+  inTok: number;
+  outTok: number;
+  models: string[];
+}): ServiceRowCost => {
+  const inTok = finiteOrZero(row.inTok);
+  const outTok = finiteOrZero(row.outTok);
+  const models = (row.models ?? []).filter(
+    (m): m is string => typeof m === "string" && m.length > 0,
+  );
+  if (models.length === 0) return { usd: 0, estimated: true };
+
+  const priced = models.map((m) => resolveModelPricing(m));
+  const anyBlended = priced.some((p) => p.blended === true);
+  const avgIn = priced.reduce((s, p) => s + p.inputPerMTok, 0) / priced.length;
+  const avgOut = priced.reduce((s, p) => s + p.outputPerMTok, 0) / priced.length;
+  const usd = finiteOrZero((inTok * avgIn + outTok * avgOut) / 1_000_000);
+
+  return { usd, estimated: anyBlended || models.length > 1 };
+};
 
 /** A single labelled cost figure rendered as a stat in the modal. */
 export interface CostStat {

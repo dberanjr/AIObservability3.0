@@ -18,8 +18,10 @@ import {
   ChevronRightIcon,
 } from "@dynatrace/strato-icons";
 import { fmtCount } from "../../data/format";
+import { ErrorBanner } from "../../components/ErrorState";
 import type { SectionIconKey } from "./catalog";
 import type { AttrResult, SectionResult, TierStats } from "./useAttributeAudit";
+import { coverageRampColor, VERDICT_COLOR, type Verdict } from "./coverage";
 
 const ICONS: Record<SectionIconKey, typeof AIModelIcon> = {
   llm: AIModelIcon,
@@ -34,23 +36,16 @@ const ICONS: Record<SectionIconKey, typeof AIModelIcon> = {
   infra: ContainerIcon,
 };
 
-const PRESENT = "var(--green-2)";
-const MISSING = "var(--red)";
-
-/** Coverage → accent color. Full green, partial amber, none red. */
-const coverageColor = (present: number, total: number): string => {
-  if (total === 0) return "var(--text-3)";
-  if (present === total) return PRESENT;
-  if (present === 0) return MISSING;
-  return "var(--amber)";
-};
-
 // ─── Tier badge ───────────────────────────────────────────────────────────────
 
+// Tier colors are theme-safe tokens (not raw hex) so they survive the light/dark
+// switch. Tier A is a burnt-orange (amber pushed toward red) so it reads as the
+// "hottest / mandatory" tier while staying visually distinct from the partial-
+// coverage amber used by the coverage ramp.
 export const TIER_META: Record<string, { label: string; color: string; title: string; longLabel: string }> = {
-  A: { label: "M", longLabel: "Mandatory",    color: "#D97706",        title: "Mandatory — core observability breaks without this" },
+  A: { label: "M", longLabel: "Mandatory",    color: "color-mix(in oklab, var(--amber) 85%, var(--red))", title: "Mandatory — core observability breaks without this" },
   B: { label: "I", longLabel: "Important",    color: "var(--blue)",    title: "Important — enables key dashboards and analytics" },
-  C: { label: "N", longLabel: "Nice to Have", color: "#7C3AED",        title: "Nice to Have — useful for deep debugging or specialized use cases" },
+  C: { label: "N", longLabel: "Nice to Have", color: "var(--purple)",  title: "Nice to Have — useful for deep debugging or specialized use cases" },
   D: { label: "O", longLabel: "Other",        color: "var(--text-4)",  title: "Other — deprecated, anti-pattern, or low practical value" },
 };
 
@@ -111,20 +106,25 @@ const TierStatsRow = ({
             gap: 4,
             padding: "1px 6px 1px 3px",
             borderRadius: 999,
-            border: `1px solid ${active ? meta.color : "var(--border)"}`,
-            background: active ? `color-mix(in oklab, ${meta.color} 10%, transparent)` : "transparent",
+            // Inactive state reads through border + fill, not a blanket opacity,
+            // so the count stays legible (a11y).
+            border: active
+              ? `1px solid ${meta.color}`
+              : "1px dashed var(--text-4)",
+            background: active
+              ? `color-mix(in oklab, ${meta.color} 10%, transparent)`
+              : "var(--surface-2)",
             cursor: "pointer",
             font: "inherit",
-            opacity: active ? 1 : 0.45,
-            transition: "opacity 0.1s, border-color 0.1s",
+            transition: "border-color 0.1s, background 0.1s",
           }}
         >
           <TierBadge tier={t} compact />
           <Text
             style={{
-              fontSize: 10,
+              fontSize: 10.5,
               fontVariantNumeric: "tabular-nums",
-              color: active ? meta.color : "var(--text-4)",
+              color: active ? meta.color : "var(--text-3)",
             }}
           >
             {`${s.present}/${s.total}`}
@@ -137,10 +137,21 @@ const TierStatsRow = ({
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-const VerdictPill = ({ present }: { present: boolean }) => {
-  const color = present ? PRESENT : MISSING;
+const VERDICT_LABEL: Record<Verdict, string> = {
+  present: "PRESENT",
+  sparse: "SPARSE",
+  missing: "MISSING",
+};
+
+const VerdictPill = ({ verdict }: { verdict: Verdict }) => {
+  const color = VERDICT_COLOR[verdict];
   return (
     <span
+      title={
+        verdict === "sparse"
+          ? "Present, but on under 1% of the section population — likely under-sampled or edge-case"
+          : undefined
+      }
       style={{
         display: "inline-block",
         padding: "1px 7px",
@@ -154,15 +165,15 @@ const VerdictPill = ({ present }: { present: boolean }) => {
         border: `1px solid color-mix(in oklab, ${color} 40%, transparent)`,
       }}
     >
-      {present ? "PRESENT" : "MISSING"}
+      {VERDICT_LABEL[verdict]}
     </span>
   );
 };
 
 /** A single attribute cell: status dot, name, what-it-is, span count + share
- *  bar, and a present/missing pill. Clicking opens the attribute detail modal. */
+ *  bar, and a present/sparse/missing pill. Clicking opens the detail modal. */
 const AttrCell = ({ a, onClick }: { a: AttrResult; onClick: () => void }) => {
-  const color = a.present ? PRESENT : MISSING;
+  const color = VERDICT_COLOR[a.verdict];
   const isDeprecated = !!a.spec.deprecated;
   const isNew = !!a.spec.specNew;
 
@@ -183,9 +194,7 @@ const AttrCell = ({ a, onClick }: { a: AttrResult; onClick: () => void }) => {
         padding: "8px 10px",
         borderRadius: 8,
         border: "1px solid var(--border)",
-        background: a.present
-          ? "color-mix(in oklab, var(--green-2) 5%, var(--surface))"
-          : "color-mix(in oklab, var(--red) 5%, var(--surface))",
+        background: `color-mix(in oklab, ${color} 5%, var(--surface))`,
         borderLeft: `3px solid ${color}`,
         minWidth: 0,
         transition: "box-shadow 0.12s, transform 0.12s",
@@ -223,14 +232,17 @@ const AttrCell = ({ a, onClick }: { a: AttrResult; onClick: () => void }) => {
           </Text>
           {isNew && (
             <span
+              title="Added in the recent OpenTelemetry GenAI spec wave"
               style={{
                 flexShrink: 0,
-                fontSize: 8,
+                fontSize: 9.5,
                 fontWeight: 700,
                 letterSpacing: "0.05em",
-                color: "#059669",
-                background: "color-mix(in oklab, #059669 12%, transparent)",
-                border: "1px solid color-mix(in oklab, #059669 35%, transparent)",
+                // Neutral outline chip so it doesn't compete with the green
+                // PRESENT verdict sitting alongside it.
+                color: "var(--text-3)",
+                background: "transparent",
+                border: "1px solid var(--border)",
                 borderRadius: 3,
                 padding: "0px 4px",
               }}
@@ -239,7 +251,7 @@ const AttrCell = ({ a, onClick }: { a: AttrResult; onClick: () => void }) => {
             </span>
           )}
         </Flex>
-        <VerdictPill present={a.present} />
+        <VerdictPill verdict={a.verdict} />
       </Flex>
 
       <Text style={{ fontSize: 10.5, color: "var(--text-3)", lineHeight: 1.35 }}>
@@ -337,10 +349,11 @@ export interface SectionCardProps {
 }
 
 export const SectionCard = ({ result, collapsed, onToggle, onAttrClick, activeTiers, onTierToggle }: SectionCardProps) => {
-  const { section, attributes, presentCount, totalCount, sectionSpans, noData, isLoading, tierStats } =
+  const { section, attributes, presentCount, sparseCount, totalCount, sectionSpans, noData, isLoading, error, refetch, tierStats } =
     result;
   const Icon = ICONS[section.iconKey];
-  const accent = coverageColor(presentCount, totalCount);
+  const hasError = !!error;
+  const accent = hasError ? "var(--red)" : coverageRampColor(presentCount, totalCount);
   const Chevron = collapsed ? ChevronRightIcon : ChevronDownIcon;
 
   return (
@@ -430,18 +443,33 @@ export const SectionCard = ({ result, collapsed, onToggle, onAttrClick, activeTi
                     color: accent,
                   }}
                 >
-                  {`${presentCount}/${totalCount} present`}
+                  {hasError ? "—" : `${presentCount}/${totalCount} present`}
                 </Text>
                 <span
                   style={{
                     fontSize: 10.5,
-                    color: "var(--text-3)",
+                    color: hasError ? "var(--red)" : "var(--text-3)",
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {noData ? "no spans" : `${fmtCount(sectionSpans)} spans scanned`}
+                  {hasError
+                    ? "couldn't evaluate"
+                    : noData
+                      ? "no spans"
+                      : `${fmtCount(sectionSpans)} spans scanned`}
                 </span>
               </Flex>
+              {!hasError && sparseCount > 0 && (
+                <Text
+                  style={{
+                    fontSize: 10.5,
+                    color: "var(--amber)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {`${sparseCount} sparse (<1% of spans)`}
+                </Text>
+              )}
               <div
                 style={{
                   width: 160,
@@ -454,7 +482,7 @@ export const SectionCard = ({ result, collapsed, onToggle, onAttrClick, activeTi
               >
                 <div
                   style={{
-                    width: `${totalCount > 0 ? (presentCount / totalCount) * 100 : 0}%`,
+                    width: `${hasError || totalCount === 0 ? 0 : (presentCount / totalCount) * 100}%`,
                     height: "100%",
                     background: accent,
                   }}
@@ -492,6 +520,10 @@ export const SectionCard = ({ result, collapsed, onToggle, onAttrClick, activeTi
                 <Skeleton key={i} style={{ height: 58 }} />
               ))}
             </div>
+          ) : error ? (
+            // A failed section query must NOT masquerade as a clean "no spans"
+            // empty state — surface it distinctly with a retry.
+            <ErrorBanner error={error} onRetry={refetch} />
           ) : noData ? (
             <Text
               style={{

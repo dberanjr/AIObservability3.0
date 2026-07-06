@@ -5,6 +5,7 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtTokens } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { ErrorState } from "../../components/ErrorState";
 import { useExplorerHeatmap } from "./useExplorerHeatmap";
 import { ServiceModelModal } from "./ServiceModelModal";
 
@@ -21,13 +22,69 @@ interface SelectedCell {
 const CELL_W = 64;
 const CELL_H = 28;
 const SVC_COL_W = 220;
+const ROW_CAP = 30;
 
-const cellColor = (tokens: number, max: number, color: string): string => {
+/** Single sequential magnitude hue for every cell, so intensity is comparable
+ *  across the whole grid (provider identity stays in the column-header dot).
+ *  Previously each column tinted its provider colour, which made a dark
+ *  Anthropic cell and a dark OpenAI cell incomparable. */
+const SEQ_HUE = "var(--blue)";
+const SEQ_MIN_PCT = 5;
+const SEQ_MAX_PCT = 90;
+
+/** Log-scaled intensity (5–90%) of the single sequential hue. `max` is the
+ *  grid-wide busiest cell so every cell is measured against one scale. */
+const cellColor = (tokens: number, max: number): string => {
   if (tokens <= 0 || max <= 0) return "transparent";
-  // log-scaled saturation, per DESIGN_HANDOFF §4.2
   const ratio = Math.log10(tokens + 1) / Math.log10(max + 1);
-  const pct = Math.max(5, Math.min(90, Math.round(ratio * 90)));
-  return `color-mix(in oklab, ${color} ${pct}%, transparent)`;
+  const pct = Math.max(
+    SEQ_MIN_PCT,
+    Math.min(SEQ_MAX_PCT, Math.round(ratio * SEQ_MAX_PCT)),
+  );
+  return `color-mix(in oklab, ${SEQ_HUE} ${pct}%, transparent)`;
+};
+
+/** Compact gradient legend anchoring the sequential scale to real token
+ *  counts (min / median / max nonzero cell), noting the log scaling. */
+const HeatmapLegend = ({ values }: { values: number[] }) => {
+  if (values.length === 0) return null;
+  const min = values[0];
+  const max = values[values.length - 1];
+  const median = values[Math.floor(values.length / 2)];
+  return (
+    <Flex alignItems="center" gap={8} style={{ flexWrap: "wrap" }}>
+      <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>Tokens</Text>
+      <div style={{ minWidth: 120, flex: "0 1 180px" }}>
+        <div
+          aria-hidden
+          style={{
+            height: 8,
+            borderRadius: 999,
+            background: `linear-gradient(to right, color-mix(in oklab, ${SEQ_HUE} ${SEQ_MIN_PCT}%, transparent), color-mix(in oklab, ${SEQ_HUE} ${SEQ_MAX_PCT}%, transparent))`,
+            border: "1px solid var(--border)",
+          }}
+        />
+        <Flex
+          justifyContent="space-between"
+          style={{ marginTop: 2 }}
+        >
+          {[min, median, max].map((v, i) => (
+            <Text
+              key={i}
+              style={{
+                fontSize: 9.5,
+                color: "var(--text-3)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {fmtTokens(v)}
+            </Text>
+          ))}
+        </Flex>
+      </div>
+      <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>log-scaled</Text>
+    </Flex>
+  );
 };
 
 // Body is a separate component so useExplorerHeatmap (an independent DQL query)
@@ -36,17 +93,41 @@ const cellColor = (tokens: number, max: number, color: string): string => {
 const ServiceModelHeatmapBody = () => {
   const result = useExplorerHeatmap();
   const [selected, setSelected] = React.useState<SelectedCell | null>(null);
+
+  const total = result.rows.length;
+  const visibleRows = result.rows.slice(0, ROW_CAP);
+  const hiddenRows = total - visibleRows.length;
+
+  // Nonzero cell token values (whole grid) → the legend's min/median/max anchors.
+  const cellValues = React.useMemo(() => {
+    const vals: number[] = [];
+    for (const row of result.rows) {
+      for (const c of row.cells.values()) if (c.tokens > 0) vals.push(c.tokens);
+    }
+    return vals.sort((a, b) => a - b);
+  }, [result.rows]);
+
   return (
     <>
     <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
-      <Flex alignItems="baseline" justifyContent="flex-end">
+      <Flex alignItems="center" justifyContent="space-between" gap={12} style={{ flexWrap: "wrap" }}>
+        <HeatmapLegend values={cellValues} />
         <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-          {result.rows.length} services · {result.columns.length} models
+          {total > ROW_CAP
+            ? `Top ${ROW_CAP} of ${total} services`
+            : `${total} ${total === 1 ? "service" : "services"}`}{" "}
+          · {result.columns.length} models
         </Text>
       </Flex>
 
       {result.isLoading ? (
         <Skeleton style={{ height: 240 }} />
+      ) : result.error ? (
+        <ErrorState
+          title="Couldn't load the service × model usage"
+          error={result.error}
+          bare
+        />
       ) : result.rows.length === 0 ? (
         <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
           No usage data in the current scope.
@@ -129,7 +210,7 @@ const ServiceModelHeatmapBody = () => {
               </div>
             ))}
 
-            {result.rows.slice(0, 30).map((row) => (
+            {visibleRows.map((row) => (
               <React.Fragment key={row.serviceId}>
                 <div
                   style={{
@@ -203,11 +284,7 @@ const ServiceModelHeatmapBody = () => {
                       style={{
                         height: CELL_H,
                         borderTop: "1px solid var(--border)",
-                        background: cellColor(
-                          tokens,
-                          result.maxCellTokens,
-                          col.color,
-                        ),
+                        background: cellColor(tokens, result.maxCellTokens),
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -223,6 +300,23 @@ const ServiceModelHeatmapBody = () => {
                 })}
               </React.Fragment>
             ))}
+            {hiddenRows > 0 && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  position: "sticky",
+                  left: 0,
+                  padding: "6px 8px",
+                  borderTop: "1px solid var(--border)",
+                  fontSize: 11,
+                  color: "var(--text-3)",
+                }}
+              >
+                {hiddenRows} more{" "}
+                {hiddenRows === 1 ? "service" : "services"} not shown (ranked by
+                tokens) — narrow the scope to see them.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -239,10 +333,21 @@ const ServiceModelHeatmapBody = () => {
   );
 };
 
-export const ServiceModelHeatmap = () => (
+export interface ServiceModelHeatmapProps {
+  /** Controlled collapse state, so a KPI tile can force this card open. */
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
+}
+
+export const ServiceModelHeatmap = ({
+  open,
+  onOpenChange,
+}: ServiceModelHeatmapProps = {}) => (
   <CollapsibleCard
     title="Service × model usage"
-    subtitle="Tokens per service / model — log-scaled cell color"
+    subtitle="Tokens per service / model — single log-scaled magnitude scale (see legend)"
+    open={open}
+    onOpenChange={onOpenChange}
     defaultOpen
   >
     <ServiceModelHeatmapBody />

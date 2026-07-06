@@ -3,7 +3,9 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtUSDCompact } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
 import type { DailyCostSummary } from "./useFinOps";
+import { assignSeriesColors } from "./finopsLogic";
 
 const VIEW_W = 720;
 const HEIGHT = 240;
@@ -11,16 +13,6 @@ const PAD_L = 48;
 const PAD_R = 16;
 const PAD_T = 12;
 const PAD_B = 28;
-
-const SERIES_COLORS = [
-  "var(--blue)",
-  "var(--purple)",
-  "var(--cyan)",
-  "var(--purple-2)",
-  "var(--green-2)",
-  "var(--amber)",
-  "var(--text-3)",
-];
 
 const niceMax = (max: number): number => {
   if (max <= 0) return 1;
@@ -42,10 +34,9 @@ export const DailyCostStackedBar = ({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const { stacks, max, colorFor } = useMemo(() => {
-    const colorMap = new Map<string, string>();
-    daily.series.forEach((s, i) => {
-      colorMap.set(s.model, SERIES_COLORS[i % SERIES_COLORS.length]);
-    });
+    // Colour each model series by its provider so a model reads the same hue
+    // here as in the bubble chart, table chips and provider-mix donut.
+    const colorMap = assignSeriesColors(daily.series.map((s) => s.model));
     const max = niceMax(Math.max(...daily.totals, 0));
     const stacks = daily.totals.map((_, dayIdx) => {
       let running = 0;
@@ -113,9 +104,12 @@ export const DailyCostStackedBar = ({
         {isLoading && stacks.length === 0 ? (
           <Skeleton style={{ height: HEIGHT, borderRadius: 8 }} />
         ) : stacks.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No spend data over the last 7 days.
-          </Text>
+          <EmptyState
+            bare
+            title="No spend over the last 7 days"
+            description="No costable token usage was found in scope across the last 7 daily scans."
+            hint="Each day is scanned at a 1:100 sampling floor; widen the scope or check that priced models are in use."
+          />
         ) : (
           <div style={{ position: "relative" }}>
             <svg

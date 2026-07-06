@@ -17,12 +17,18 @@ const ExplorerFindingsBody = ({
   isLoading,
   onSelect,
 }: ExplorerFindingsProps) => {
+  // A fixed responsive track keeps cards a stable width regardless of how many
+  // heuristics fired (2 findings no longer stretch to full width), left-aligned
+  // and wrapping instead of restretching (Explorer-11). auto-fill (not auto-fit)
+  // leaves empty tracks so a couple of cards don't balloon.
+  const GRID_COLUMNS = "repeat(auto-fill, minmax(220px, 1fr))";
+
   if (isLoading && findings.length === 0) {
     return (
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: `repeat(5, minmax(0, 1fr))`,
+          gridTemplateColumns: GRID_COLUMNS,
           gap: 12,
           padding: 12,
         }}
@@ -48,7 +54,7 @@ const ExplorerFindingsBody = ({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: `repeat(${Math.min(findings.length, 5)}, minmax(0, 1fr))`,
+        gridTemplateColumns: GRID_COLUMNS,
         gap: 12,
         padding: 12,
       }}

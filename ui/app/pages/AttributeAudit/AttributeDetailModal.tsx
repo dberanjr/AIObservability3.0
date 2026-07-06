@@ -7,13 +7,19 @@ import { CheckmarkIcon, ExternalLinkIcon, ArrowRightIcon } from "@dynatrace/stra
 import { fmtCount, fmtPercent } from "../../data/format";
 import type { AuditSection } from "./catalog";
 import type { AttrResult } from "./useAttributeAudit";
+import { VERDICT_COLOR, type Verdict } from "./coverage";
 import { buildDetail, type DetailLink } from "./details";
 
 const PRESENT = "var(--green-2)";
-const MISSING = "var(--red)";
 
-const VerdictPill = ({ present }: { present: boolean }) => {
-  const color = present ? PRESENT : MISSING;
+const VERDICT_TEXT: Record<Verdict, string> = {
+  present: "PRESENT — emitting",
+  sparse: "SPARSE — rarely emitting",
+  missing: "MISSING — not emitting",
+};
+
+const VerdictPill = ({ verdict }: { verdict: Verdict }) => {
+  const color = VERDICT_COLOR[verdict];
   return (
     <span
       style={{
@@ -28,7 +34,7 @@ const VerdictPill = ({ present }: { present: boolean }) => {
         border: `1px solid color-mix(in oklab, ${color} 40%, transparent)`,
       }}
     >
-      {present ? "PRESENT — emitting" : "MISSING — not emitting"}
+      {VERDICT_TEXT[verdict]}
     </span>
   );
 };
@@ -104,10 +110,10 @@ export const AttributeDetailModal = ({
         <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
           {/* Status strip */}
           <Flex alignItems="center" gap={12} style={{ flexWrap: "wrap" }}>
-            <VerdictPill present={attr.present} />
+            <VerdictPill verdict={attr.verdict} />
             <Text style={{ fontSize: 12, color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>
               {attr.present
-                ? `${fmtCount(attr.spans)} spans · ${fmtPercent(attr.share * 100, 1)} of the ${section.short} population`
+                ? `${fmtCount(attr.spans)} spans · ${fmtPercent(attr.share * 100, 1)} of the ${section.short} population${attr.verdict === "sparse" ? " — under-sampled, treat with caution" : ""}`
                 : `Not seen on any ${section.short} span in the selected window`}
             </Text>
           </Flex>

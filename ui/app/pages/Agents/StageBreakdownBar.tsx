@@ -1,14 +1,8 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { STAGE_META, stageMixLabel } from "./stageMix";
 import type { StageBreakdown } from "./useAgents";
-
-const STAGES: Array<{ key: keyof StageBreakdown; label: string; color: string }> = [
-  { key: "llm", label: "LLM", color: "var(--blue)" },
-  { key: "tool", label: "Tool", color: "var(--cyan)" },
-  { key: "retrieval", label: "Retrieval", color: "var(--amber)" },
-  { key: "orch", label: "Orch", color: "var(--purple)" },
-];
 
 export interface StageBreakdownBarProps {
   stage: StageBreakdown;
@@ -31,9 +25,10 @@ export const StageBreakdownBar = ({
         overflow: "hidden",
         width: "100%",
       }}
-      aria-label="Stage breakdown"
+      role="img"
+      aria-label={stageMixLabel(stage)}
     >
-      {STAGES.map((s) => {
+      {STAGE_META.map((s) => {
         const frac = stage[s.key];
         if (frac <= 0) return null;
         return (
@@ -50,7 +45,7 @@ export const StageBreakdownBar = ({
     </div>
     {showLegend && (
       <Flex gap={8} style={{ flexWrap: "wrap" }}>
-        {STAGES.map((s) => (
+        {STAGE_META.map((s) => (
           <Flex key={s.key} alignItems="center" gap={4}>
             <span
               aria-hidden

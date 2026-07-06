@@ -4,6 +4,13 @@ import type { Timeframe } from "../../scope/types";
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
 /**
+ * Row cap on the AI-services catalog query. Exported so the table can tell when
+ * the result was truncated (services.length >= this) and show a "top N — narrow
+ * the scope" footer rather than implying the fleet is exactly this size.
+ */
+export const AI_SERVICES_LIMIT = 200;
+
+/**
  * AI services catalog: per-service aggregates used by the AIServicesTable and
  * the summary tiles.
  *
@@ -36,6 +43,8 @@ ${globalFilterClauses(filters)}
 | summarize
     requests = count(),
     tokens = sum(in_tok + out_tok),
+    in_tokens = sum(in_tok),
+    out_tokens = sum(out_tok),
     errors = sum(is_error),
     logical_errors = sum(has_gen_ai_error + has_guardrail + has_refusal + has_truncation + has_content_filter),
     agents = countDistinct(gen_ai.agent.name),
@@ -47,7 +56,7 @@ ${globalFilterClauses(filters)}
     tok_per_req = if(requests > 0, toDouble(tokens) / toDouble(requests), else: 0),
     error_rate_pct = if(requests > 0, toDouble(errors) / toDouble(requests) * 100, else: 0)
 | sort tokens desc
-| limit 200
+| limit ${AI_SERVICES_LIMIT}
 `.trim();
 
 /**

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -7,54 +7,156 @@ import {
   ChevronRightIcon,
   WarningIcon,
 } from "@dynatrace/strato-icons";
-import { fmtCount, fmtPercent, fmtTokens } from "../../data/format";
+import { fmtCount, fmtPercent, fmtTokens, fmtUSDCompact } from "../../data/format";
 import {
   PROVIDER_COLOR,
   normalizeProvider,
   canonicalizeModel,
 } from "../../detection/attributes";
 import { FilterTrigger } from "../../components/FilterTrigger";
+import { estimateServiceRowCost, type ServiceRowCost } from "./serviceModelCost";
 import type { AIService } from "./useAIServices";
 
-const COLS = [
+/** Client-side sort keys. `null` (no active sort) preserves the query order
+ *  (tokens desc). String keys sort alphabetically; the rest are numeric. */
+type SortKey =
+  | "service"
+  | "framework"
+  | "req"
+  | "tokens"
+  | "cost"
+  | "tokPerReq"
+  | "agents"
+  | "errors"
+  | "logical";
+
+interface ColDef {
+  id: string;
+  label: string;
+  width?: number;
+  align?: "left" | "right";
+  /** When set, the header is a sort toggle over this key. */
+  sortKey?: SortKey;
+}
+
+const COLS: ColDef[] = [
   { id: "status", label: "", width: 24 },
-  { id: "service", label: "Service" },
-  { id: "framework", label: "Framework", width: 120 },
+  { id: "service", label: "Service", sortKey: "service" },
+  { id: "framework", label: "Framework", width: 120, sortKey: "framework" },
   { id: "models", label: "Models", width: 220 },
-  { id: "req", label: "LLM req", width: 80, align: "right" as const },
-  { id: "tokens", label: "Tokens", width: 90, align: "right" as const },
-  { id: "tokPerReq", label: "Tok/req", width: 90, align: "right" as const },
-  { id: "agents", label: "Agents", width: 70, align: "right" as const },
-  { id: "errors", label: "Errors", width: 80, align: "right" as const },
-  { id: "logical", label: "Logical err", width: 100, align: "right" as const },
+  { id: "req", label: "LLM req", width: 80, align: "right", sortKey: "req" },
+  { id: "tokens", label: "Tokens", width: 90, align: "right", sortKey: "tokens" },
+  { id: "cost", label: "Est. cost", width: 96, align: "right", sortKey: "cost" },
+  { id: "tokPerReq", label: "Tok/req", width: 90, align: "right", sortKey: "tokPerReq" },
+  { id: "agents", label: "Agents", width: 70, align: "right", sortKey: "agents" },
+  { id: "errors", label: "Errors", width: 90, align: "right", sortKey: "errors" },
+  { id: "logical", label: "Logical err", width: 100, align: "right", sortKey: "logical" },
   { id: "drill", label: "", width: 24 },
 ];
 
+/** String keys default to ascending; numeric keys to descending on first click. */
+const STRING_KEYS: ReadonlySet<SortKey> = new Set(["service", "framework"]);
+
+interface SortState {
+  key: SortKey;
+  dir: "asc" | "desc";
+}
+
+/** A row paired with its estimated cost (memoised once per rows change). */
+interface PricedRow {
+  row: AIService;
+  cost: ServiceRowCost;
+}
+
+const sortValue = (item: PricedRow, key: SortKey): number | string => {
+  switch (key) {
+    case "service":
+      return item.row.service.toLowerCase();
+    case "framework":
+      return (item.row.framework ?? "").toLowerCase();
+    case "req":
+      return item.row.requests;
+    case "tokens":
+      return item.row.tokens;
+    case "cost":
+      return item.cost.usd;
+    case "tokPerReq":
+      return item.row.tokPerReq;
+    case "agents":
+      return item.row.agents;
+    case "errors":
+      return item.row.errorRatePct;
+    case "logical":
+      return item.row.logicalErrors;
+  }
+};
+
 const HeaderCell = ({
-  children,
-  width,
-  align,
+  col,
+  sort,
+  onSort,
 }: {
-  children: React.ReactNode;
-  width?: number;
-  align?: "left" | "right";
-}) => (
-  <div
-    style={{
-      flex: width ? "0 0 auto" : 1,
-      width,
-      textAlign: align,
-      fontSize: 10.5,
-      fontWeight: 600,
-      letterSpacing: "0.05em",
-      textTransform: "uppercase",
-      color: "var(--text-3)",
-      padding: "8px 6px",
-    }}
-  >
-    {children}
-  </div>
-);
+  col: ColDef;
+  sort: SortState | null;
+  onSort: (key: SortKey) => void;
+}) => {
+  const active = sort && col.sortKey === sort.key;
+  const ariaSort: React.AriaAttributes["aria-sort"] = col.sortKey
+    ? active
+      ? sort.dir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none"
+    : undefined;
+
+  const base: React.CSSProperties = {
+    flex: col.width ? "0 0 auto" : 1,
+    width: col.width,
+    textAlign: col.align,
+    fontSize: 10.5,
+    fontWeight: 600,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    color: active ? "var(--text-2)" : "var(--text-3)",
+    padding: "8px 6px",
+  };
+
+  if (!col.sortKey) {
+    return (
+      <div role="columnheader" style={base}>
+        {col.label}
+      </div>
+    );
+  }
+
+  return (
+    <div role="columnheader" aria-sort={ariaSort} style={base}>
+      <button
+        type="button"
+        onClick={() => onSort(col.sortKey!)}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 3,
+          width: "100%",
+          justifyContent: col.align === "right" ? "flex-end" : "flex-start",
+          color: "inherit",
+          font: "inherit",
+          letterSpacing: "inherit",
+          textTransform: "inherit",
+        }}
+        title={`Sort by ${col.label}`}
+      >
+        {col.label}
+        <span aria-hidden style={{ fontSize: 9, opacity: active ? 1 : 0.35 }}>
+          {active ? (sort.dir === "asc" ? "▲" : "▼") : "▾"}
+        </span>
+      </button>
+    </div>
+  );
+};
 
 const Cell = ({
   children,
@@ -149,25 +251,94 @@ const ModelChips = ({
   </Flex>
 );
 
+/** Estimated-cost cell. A blended/multi-model estimate carries a subtle amber
+ *  "≈" marker (same convention as the heatmap-cell modal's EstimatedBadge). */
+const CostCell = ({ cost }: { cost: ServiceRowCost }) => (
+  <Cell
+    width={96}
+    align="right"
+    style={{ fontFamily: "var(--mono, monospace)", fontVariantNumeric: "tabular-nums" }}
+  >
+    <span
+      title={
+        cost.estimated
+          ? "Estimated — priced at a blended/aggregated model rate. Open a heatmap cell for an exact per-model figure."
+          : "Priced from the model's list rate."
+      }
+      style={{ color: cost.estimated ? "var(--text-2)" : "var(--text)" }}
+    >
+      {cost.estimated && (
+        <span aria-hidden style={{ color: "var(--amber)", marginRight: 3 }}>
+          ≈
+        </span>
+      )}
+      {fmtUSDCompact(cost.usd)}
+    </span>
+  </Cell>
+);
+
 export interface AIServicesTableProps {
   rows: AIService[];
   isLoading: boolean;
+  /** True when the underlying query hit its row cap (more services exist). */
+  truncated?: boolean;
   onRowClick?: (row: AIService) => void;
+  /** Controlled collapse state, so a KPI tile can force this card open. */
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
 }
 
 const AIServicesTableBody = ({
   rows,
   isLoading,
+  truncated,
   onRowClick,
-}: AIServicesTableProps) => (
-    <Flex flexDirection="column" gap={0}>
+}: AIServicesTableProps) => {
+  const [sort, setSort] = useState<SortState | null>(null);
+
+  const priced = useMemo<PricedRow[]>(
+    () =>
+      rows.map((row) => ({
+        row,
+        cost: estimateServiceRowCost({
+          inTok: row.inTok,
+          outTok: row.outTok,
+          models: row.models,
+        }),
+      })),
+    [rows],
+  );
+
+  const sorted = useMemo<PricedRow[]>(() => {
+    if (!sort) return priced;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...priced].sort((a, b) => {
+      const av = sortValue(a, sort.key);
+      const bv = sortValue(b, sort.key);
+      if (typeof av === "string" || typeof bv === "string") {
+        return String(av).localeCompare(String(bv)) * dir;
+      }
+      return (av - bv) * dir;
+    });
+  }, [priced, sort]);
+
+  const onSort = (key: SortKey) => {
+    setSort((prev) => {
+      if (prev && prev.key === key) {
+        return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
+      }
+      return { key, dir: STRING_KEYS.has(key) ? "asc" : "desc" };
+    });
+  };
+
+  return (
+    <Flex flexDirection="column" gap={0} role="table" aria-label="AI services">
       <div
+        role="row"
         style={{ display: "flex", alignItems: "center", padding: "0 10px" }}
       >
         {COLS.map((c) => (
-          <HeaderCell key={c.id} width={c.width} align={c.align}>
-            {c.label}
-          </HeaderCell>
+          <HeaderCell key={c.id} col={c} sort={sort} onSort={onSort} />
         ))}
       </div>
 
@@ -185,7 +356,7 @@ const AIServicesTableBody = ({
         </Flex>
       ) : (
         <Flex flexDirection="column" gap={0}>
-          {rows.map((r) => (
+          {sorted.map(({ row: r, cost }) => (
             <div
               key={r.serviceId}
               role="row"
@@ -283,6 +454,7 @@ const AIServicesTableBody = ({
               >
                 {fmtTokens(r.tokens)}
               </Cell>
+              <CostCell cost={cost} />
               <Cell
                 width={90}
                 align="right"
@@ -304,7 +476,7 @@ const AIServicesTableBody = ({
                 {fmtCount(r.agents)}
               </Cell>
               <Cell
-                width={80}
+                width={90}
                 align="right"
                 style={{
                   fontFamily: "var(--mono, monospace)",
@@ -361,6 +533,23 @@ const AIServicesTableBody = ({
         </Flex>
       )}
 
+      {truncated && rows.length > 0 && (
+        <Flex
+          alignItems="center"
+          gap={6}
+          style={{
+            padding: "8px 16px",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <WarningIcon size={14} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            Showing the top 200 services by tokens — narrow the scope (timeframe or
+            filters) to surface the rest.
+          </Text>
+        </Flex>
+      )}
+
       <Flex
         style={{
           padding: "10px 16px",
@@ -382,14 +571,20 @@ const AIServicesTableBody = ({
           or <code>refusal</code>. OTel markers (<code>gen_ai.error.type</code>,
           guardrail/moderation events, <code>gen_ai.response.refusal_reason</code>)
           are also counted when present, but emit no data in this environment.
+          Est. cost prices each service's tokens against the model rate table;
+          <span style={{ color: "var(--amber)" }}> ≈</span> marks a blended or
+          multi-model estimate.
         </Text>
       </Flex>
     </Flex>
-);
+  );
+};
 
 export const AIServicesTable = (props: AIServicesTableProps) => (
   <CollapsibleCard
     title="AI services"
+    open={props.open}
+    onOpenChange={props.onOpenChange}
     subtitle={
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
         Any monitored service that emitted LLM spans
@@ -399,6 +594,7 @@ export const AIServicesTable = (props: AIServicesTableProps) => (
     }
     headerRight={
       <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+        {props.truncated ? "top " : ""}
         {props.rows.length} {props.rows.length === 1 ? "service" : "services"}
       </Text>
     }

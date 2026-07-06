@@ -41,7 +41,7 @@ export const InvocationsChart = () => {
       series={[
         {
           label: "Invocations",
-          color: "var(--purple)",
+          color: "var(--blue)",
           values: model.values,
           axis: "left",
         },

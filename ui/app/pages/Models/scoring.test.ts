@@ -240,4 +240,49 @@ describe("compareModels", () => {
     const big = compareModels(profile, cheap, expensive, 100_000);
     expect(["strong", "moderate", "narrow"]).toContain(big.verdict);
   });
+
+  it("flags qualityEstimated when neither model carries a real eval score", () => {
+    const result = compareModels(profile, cheap, expensive, 100_000);
+    expect(result.qualityEstimated).toBe(true);
+  });
+
+  it("clears qualityEstimated once a real eval score is present", () => {
+    const result = compareModels(
+      profile,
+      { ...cheap, realEvalScore: 82 },
+      { ...expensive, realEvalScore: 74 },
+      100_000,
+    );
+    expect(result.qualityEstimated).toBe(false);
+  });
+
+  it("marks the verdict quality-driven when quality dominates the margin", () => {
+    // critical-policy weights quality 45%; a frontier model beats a mid one
+    // mostly on the (estimated) quality tier proxy.
+    const qualityProfile = findProfile("critical-policy");
+    const frontier = {
+      model: "claude-opus-4-5",
+      avgMs: 800,
+      costPerRequest: 0.02,
+      requests: 3000,
+      errorRatePct: 0.3,
+      pricing: getPricing("claude-opus-4-5"),
+    };
+    const midTier = {
+      model: "claude-sonnet-4-6",
+      avgMs: 800,
+      costPerRequest: 0.02,
+      requests: 3000,
+      errorRatePct: 0.3,
+      pricing: getPricing("claude-sonnet-4-6"),
+    };
+    const result = compareModels(qualityProfile, frontier, midTier, 100_000);
+    expect(result.winner).toBe("a");
+    expect(result.qualityDriven).toBe(true);
+  });
+
+  it("is not quality-driven when the win comes from cost", () => {
+    const result = compareModels(profile, cheap, expensive, 100_000);
+    expect(result.qualityDriven).toBe(false);
+  });
 });

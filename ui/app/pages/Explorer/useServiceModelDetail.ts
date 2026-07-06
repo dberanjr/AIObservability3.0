@@ -26,6 +26,7 @@ export interface UseServiceModelDetailResult {
   metrics: ServiceModelMetrics | null;
   cost: ServiceModelCost | null;
   isLoading: boolean;
+  error?: Error;
 }
 
 /**
@@ -58,7 +59,7 @@ export const useServiceModelDetail = (
       )
     : "";
 
-  const { data, isLoading } = useScopedDql<DetailRow>(query, {
+  const { data, isLoading, error } = useScopedDql<DetailRow>(query, {
     enabled,
     staleTime: 60_000,
   });
@@ -66,6 +67,10 @@ export const useServiceModelDetail = (
   return useMemo<UseServiceModelDetailResult>(() => {
     if (!enabled) {
       return { metrics: null, cost: null, isLoading: false };
+    }
+
+    if (error) {
+      return { metrics: null, cost: null, isLoading, error };
     }
 
     const row = data?.records?.[0];
@@ -97,7 +102,7 @@ export const useServiceModelDetail = (
     });
 
     return { metrics, cost, isLoading };
-  }, [enabled, data, isLoading, samplingRatio, models, scope.timeframe]);
+  }, [enabled, data, isLoading, error, samplingRatio, models, scope.timeframe]);
 };
 
 /**

@@ -4,16 +4,19 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { TIER_COLORS } from "./constants";
 import {
   useLatencyDecomposition,
   type LatencyTier,
 } from "./useLatencyDecomposition";
 
+// Shared hue-per-concept map so the LLM/Tool/Retrieval/Orchestration tiers are
+// colored identically here and in the row-level StageBreakdownBar above.
 const TIER_COLOR: Record<LatencyTier, string> = {
-  LLM: "var(--purple-2)",
-  "Retrieval/DB": "var(--cyan)",
-  Tool: "var(--amber)",
-  Orchestration: "var(--text-4)",
+  LLM: TIER_COLORS.llm,
+  "Retrieval/DB": TIER_COLORS.retrieval,
+  Tool: TIER_COLORS.tool,
+  Orchestration: TIER_COLORS.orchestration,
 };
 
 // Body is a separate component so the query (useLatencyDecomposition) only runs
