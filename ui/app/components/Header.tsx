@@ -1,9 +1,10 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AppHeader } from "@dynatrace/strato-components-preview/layouts";
-import { SettingIcon } from "@dynatrace/strato-icons";
+import { GridIcon, SettingIcon } from "@dynatrace/strato-icons";
 import { HeaderTimeframe } from "./HeaderTimeframe";
 import { useTweaks } from "../tweaks/TweaksContext";
+import { useEditLayout } from "../layout/EditLayoutContext";
 import { ModelPricingButton } from "../pricing/ModelPricingButton";
 
 /**
@@ -29,6 +30,7 @@ const NAV_ITEMS: { to: string; label: string }[] = [
 
 export const Header = () => {
   const { isPanelOpen, togglePanel } = useTweaks();
+  const { editLayout, toggle: toggleEditLayout } = useEditLayout();
   // Carry the current query string (timeframe ?from/?to, etc.) across tab
   // navigation so the selected scope doesn't reset when switching pages.
   const { search, pathname } = useLocation();
@@ -66,6 +68,15 @@ export const Header = () => {
       <AppHeader.ActionItems>
         <HeaderTimeframe />
         <ModelPricingButton />
+        <AppHeader.ActionButton
+          prefixIcon={<GridIcon />}
+          isSelected={editLayout}
+          onClick={toggleEditLayout}
+          aria-label="Customize layout"
+          aria-pressed={editLayout}
+        >
+          Customize
+        </AppHeader.ActionButton>
         <AppHeader.ActionButton
           prefixIcon={<SettingIcon />}
           isSelected={isPanelOpen}

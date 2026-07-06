@@ -25,6 +25,7 @@ import { CapabilityProvider } from "./scope/CapabilityContext";
 import { ScanReportProvider } from "./scope/ScanReportContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
+import { EditLayoutProvider } from "./layout/EditLayoutContext";
 import { TweaksPanel } from "./tweaks/TweaksPanel";
 import { ColorBlindFilters } from "./tweaks/ColorBlindFilters";
 import { ModelPricingProvider } from "./pricing/ModelPricingContext";
@@ -33,6 +34,7 @@ import { ModelPricingPanel } from "./pricing/ModelPricingPanel";
 export const App = () => {
   return (
     <TweaksProvider>
+    <EditLayoutProvider>
     <ModelPricingProvider>
     <SegmentsProvider>
     <SamplingProvider>
@@ -106,6 +108,7 @@ export const App = () => {
     </SamplingProvider>
     </SegmentsProvider>
     </ModelPricingProvider>
+    </EditLayoutProvider>
     </TweaksProvider>
   );
 };

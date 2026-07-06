@@ -4,6 +4,7 @@ import { ErrorBanner } from "../../components/ErrorState";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
 import { ScanScope } from "../../scope/ScanReportContext";
+import { useEditLayout } from "../../layout/EditLayoutContext";
 import { SummaryLayoutProvider, CollapsibleTile } from "./CollapsibleTile";
 import { CustomizableGrid, type GridTile } from "./CustomizableGrid";
 import { usePulseSummary } from "../Pulse/usePulseSummary";
@@ -59,9 +60,9 @@ export const SummaryPage = () => {
   const summary = usePulseSummary();
   const posture = useFleetPosture();
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
-  // Layout customization is opt-in: the default landing is calm and read-only,
-  // with drag/resize/reset revealed only in edit mode (SUM-4).
-  const [editLayout, setEditLayout] = useState(false);
+  // Layout customization is opt-in and driven by the global header "Customize"
+  // toggle, so it's reachable from every page (SUM-4).
+  const { editLayout } = useEditLayout();
 
   const firstError = summary.error ?? posture.error ?? null;
 
@@ -114,27 +115,6 @@ export const SummaryPage = () => {
         style={{ padding: "18px 20px 28px" }}
       >
         {firstError && <ErrorBanner error={firstError} />}
-
-        <Flex justifyContent="flex-end">
-          <button
-            type="button"
-            onClick={() => setEditLayout((v) => !v)}
-            title="Rearrange and resize the tiles below"
-            style={{
-              all: "unset",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              padding: "5px 12px",
-              borderRadius: 8,
-              border: `1px solid ${editLayout ? "var(--blue)" : "var(--border)"}`,
-              color: editLayout ? "#fff" : "var(--text-2)",
-              background: editLayout ? "var(--blue)" : "transparent",
-            }}
-          >
-            {editLayout ? "Done editing" : "⚙ Customize layout"}
-          </button>
-        </Flex>
 
         {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}
         <ScanScope name="posture">

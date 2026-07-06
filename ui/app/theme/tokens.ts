@@ -146,18 +146,17 @@ ${toBlock(lightSurfaces)}
 ${toBlock(darkSurfaces)}
 }
 
-/* ---- Summary: floating cards ---------------------------------------------
-   Every card on the Summary page gets the same stronger, softer shadow so it
-   reads as lifted off the page, and rises further on hover. Scoped to the page
-   wrapper so other tabs keep the default elevation. */
-.aiobs-summary-page .strato-surface .surface-background {
-  /* !important because Strato applies the raised elevation shadow inline
-     (that's why the bordered/ghost overrides also use !important). */
+/* ---- Floating cards (app-wide) -------------------------------------------
+   Every raised Surface across the app gets the same stronger, softer shadow so
+   data elements read as lifted off the page and pop out at the user. Grid tiles
+   (.aiobs-tile-item) rise further on hover. */
+.strato-surface .surface-background {
+  /* !important because Strato applies the raised elevation shadow inline. */
   box-shadow: 0 12px 28px -6px rgba(16, 18, 27, 0.26),
     0 4px 10px -2px rgba(16, 18, 27, 0.14) !important;
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
-:root[data-theme="dark"] .aiobs-summary-page .strato-surface .surface-background {
+:root[data-theme="dark"] .strato-surface .surface-background {
   box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.66),
     0 4px 12px -2px rgba(0, 0, 0, 0.5) !important;
 }
