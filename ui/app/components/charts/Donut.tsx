@@ -22,6 +22,9 @@ export interface DonutProps {
   centerLabel?: string;
   size?: number;
   thickness?: number;
+  /** Accessible label for the chart. Defaults to a spoken summary of the slices
+   *  so a screen reader announces the actual distribution, not a fixed name. */
+  ariaLabel?: string;
 }
 
 const arcPath = (
@@ -67,8 +70,19 @@ export const Donut = ({
   centerLabel,
   size = 140,
   thickness = 22,
+  ariaLabel,
 }: DonutProps) => {
   const total = slices.reduce((acc, s) => acc + s.value, 0);
+  const label =
+    ariaLabel ??
+    (slices.length > 0
+      ? `Distribution: ${slices
+          .map(
+            (s) =>
+              `${s.label} ${total > 0 ? Math.round((s.value / total) * 100) : 0}%`,
+          )
+          .join(", ")}`
+      : "Distribution (no data)");
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 2;
@@ -88,7 +102,7 @@ export const Donut = ({
       <div
         style={{ position: "relative", width: size, height: size, flex: "0 0 auto" }}
       >
-        <svg width={size} height={size} role="img" aria-label="Provider mix">
+        <svg width={size} height={size} role="img" aria-label={label}>
           <circle cx={cx} cy={cy} r={r} fill="var(--surface-2)" />
           {arcs.map(({ slice, d }) =>
             d ? <path key={slice.key} d={d} fill={safeFill(slice.color)} /> : null,

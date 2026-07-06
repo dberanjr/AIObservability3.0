@@ -66,8 +66,8 @@ const lightSurfaces = {
   "--border": "#e8e7e1",
   "--text": "#1a1a1a",
   "--text-2": "#4a4a48",
-  "--text-3": "#76746e",
-  "--text-4": "#a4a29a",
+  "--text-3": "#6b695f",
+  "--text-4": "#87857b",
   "--intel-soft": brand.intelSoftLight,
 };
 
@@ -79,8 +79,8 @@ const darkSurfaces = {
   "--border": "#25252b",
   "--text": "#f0efea",
   "--text-2": "#b6b4ad",
-  "--text-3": "#80807a",
-  "--text-4": "#5c5b56",
+  "--text-3": "#928f89",
+  "--text-4": "#75746e",
   "--intel-soft": brand.intelSoftDark,
 };
 
@@ -270,6 +270,20 @@ ${toBlock(darkSurfaces)}
 .aiobs-clickable-tile:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
+}
+
+/* A11Y: global keyboard focus ring. Many interactive elements use
+   'all: unset' / 'appearance: none', which strips the default outline and left
+   keyboard users with no visible focus. This restores a ring on keyboard focus
+   only (:focus-visible keeps mouse clicks clean); components with their own
+   :focus-visible rule above still win by specificity. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 /* Pulse hero: the AI Application Architecture map and the summary tiles sit
