@@ -2,7 +2,16 @@
 
 **Date:** 2026-07-05
 **Branch:** redesign-5-tab
-**Status:** Awaiting review
+**Status:** Approved 2026-07-05
+
+## Approval notes
+- Bucket filter targets `fetch spans` only (not `fetch logs`) — confirmed.
+- Empty-bucket guard is documentation-only (no pre-flight validation) —
+  confirmed.
+- Detect-AI-buckets results list reports **only buckets that contain AI
+  spans** — inherent to the query (filter-by-matcher then
+  `summarize by: {dt.system.bucket}` yields count > 0 rows only; buckets with
+  zero AI spans never appear).
 
 ## Goal
 
