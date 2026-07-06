@@ -49,16 +49,25 @@ export const StatTile = ({
   children,
 }: StatTileProps) => {
   const interactive = !!onActivate;
+  // Only tiles carrying a warning/problem (amber/red emphasis) get the
+  // pronounced pop-out shadow (via .aiobs-alert-tile) — good/neutral tiles keep
+  // the standard shadow. StatTile is a leaf KPI tile (never a container of
+  // sub-tiles), so this can't apply the heavy shadow to a composite tile.
+  const alert = emphasis === "amber" || emphasis === "red";
+  const className =
+    [interactive && "aiobs-clickable-tile", alert && "aiobs-alert-tile"]
+      .filter(Boolean)
+      .join(" ") || undefined;
   return (
     <Surface
       elevation="raised"
       padding={12}
+      className={className}
       {...(interactive
         ? {
             role: "button",
             tabIndex: 0,
             "aria-label": actionLabel,
-            className: "aiobs-clickable-tile",
             onClick: onActivate,
             onKeyDown: (e: React.KeyboardEvent) => {
               if (e.key === "Enter" || e.key === " ") {

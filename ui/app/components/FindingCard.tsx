@@ -42,6 +42,13 @@ export const FindingCard = ({ finding, onClick }: FindingCardProps) => {
     <Surface
       elevation="raised"
       padding={12}
+      // A finding is an issue worth attention — warning/critical ones get the
+      // pronounced pop-out shadow so they draw the eye; info stays standard.
+      className={
+        finding.severity === "warning" || finding.severity === "critical"
+          ? "aiobs-alert-tile"
+          : undefined
+      }
       style={{
         position: "relative",
         height: "100%",

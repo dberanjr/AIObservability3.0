@@ -156,17 +156,30 @@ ${toBlock(lightSurfaces)}
 ${toBlock(darkSurfaces)}
 }
 
-/* ---- Floating cards (app-wide) -------------------------------------------
-   Every raised Surface across the app gets the same stronger, softer shadow so
-   data elements read as lifted off the page and pop out at the user. Grid tiles
-   (.aiobs-tile-item) rise further on hover. */
+/* ---- Card shadows (app-wide) ---------------------------------------------
+   Standard: every raised Surface gets a soft, subtle shadow so cards read as
+   gently lifted. Pronounced: ONLY tiles that carry a warning / problem / issue
+   (.aiobs-alert-tile) get the heavy pop-out shadow, so a strong shadow reads as
+   a SIGNAL that draws the eye rather than global decoration. Composite tiles
+   that hold sub-tiles never receive .aiobs-alert-tile, so they stay standard.
+   Grid tiles (.aiobs-tile-item) lift slightly on hover. */
 .strato-surface .surface-background {
   /* !important because Strato applies the raised elevation shadow inline. */
-  box-shadow: 0 12px 28px -6px rgba(16, 18, 27, 0.26),
-    0 4px 10px -2px rgba(16, 18, 27, 0.14) !important;
+  box-shadow: 0 2px 6px -1px rgba(16, 18, 27, 0.10),
+    0 1px 3px -1px rgba(16, 18, 27, 0.07) !important;
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
 :root[data-theme="dark"] .strato-surface .surface-background {
+  box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.5),
+    0 1px 3px -1px rgba(0, 0, 0, 0.4) !important;
+}
+/* Alert tiles (warning / problem / issue) — the pronounced pop-out shadow.
+   Defined after the standard rule so it wins at equal specificity. */
+.aiobs-alert-tile .surface-background {
+  box-shadow: 0 12px 28px -6px rgba(16, 18, 27, 0.26),
+    0 4px 10px -2px rgba(16, 18, 27, 0.14) !important;
+}
+:root[data-theme="dark"] .aiobs-alert-tile .surface-background {
   box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.66),
     0 4px 12px -2px rgba(0, 0, 0, 0.5) !important;
 }
@@ -174,16 +187,8 @@ ${toBlock(darkSurfaces)}
   transition: transform 160ms ease;
 }
 .aiobs-tile-item:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   z-index: 2;
-}
-.aiobs-tile-item:hover .surface-background {
-  box-shadow: 0 20px 40px -8px rgba(16, 18, 27, 0.32),
-    0 6px 14px -3px rgba(16, 18, 27, 0.18) !important;
-}
-:root[data-theme="dark"] .aiobs-tile-item:hover .surface-background {
-  box-shadow: 0 22px 44px -8px rgba(0, 0, 0, 0.75),
-    0 6px 16px -3px rgba(0, 0, 0, 0.55) !important;
 }
 
 /* ---- Tweaks: accent — overrides --blue (the primary accent token most
