@@ -38,6 +38,10 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
     );
   }
 
+  // scan-6: reflect the ratio the per-day scans ACTUALLY ran at, not a hardcoded
+  // "1:100" that lies when the toolbar sampling is heavier than the floor.
+  const sampledSub = `1-in-${data.dailyRatio.toLocaleString()} sampled · extrapolated`;
+
   // Each KPI keeps its content unchanged; the customizable grid owns placement
   // only. Six equal tiles → defaultColSpan 2 of 12 preserves the 6-across row.
   const tiles: GridTile[] = [
@@ -48,7 +52,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
         <StatTile
           label="Spend · 24h"
           value={fmtUSDCompact(data.spend24h)}
-          sub="1:100 sampled · extrapolated"
+          sub={sampledSub}
         />
       ),
     },
@@ -59,7 +63,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
         <StatTile
           label="Spend · 7d"
           value={fmtUSDCompact(data.spend7d)}
-          sub="1:100 sampled · extrapolated"
+          sub={sampledSub}
         />
       ),
     },
@@ -121,9 +125,10 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
         editable={editLayout}
       />
       <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-        24h / 7d / 30d spend is scanned at a 1:100 sampling floor and
-        extrapolated; concentration and $/1M use the current timeframe at the
-        toolbar sampling ratio — totals may differ across the two families.
+        24h / 7d / 30d spend is scanned at a 1-in-{data.dailyRatio.toLocaleString()}{" "}
+        sampling floor and extrapolated; concentration and $/1M use the current
+        timeframe at the toolbar sampling ratio — totals may differ across the
+        two families.
       </Text>
     </Flex>
   );

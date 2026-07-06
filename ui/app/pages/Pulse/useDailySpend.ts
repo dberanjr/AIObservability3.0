@@ -69,6 +69,12 @@ export interface DailySpend {
   projected30d: number;
   /** 24h day-over-day % change (vs the prior day), or null. */
   delta24h: number | null;
+  /**
+   * The sampling ratio these per-day scans actually ran at (the floor, or the
+   * heavier toolbar ratio). Exposed so the tile can disclose when this estimate
+   * was sampled more coarsely than the toolbar setting implies (scan-6).
+   */
+  samplingRatio: number;
   isLoading: boolean;
 }
 
@@ -123,6 +129,7 @@ export const useDailySpend = (): DailySpend => {
       spend7d,
       projected30d,
       delta24h,
+      samplingRatio: effectiveRatio,
       isLoading: results.some((r) => r.isLoading),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

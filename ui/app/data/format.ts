@@ -88,6 +88,51 @@ export const fmtSecs1 = (ms: unknown): string => {
 };
 
 /**
+ * A page's scan budget is the per-fetch scan limit (GB, decimal) times the
+ * number of DQL queries the page ran — every query is injected with the same
+ * per-fetch cap, so the page's aggregate budget scales with the query count.
+ * Returns the FRACTION of that budget the page actually scanned, or null when
+ * the budget is unlimited (`scanLimitGb <= 0`) or nothing has run yet.
+ *
+ * NOTE: this is a coarse page-level severity signal, not an exact per-query
+ * truncation measure — a single multi-fetch query (e.g. a join) can legitimately
+ * scan more than one per-fetch cap, so the fraction can exceed 1.
+ */
+export const scanBudgetFraction = (
+  scannedBytes: unknown,
+  scanLimitGb: number,
+  queryCount: number,
+): number | null => {
+  const scanned = finite(scannedBytes);
+  if (scanned == null) return null;
+  if (!(scanLimitGb > 0) || !(queryCount > 0)) return null;
+  const budgetBytes = scanLimitGb * 1e9 * queryCount;
+  if (!(budgetBytes > 0)) return null;
+  return scanned / budgetBytes;
+};
+
+export type ScanBudgetSeverity = "ok" | "warn" | "crit";
+
+/**
+ * Coarse severity band for a page's scan-vs-budget fraction. Drives the calm
+ * neutral → amber coloring of the status-line scan readout (both warn and crit
+ * render amber; the split is kept so callers can escalate further if needed). A
+ * null fraction (unlimited budget) reads as "ok".
+ */
+export const scanBudgetSeverity = (
+  fraction: number | null,
+): ScanBudgetSeverity => {
+  if (fraction == null) return "ok";
+  if (fraction >= 1) return "crit";
+  if (fraction >= 0.8) return "warn";
+  return "ok";
+};
+
+/** Whole-percent label for a budget fraction, e.g. "34%" (empty for null). */
+export const fmtBudgetPct = (fraction: number | null): string =>
+  fraction == null ? "" : `${Math.round(fraction * 100)}%`;
+
+/**
  * Short-form count (e.g. 77.01M, 2.68M, 1.5k) for tight spaces like donut
  * centers and tile values where the full comma-separated number would
  * overflow.

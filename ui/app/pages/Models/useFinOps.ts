@@ -102,6 +102,12 @@ export interface FinOpsData {
   costPerMTok: number;
   /** Estimated savings if expensive-model traffic shifted to its cheaper peer. */
   possibleSavings: number;
+  /**
+   * The sampling ratio the 24h / 7d / 30d per-day scans actually ran at (the
+   * floor, or the heavier toolbar ratio). Exposed so the spend tiles disclose
+   * the true ratio rather than a hardcoded one (scan-6).
+   */
+  dailyRatio: number;
   isLoading: boolean;
   error?: Error;
 }
@@ -301,6 +307,7 @@ export const useFinOps = (): FinOpsData => {
       concentrationPct,
       costPerMTok,
       possibleSavings,
+      dailyRatio,
       isLoading:
         resolution.isLoading ||
         dailyResults.some((r) => r.isLoading) ||

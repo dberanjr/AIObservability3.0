@@ -4,10 +4,19 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { useSegments } from "@dynatrace/strato-components/filters";
 import { useResolvedCounts } from "../scope/useResolvedCounts";
-import { PageScanTotal } from "../components/ScanDebug";
+import { PageScanReadout, PageScanTotal } from "../components/ScanDebug";
+import { SamplingBadge } from "../components/SamplingBadge";
 import { useScanTotal } from "../scope/ScanReportContext";
 import { useTweaks } from "../tweaks/TweaksContext";
 import { parseBuckets } from "../scope/queries";
+import { fmtSecs1 } from "../data/format";
+
+// A refresh older than this reads as stale — the status timestamp turns amber
+// so cached, aging data doesn't masquerade as fresh (scan-8).
+const STALE_MS = 5 * 60_000;
+// A slowest-query time at/above this is called out in amber so a heavy refresh
+// is visible rather than silently slow (scan-8).
+const SLOW_QUERY_MS = 5000;
 
 const formatRelative = (ms: number): string => {
   if (ms < 1000) return "just now";
@@ -48,10 +57,19 @@ export const ResolutionStatusLine = () => {
     return () => window.clearInterval(id);
   }, []);
 
-  const refreshedLabel =
-    counts.isFetching || counts.lastRefreshed == null
-      ? "refreshing..."
-      : formatRelative(now - counts.lastRefreshed);
+  const refreshing = counts.isFetching || counts.lastRefreshed == null;
+  const refreshAge = counts.lastRefreshed == null ? null : now - counts.lastRefreshed;
+  const refreshedLabel = refreshing
+    ? "refreshing..."
+    : formatRelative(refreshAge ?? 0);
+  // Escalate the freshness indicator once data ages past the staleness cutoff
+  // (scan-8): the label turns amber so a "refreshed 8m ago" that's actually
+  // serving stale cache reads as a caveat, not decoration.
+  const stale = !refreshing && refreshAge != null && refreshAge > STALE_MS;
+  // Surface the slowest query behind the current page so a heavy refresh is
+  // visible; amber once it crosses the slow threshold.
+  const slowestMs = scan?.executionMs ?? 0;
+  const slow = slowestMs >= SLOW_QUERY_MS;
 
   return (
     <Flex
@@ -75,6 +93,9 @@ export const ResolutionStatusLine = () => {
           </>
         )}
       </Text>
+      {/* scan-3: prominent, always-visible disclosure that the page's numbers
+          are extrapolated from a sample (renders nothing when sampling is off). */}
+      <SamplingBadge variant="full" />
       <Flex flexGrow={1} />
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
         Scope further with Segments in the toolbar above.
@@ -119,9 +140,33 @@ export const ResolutionStatusLine = () => {
           <span aria-hidden>⚠</span> Partial data — scan limit hit
         </span>
       )}
+      {/* scan-4/5/7: always-on, calm scan-cost + budget readout for everyone,
+          independent of the scan-debug toggle. */}
+      <PageScanReadout />
+      {/* Verbose engineer diagnostic — still gated behind showScanDebug. */}
       <PageScanTotal />
-      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+      <Text
+        style={{
+          fontSize: 11,
+          color: stale ? "var(--amber)" : "var(--text-3)",
+          fontWeight: stale ? 600 : undefined,
+          whiteSpace: "nowrap",
+        }}
+        title={
+          stale
+            ? "This page hasn't refreshed in over 5 minutes — some tiles may be serving cached data. Change the timeframe or narrow scope to refresh."
+            : "When the fleet-wide counts last completed. The slowest query on this page is shown alongside."
+        }
+      >
         Last refreshed {refreshedLabel}
+        {slowestMs > 0 && (
+          <>
+            {" · "}
+            <span style={{ color: slow ? "var(--amber)" : "inherit" }}>
+              slowest query {fmtSecs1(slowestMs)}
+            </span>
+          </>
+        )}
       </Text>
     </Flex>
   );

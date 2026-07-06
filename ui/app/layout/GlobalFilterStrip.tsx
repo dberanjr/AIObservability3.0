@@ -44,7 +44,11 @@ const LabeledField = ({ label, children }: LabeledFieldProps) => (
  * the primary Segments / Filters scope controls (IA — Information-10). The
  * control itself is untouched (native <select>, so it stays in the tab order).
  */
-const AdvancedField = ({ label, children }: LabeledFieldProps) => (
+const AdvancedField = ({
+  label,
+  hint,
+  children,
+}: LabeledFieldProps & { hint?: string }) => (
   <Flex flexDirection="column" gap={2} style={{ minWidth: 90 }}>
     <Text
       style={{
@@ -59,6 +63,21 @@ const AdvancedField = ({ label, children }: LabeledFieldProps) => (
       {label}
     </Text>
     {children}
+    {/* scan-1: one-line cost-vs-fidelity trade-off so the two Grail-cost levers
+        aren't set blind — what each direction costs vs what it buys. */}
+    {hint && (
+      <Text
+        style={{
+          fontSize: 9,
+          lineHeight: 1.3,
+          color: "var(--text-3)",
+          opacity: 0.85,
+          maxWidth: 156,
+        }}
+      >
+        {hint}
+      </Text>
+    )}
   </Flex>
 );
 
@@ -252,11 +271,17 @@ export const GlobalFilterStrip = () => {
             borderLeft: "1px solid var(--border)",
           }}
         >
-          <AdvancedField label="Sampling">
+          <AdvancedField
+            label="Sampling"
+            hint="Higher = faster & cheaper; counts become extrapolated estimates."
+          >
             <SamplingSegmented />
           </AdvancedField>
 
-          <AdvancedField label="Scan limit">
+          <AdvancedField
+            label="Scan limit"
+            hint="Higher = fewer truncated results, but slower & more scan cost."
+          >
             <ScanLimitSegmented />
           </AdvancedField>
         </Flex>

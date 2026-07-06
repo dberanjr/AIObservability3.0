@@ -29,11 +29,23 @@ export const ScanLimitSegmented = () => {
           aria-label="Scan limit"
         />
         <Select.Content>
-          {SCAN_LIMITS_GB.map((value) => (
-            <Select.Option key={value} value={String(value)}>
-              {SCAN_LIMIT_LABELS[value]}
-            </Select.Option>
-          ))}
+          {SCAN_LIMITS_GB.map((value, i) => {
+            // Point-of-choice trade-off cue on the endpoints (scan-1): the floor
+            // is cheapest but truncates soonest; the ceiling is most complete but
+            // costliest to scan.
+            const note =
+              i === 0
+                ? " · fastest, may truncate"
+                : value === SCAN_LIMITS_GB[SCAN_LIMITS_GB.length - 1]
+                  ? " · most complete"
+                  : "";
+            return (
+              <Select.Option key={value} value={String(value)}>
+                {SCAN_LIMIT_LABELS[value]}
+                {note}
+              </Select.Option>
+            );
+          })}
         </Select.Content>
       </Select>
     </div>

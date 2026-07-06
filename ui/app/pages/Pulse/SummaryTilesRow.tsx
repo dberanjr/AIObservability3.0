@@ -14,6 +14,7 @@ import {
   useChartExpander,
 } from "../../components/charts/ChartExpander";
 import { InfoTooltip } from "../../components/InfoTooltip";
+import { SamplingBadge } from "../../components/SamplingBadge";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import {
   fmtCount,
@@ -291,6 +292,9 @@ interface TileShellProps {
    * the redundant left-side number. */
   variant?: TileVariant;
   value?: string;
+  /** Small inline marker rendered next to the value (scan-3: the "≈ est."
+   * sampling badge on extrapolated headline figures). */
+  valueAffix?: React.ReactNode;
   sub?: string;
   /** Bottom-pinned chart, used by "value" variant. */
   bottom?: React.ReactNode;
@@ -347,6 +351,7 @@ const Tile = ({
   label,
   variant = "value",
   value,
+  valueAffix,
   sub,
   bottom,
   visual,
@@ -421,19 +426,35 @@ const Tile = ({
           </Flex>
         ) : (
           <>
-            {value !== undefined && (
-              <Text
-                style={{
-                  fontSize: 22,
-                  fontWeight: 600,
-                  fontVariantNumeric: "tabular-nums",
-                  lineHeight: 1,
-                  color: "var(--text)",
-                }}
-              >
-                {value}
-              </Text>
-            )}
+            {value !== undefined &&
+              (valueAffix ? (
+                <Flex alignItems="baseline" gap={6} style={{ flexWrap: "wrap", minWidth: 0 }}>
+                  <Text
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 600,
+                      fontVariantNumeric: "tabular-nums",
+                      lineHeight: 1,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {value}
+                  </Text>
+                  {valueAffix}
+                </Flex>
+              ) : (
+                <Text
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 600,
+                    fontVariantNumeric: "tabular-nums",
+                    lineHeight: 1,
+                    color: "var(--text)",
+                  }}
+                >
+                  {value}
+                </Text>
+              ))}
             {sub && (
               <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
                 {sub}
@@ -806,6 +827,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         label="Tokens"
         info="Total tokens (input + output) consumed by GenAI calls in the current scope. Counts/sums are extrapolated to the unsampled population when sampling is on."
         value={fmtTokens(summary.tokens)}
+        valueAffix={<SamplingBadge variant="compact" />}
         sub={
           summary.requests != null
             ? `${fmtCount(summary.requests)} req`
@@ -827,6 +849,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         label="Spend"
         info="USD spend = actual (models priced in the table) + estimated (models not in the table, costed at a blended fallback rate). The sub-line splits the two. Counts are extrapolated to the unsampled population when sampling is on."
         value={fmtUSDCompact(totalSpend)}
+        valueAffix={<SamplingBadge variant="compact" />}
         sub={spendSub}
         bottom={renderSpark(summary.spark.spend, "var(--blue)", fmtUSDCompact, "Spend trend")}
         expanded={() =>

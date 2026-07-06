@@ -29,13 +29,24 @@ export const SamplingSegmented = () => {
           aria-label="Sampling ratio"
         />
         <Select.Content>
-          {SAMPLING_RATIOS.map((value) => (
-            <Select.Option key={value} value={String(value)}>
-              {value === 1
-                ? "None (every record)"
-                : `${SAMPLING_LABELS[value]} (1 in ${value})`}
-            </Select.Option>
-          ))}
+          {SAMPLING_RATIOS.map((value) => {
+            // Point-of-choice fidelity cue on the endpoints (scan-1): None is
+            // exact but scans the most; the top ratio is cheapest but roughest.
+            const note =
+              value === 1
+                ? " · exact"
+                : value === SAMPLING_RATIOS[SAMPLING_RATIOS.length - 1]
+                  ? " · roughest estimate"
+                  : "";
+            return (
+              <Select.Option key={value} value={String(value)}>
+                {value === 1
+                  ? "None (every record)"
+                  : `${SAMPLING_LABELS[value]} (1 in ${value})`}
+                {note}
+              </Select.Option>
+            );
+          })}
         </Select.Content>
       </Select>
     </div>

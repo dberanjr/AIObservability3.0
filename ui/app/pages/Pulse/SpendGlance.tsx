@@ -8,6 +8,8 @@ import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { SamplingBadge } from "../../components/SamplingBadge";
+import { useSampling } from "../../scope/SamplingContext";
 import { useDailySpend } from "./useDailySpend";
 import { fmtUSD, fmtUSDCompact } from "../../data/format";
 
@@ -93,10 +95,19 @@ const Cell = ({
 );
 
 const SpendGlanceBody = () => {
-  const { spend24h, spend7d, projected30d, delta24h, bars, barLabels } = useDailySpend();
+  const { spend24h, spend7d, projected30d, delta24h, bars, barLabels, samplingRatio } =
+    useDailySpend();
+  const { samplingRatio: toolbarRatio } = useSampling();
+  // scan-6: these per-day scans force their own sampling floor, so when it's
+  // coarser than the toolbar the numbers are a rougher estimate than the global
+  // control implies — disclose the actual ratio used on this tile.
+  const overrideRatio = samplingRatio > toolbarRatio ? samplingRatio : undefined;
 
   return (
       <Flex flexDirection="column" gap={12} style={{ padding: "14px 18px" }}>
+        {overrideRatio != null && (
+          <SamplingBadge variant="full" ratio={overrideRatio} />
+        )}
         <Flex gap={20}>
           <Cell label="Last 24h" value={fmtUSD(spend24h)} delta={delta24h} />
           <Cell label="Last 7d" value={fmtUSD(spend7d)} />
