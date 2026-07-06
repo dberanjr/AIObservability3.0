@@ -235,6 +235,102 @@ ${accentForegroundCss}
   color: var(--accent-fg) !important;
 }
 
+/* ---- Grouped primary tab strip (IA — Information-1) ----
+ * A dedicated row under the app bar holding the four labeled tab clusters
+ * (Overview / Analyze / Audit) plus a right-aligned utility cluster (Field
+ * Notes / About). Each cluster carries a leading uppercase label and is set
+ * off by a 1px divider; the row scrolls horizontally when the viewport is too
+ * narrow rather than wrapping. Active pills reuse .aiobs-nav-active above. */
+.aiobs-tabnav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.aiobs-tabnav-scroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 20px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.aiobs-tabnav-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+/* Divider between labeled clusters: a subtle 1px rule to the group's left. */
+.aiobs-tabnav-group--divided {
+  margin-left: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+/* Utility cluster (Field Notes / About): pushed to the right and set off by a
+   final divider, outside any group label. Collapses to a normal inline
+   position (auto margin resolves to 0) when the row overflows and scrolls. */
+.aiobs-tabnav-group--utility {
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.aiobs-tabnav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+  padding-right: 2px;
+  user-select: none;
+}
+.aiobs-tabnav-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.aiobs-tabnav-pill:hover {
+  background: color-mix(in oklab, var(--blue) 12%, transparent);
+  color: var(--text);
+}
+
+/* ---- Overview cross-link pill (IA — Information-3) ----
+ * The Summary→Pulse / Pulse→Summary hand-off. A subtle accent-tinted pill that
+ * fills solid on hover; on the accent fill it flips to var(--accent-fg) — the
+ * same luminance-tuned foreground the active nav pill uses — so the label keeps
+ * contrast under any accent pick. Keyboard focus falls back to the global
+ * button:focus-visible ring. */
+.aiobs-crosslink {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--blue);
+  background: color-mix(in oklab, var(--blue) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--blue) 28%, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.aiobs-crosslink:hover {
+  background: var(--blue);
+  color: var(--accent-fg);
+  border-color: var(--blue);
+}
+
 /* Topology graph canvas: user-resizable height. Height lives on the class (not
    inline) so React re-renders don't reset the user's drag; the browser writes
    an inline height when resized, which wins. */

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
+import { PageIntro } from "../../components/PageIntro";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
 import { ScanScope } from "../../scope/ScanReportContext";
@@ -120,6 +121,18 @@ export const SummaryPage = () => {
         gap={24}
         style={{ padding: "18px 20px 28px" }}
       >
+        {/* Page title + one-line purpose + cross-link to Pulse (IA — Information-3).
+            Summary is the executive, at-rest scorecard; the pill states the
+            relationship and hands off to Pulse for live operations, carrying the
+            active scope over. */}
+        <PageIntro
+          title="Summary"
+          subtitle="The executive, at-rest scorecard — fleet grade plus the headline KPIs for AI health, spend, and quality across every workload in scope."
+          crossTo="/pulse"
+          crossLead="For live operations — the architecture map and real-time signals — open"
+          crossLabel="Pulse →"
+          crossTitle="Go to Pulse (live operations) with the current scope"
+        />
         {firstError && <ErrorBanner error={firstError} onRetry={retryHero} />}
 
         {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}

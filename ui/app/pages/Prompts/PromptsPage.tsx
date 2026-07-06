@@ -352,7 +352,7 @@ export const PromptsPage = () => {
         {/* Page identity + one-line purpose (IA): an in-page "you are here"
             beyond the active nav pill, stating what this page answers. */}
         <Flex flexDirection="column" gap={2}>
-          <Heading level={1} style={{ fontSize: 18, fontWeight: 600 }}>
+          <Heading level={1} style={{ fontSize: 18, fontWeight: 700 }}>
             Prompts
           </Heading>
           <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>

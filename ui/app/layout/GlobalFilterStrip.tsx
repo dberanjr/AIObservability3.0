@@ -38,6 +38,31 @@ const LabeledField = ({ label, children }: LabeledFieldProps) => (
 );
 
 /**
+ * Secondary, de-emphasised variant of LabeledField for the power-user
+ * Grail-cost knobs (Sampling / Scan limit). Same control at full contrast, but
+ * a smaller, dimmer label and tighter min-width so it reads as subordinate to
+ * the primary Segments / Filters scope controls (IA — Information-10). The
+ * control itself is untouched (native <select>, so it stays in the tab order).
+ */
+const AdvancedField = ({ label, children }: LabeledFieldProps) => (
+  <Flex flexDirection="column" gap={2} style={{ minWidth: 90 }}>
+    <Text
+      style={{
+        fontSize: 9,
+        fontWeight: 600,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        color: "var(--text-3)",
+        opacity: 0.75,
+      }}
+    >
+      {label}
+    </Text>
+    {children}
+  </Flex>
+);
+
+/**
  * Renders the names of currently-selected segments next to the
  * SegmentSelector trigger so the active scope is visible without opening
  * the dropdown. Strato's `useSegments` only returns segment IDs, so we
@@ -191,19 +216,13 @@ export const GlobalFilterStrip = () => {
           flexWrap: "wrap",
         }}
       >
+        {/* Primary scope controls — Segments + Filters carry full weight and
+            sit together on the left as the two everyday knobs. */}
         <LabeledField label="Segments">
           <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
             <SegmentSelector variant="compact" />
             <SelectedSegmentNames />
           </Flex>
-        </LabeledField>
-
-        <LabeledField label="Sampling">
-          <SamplingSegmented />
-        </LabeledField>
-
-        <LabeledField label="Scan limit">
-          <ScanLimitSegmented />
         </LabeledField>
 
         <LabeledField label="Filters">
@@ -220,6 +239,27 @@ export const GlobalFilterStrip = () => {
         </LabeledField>
 
         <Flex flexGrow={1} style={{ minWidth: 0 }} />
+
+        {/* Secondary / advanced Grail-cost knobs — demoted (smaller, dimmer
+            labels, behind a divider) so they no longer sit at equal weight with
+            the primary scope controls (IA — Information-10). Most users never
+            touch Sampling / Scan limit. */}
+        <Flex
+          alignItems="flex-end"
+          gap={12}
+          style={{
+            paddingLeft: 16,
+            borderLeft: "1px solid var(--border)",
+          }}
+        >
+          <AdvancedField label="Sampling">
+            <SamplingSegmented />
+          </AdvancedField>
+
+          <AdvancedField label="Scan limit">
+            <ScanLimitSegmented />
+          </AdvancedField>
+        </Flex>
 
         <Flex gap={8} alignItems="center">
           <Button

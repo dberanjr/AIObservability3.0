@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { useSearchParams } from "react-router-dom";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { ErrorBanner } from "../../components/ErrorState";
-import { DataGapNote } from "../../components/DataGapNote";
+import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import {
   DEFAULT_FINDING_INTENTS,
@@ -173,13 +174,25 @@ export const ExplorerPage = () => {
           onFilterChange={setFilter}
         />
         <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
+          {/* Page title + one-line purpose (IA): a consistent anchor at the top
+              of the page so it reads the same as the other tabs. */}
+          <Flex flexDirection="column" gap={2}>
+            <Heading level={1} style={{ fontSize: 18, fontWeight: 700 }}>
+              Explorer
+            </Heading>
+            <Text style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.4 }}>
+              Every AI service in scope — cost, tokens, latency and errors by
+              service and model, with retrieval and framework attribution.
+            </Text>
+          </Flex>
           {firstError && <ErrorBanner error={firstError} />}
           <ExplorerTiles
             summary={summary}
             isLoading={aiServices.isLoading}
             onRevealSection={revealSection}
           />
-          <DataGapNote
+          <CollapsibleDataGapNote
+            summary="Data note: “AI Service” is inferred from gen_ai.* spans · framework attribution is heuristic"
             message="An “AI Service” here is any monitored service emitting gen_ai.* spans (resolved from service.name / dt.entity.service). Framework attribution (LangGraph, AgentExecutor, RunnableSequence…) is inferred from span names/kinds because no explicit framework tag is emitted, so it can be approximate."
             attributes={["gen_ai.framework"]}
             bestPractice="Emit a stable gen_ai.framework tag on agent spans so framework attribution and the framework filter are exact rather than heuristic. See INSTRUMENTATION-REQUIREMENTS.md P2.4."

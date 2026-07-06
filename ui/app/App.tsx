@@ -5,7 +5,6 @@ import { Route, Routes } from "react-router-dom";
 import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
 import { RedirectKeepingSearch } from "./lib/nav";
-import { Home } from "./pages/Home";
 import { AgentsPage } from "./pages/Agents/AgentsPage";
 import { ExplorerPage } from "./pages/Explorer/ExplorerPage";
 import { ModelsPage } from "./pages/Models/ModelsPage";
@@ -70,7 +69,8 @@ export const App = () => {
                 <Route path="/attributes" element={<AttributeAuditPage />} />
                 {/* Folded tabs — redirect old deep-links to their new homes.
                     Tools + Topology → Agents, MCP Health → Pulse, FinOps →
-                    Models / FinOps. Query string (timeframe, focus) carries. */}
+                    Models (FinOps is an in-page section on the Models tab now).
+                    Query string (timeframe, focus) carries. */}
                 <Route
                   path="/tools"
                   element={<RedirectKeepingSearch to="/agents" />}
@@ -89,7 +89,6 @@ export const App = () => {
                 />
                 <Route path="/about" element={<About />} />
                 <Route path="/field-notes" element={<FieldNotesPage />} />
-                <Route path="/home" element={<Home />} />
               </Routes>
             </div>
             <AppFooter />

@@ -8,24 +8,56 @@ import { useEditLayout } from "../layout/EditLayoutContext";
 import { ModelPricingButton } from "../pricing/ModelPricingButton";
 
 /**
- * Top-nav tabs, in display order. Pulse is also the index ("/") route.
+ * Primary navigation, grouped into four labeled clusters and rendered as a
+ * dedicated tab strip beneath the app bar (IA — see Information-1):
+ *   OVERVIEW — Summary, Pulse                      (the front-door dashboards)
+ *   ANALYZE  — Explorer, Agents, Models, Prompts   (per-entity analytics)
+ *   AUDIT    — Attributes                          (instrumentation coverage)
+ * Field Notes + About are trailing utility items — right-aligned, outside any
+ * group label — so low-frequency meta pages no longer compete with the core
+ * analytics tabs. Folded routes still resolve: Tools/Topology → Agents, MCP
+ * Health → Pulse, FinOps → Models (now an in-page section on the Models tab).
  *
- * Five-tab structure (the redesign): Tools + Topology fold into Agents,
- * MCP Health folds into Pulse, and FinOps merges into Models ("Models /
- * FinOps"). The bar stays visible on every route so every tab is reachable
- * from every other; the Pulse architecture map is a *secondary* router on top
- * of this bar, never a replacement for it.
+ * Every tab is a real <Link>, so routing + keyboard nav are native and the
+ * active tab reuses the .aiobs-nav-active pill (accent fill + var(--accent-fg)
+ * text). The strip stays visible on every route so every tab is reachable from
+ * every other; the Pulse architecture map is a *secondary* router on top of it.
  */
-const NAV_ITEMS: { to: string; label: string }[] = [
-  { to: "/summary", label: "Summary" },
-  { to: "/pulse", label: "Pulse" },
-  { to: "/explorer", label: "Explorer" },
-  { to: "/agents", label: "Agents" },
-  { to: "/prompts", label: "Prompts" },
-  { to: "/models", label: "Models / FinOps" },
-  { to: "/attributes", label: "Attributes" },
-  { to: "/field-notes", label: "Field Notes" },
-  { to: "/about", label: "About" },
+type NavItem = { to: string; label: string };
+type NavGroup = { id: string; label?: string; utility?: boolean; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    items: [
+      { to: "/summary", label: "Summary" },
+      { to: "/pulse", label: "Pulse" },
+    ],
+  },
+  {
+    id: "analyze",
+    label: "Analyze",
+    items: [
+      { to: "/explorer", label: "Explorer" },
+      { to: "/agents", label: "Agents" },
+      { to: "/models", label: "Models" },
+      { to: "/prompts", label: "Prompts" },
+    ],
+  },
+  {
+    id: "audit",
+    label: "Audit",
+    items: [{ to: "/attributes", label: "Attributes" }],
+  },
+  {
+    id: "utility",
+    utility: true,
+    items: [
+      { to: "/field-notes", label: "Field Notes" },
+      { to: "/about", label: "About" },
+    ],
+  },
 ];
 
 export const Header = () => {
@@ -44,50 +76,81 @@ export const Header = () => {
   };
 
   return (
-    <AppHeader>
-      <AppHeader.Navigation>
-        <AppHeader.Logo as={Link} to={{ pathname: "/", search }} />
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item.to);
-          return (
-            <AppHeader.NavigationItem
-              key={item.to}
-              as={Link}
-              to={{ pathname: item.to, search }}
-              // Deliberately NOT using isSelected: Strato's selected state draws
-              // an ::after underline we don't want. Our .aiobs-nav-active pill
-              // (solid fill + white text) is the highlight instead.
-              aria-current={active ? "page" : undefined}
-              className={active ? "aiobs-nav-active" : undefined}
+    <>
+      <AppHeader>
+        {/* The pills moved to the grouped strip below; Navigation now carries
+            only the logo, keeping the app bar for identity + global actions. */}
+        <AppHeader.Navigation>
+          <AppHeader.Logo as={Link} to={{ pathname: "/", search }} />
+        </AppHeader.Navigation>
+        <AppHeader.ActionItems>
+          <HeaderTimeframe />
+          <ModelPricingButton />
+          <AppHeader.ActionButton
+            prefixIcon={<GridIcon />}
+            isSelected={editLayout}
+            onClick={toggleEditLayout}
+            aria-label="Customize layout"
+            aria-pressed={editLayout}
+          >
+            Customize
+          </AppHeader.ActionButton>
+          <AppHeader.ActionButton
+            prefixIcon={<SettingIcon />}
+            isSelected={isPanelOpen}
+            onClick={togglePanel}
+            aria-label="Tweaks"
+            aria-pressed={isPanelOpen}
+            data-aiobs-tweaks-trigger=""
+          >
+            Tweaks
+          </AppHeader.ActionButton>
+        </AppHeader.ActionItems>
+      </AppHeader>
+
+      {/* Grouped primary tab strip (IA — Information-1). Lives on its own row
+          under the app bar so the four clusters + labels + dividers have room
+          and no longer crowd the logo / timeframe / pricing / Tweaks actions.
+          The region scrolls horizontally when the viewport is too narrow rather
+          than wrapping or collapsing into a menu, so every tab stays reachable. */}
+      <nav className="aiobs-tabnav" aria-label="Primary">
+        <div className="aiobs-tabnav-scroll">
+          {NAV_GROUPS.map((group, groupIndex) => (
+            <div
+              key={group.id}
+              className={
+                "aiobs-tabnav-group" +
+                (group.utility ? " aiobs-tabnav-group--utility" : "") +
+                (!group.utility && groupIndex > 0
+                  ? " aiobs-tabnav-group--divided"
+                  : "")
+              }
             >
-              {item.label}
-            </AppHeader.NavigationItem>
-          );
-        })}
-      </AppHeader.Navigation>
-      <AppHeader.ActionItems>
-        <HeaderTimeframe />
-        <ModelPricingButton />
-        <AppHeader.ActionButton
-          prefixIcon={<GridIcon />}
-          isSelected={editLayout}
-          onClick={toggleEditLayout}
-          aria-label="Customize layout"
-          aria-pressed={editLayout}
-        >
-          Customize
-        </AppHeader.ActionButton>
-        <AppHeader.ActionButton
-          prefixIcon={<SettingIcon />}
-          isSelected={isPanelOpen}
-          onClick={togglePanel}
-          aria-label="Tweaks"
-          aria-pressed={isPanelOpen}
-          data-aiobs-tweaks-trigger=""
-        >
-          Tweaks
-        </AppHeader.ActionButton>
-      </AppHeader.ActionItems>
-    </AppHeader>
+              {group.label && (
+                <span className="aiobs-tabnav-label">{group.label}</span>
+              )}
+              {group.items.map((item) => {
+                const active = isActive(item.to);
+                return (
+                  <Link
+                    key={item.to}
+                    to={{ pathname: item.to, search }}
+                    // Reuse the .aiobs-nav-active pill (accent fill + accessible
+                    // var(--accent-fg) text) for the current tab; a real <Link>
+                    // keeps routing + keyboard focus native.
+                    aria-current={active ? "page" : undefined}
+                    className={
+                      "aiobs-tabnav-pill" + (active ? " aiobs-nav-active" : "")
+                    }
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </nav>
+    </>
   );
 };

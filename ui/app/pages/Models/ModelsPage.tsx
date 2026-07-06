@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { ErrorBanner } from "../../components/ErrorState";
-import { DataGapNote } from "../../components/DataGapNote";
+import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
@@ -66,7 +66,8 @@ export const ModelsPage = () => {
           onChange={setTypeFilter}
         />
         <ModelsTilesRow models={filtered} isLoading={isLoading} />
-        <DataGapNote
+        <CollapsibleDataGapNote
+          summary="Data caveat: quality columns unavailable · models compare on cost & latency only"
           message="Quality columns (eval score, faithfulness, hallucination) and 'cheapest model meeting a quality SLO' aren't shown: no evaluation scores are emitted, so models can only be compared on cost and latency today."
           attributes={["gen_ai.evaluation.score", "gen_ai.evaluation.faithfulness", "gen_ai.evaluation.hallucination"]}
           bestPractice="Run an eval step (LLM-as-judge / Ragas / DeepEval) and write gen_ai.evaluation.* back onto the LLM span. Then quality-per-dollar and quality A/B across model versions become directly queryable. See INSTRUMENTATION-REQUIREMENTS.md P1.2."

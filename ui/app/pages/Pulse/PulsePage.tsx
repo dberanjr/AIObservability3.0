@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
-import { DataGapNote } from "../../components/DataGapNote";
+import { PageIntro } from "../../components/PageIntro";
+import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
 import { LatencyTierPanel } from "../Agents/LatencyTierPanel";
@@ -20,6 +21,7 @@ import { TokenEfficiencyTiles } from "./TokenEfficiencyTiles";
 import { TokenConsumptionChart } from "./TokenConsumptionChart";
 import { TopFindingsStrip } from "./TopFindingsStrip";
 import { TopModelsCard } from "./TopModelsPanel";
+import { PulseHealthHeadline } from "./PulseHealthHeadline";
 import { usePulseSummary } from "./usePulseSummary";
 
 export const PulsePage = () => {
@@ -38,7 +40,25 @@ export const PulsePage = () => {
         gap={24}
         style={{ padding: "18px 20px 80px" }}
       >
+        {/* Page title + one-line purpose + cross-link to Summary (IA — Information-3).
+            Pulse is the live-operations surface; the pill states the relationship
+            and hands off to Summary for the executive rollup, carrying the active
+            scope over. */}
+        <PageIntro
+          title="Pulse"
+          subtitle="The live-operations surface — the architecture map, live signal tiles, and the findings worth acting on right now across the AI stack."
+          crossTo="/summary"
+          crossLead="For the executive rollup — the fleet grade and at-rest scorecard — open"
+          crossLabel="Summary →"
+          crossTitle="Go to Summary (executive rollup) with the current scope"
+        />
         {firstError && <ErrorBanner error={firstError} />}
+        {/* Top-line health answer (IA — Information-9): the same fleet grade +
+            trust index the Summary hero computes, so Pulse leads with one "is it
+            healthy right now" verdict before the map and the live tiles. It leads
+            with the GRADE (which the map's at-rest tier verdict below does not
+            show), so the two are complementary rather than duplicative. */}
+        <PulseHealthHeadline summary={summary} />
         {/* Hero: the architecture map (priority) with the summary tiles in a
             two-column side panel. The tiles drop below the map when the
             viewport narrows (see .aiobs-pulse-hero). */}
@@ -46,7 +66,8 @@ export const PulsePage = () => {
           <ArchitectureMap />
           <SummaryTilesRow summary={summary} initialColumns={2} />
         </div>
-        <DataGapNote
+        <CollapsibleDataGapNote
+          summary="Data caveats: error rate now includes logical failures · quality, TTFT & per-session spend unavailable"
           message="Error rate now includes logical failures (refusals / content-filter), not just HTTP/exception errors. Quality scoring and TTFT are still unavailable — no evaluation scores or time-to-first-token attributes are emitted — and spend per session/user can't be computed without identity + proxy trace propagation."
           attributes={["gen_ai.evaluation.score", "gen_ai.response.ttft", "session.id", "gen_ai.user"]}
           bestPractice="Emit evaluation scores (P1.2), a TTFT attribute (P1.5), session/user identity (P1.1), and propagate trace context across the LLM proxy (P0.1). See INSTRUMENTATION-REQUIREMENTS.md."
