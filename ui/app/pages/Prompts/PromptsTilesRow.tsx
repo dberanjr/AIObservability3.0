@@ -6,6 +6,7 @@ import { fmtCount, fmtMs, fmtTokens } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { usePromptSummary } from "./usePromptSummary";
+import { isScopeFiltered } from "./filterScope";
 import type { PromptsFilter } from "./usePrompts";
 
 interface TileProps {
@@ -85,12 +86,24 @@ const Tile = ({ label, value, sub, emphasis = "default", onClick, active }: Tile
 export interface PromptsTilesRowProps {
   filter?: PromptsFilter;
   onFilterChange?: (next: PromptsFilter) => void;
+  /** Active problem-pattern focus (raw `?focus`) — scopes the totals (Prompts-2). */
+  focus?: string | null;
 }
 
+const ScopeCaption = () => (
+  <Text style={{ fontSize: 11, color: "var(--text-3)", padding: "0 16px 12px" }}>
+    Totals reflect the current scope. Free-text search and agent filters aren't
+    applied here, so the list below may be a narrower subset.
+  </Text>
+);
+
 // Body owns the query (usePromptSummary) so it only runs while the section is
-// expanded — CollapsibleCard renders children solely when open.
-const PromptsTilesBody = ({ filter, onFilterChange }: PromptsTilesRowProps) => {
-  const summary = usePromptSummary();
+// expanded — CollapsibleCard renders children solely when open. Threads the
+// sidebar filter + focus so the tiles respond to the same scope as the list
+// (Prompts-2).
+const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProps) => {
+  const summary = usePromptSummary(filter, focus);
+  const filtered = isScopeFiltered(filter, focus);
   if (summary.isLoading && summary.total === 0) {
     return (
       <div
@@ -114,6 +127,7 @@ const PromptsTilesBody = ({ filter, onFilterChange }: PromptsTilesRowProps) => {
   }
 
   return (
+    <>
     <div
       style={{
         display: "grid",
@@ -212,6 +226,8 @@ const PromptsTilesBody = ({ filter, onFilterChange }: PromptsTilesRowProps) => {
         active={!!filter?.onlyTruncated}
       />
     </div>
+    {filtered && <ScopeCaption />}
+    </>
   );
 };
 

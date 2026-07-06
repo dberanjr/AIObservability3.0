@@ -100,9 +100,17 @@ export interface LensCell {
 export const resolveCell = (view: NodeView, lensId: LensId | null): LensCell => {
   if (lensId) {
     const cell = view.cells[lensId];
-    if (cell) return cell;
-    // Lens active but this tier has no reading for it → muted placeholder.
-    return { status: "muted", sub: view.sub, badges: [] };
+    if (cell && cell.headline !== undefined) return cell;
+    // Lens active but this tier has no numeric reading for it. Keep the base
+    // headline (rendered dimmed via the muted status) with the lens caption as
+    // the sub-line, instead of dropping the number and falling to prose — so the
+    // map stays symmetric under a lens rather than turning text-heavy.
+    return {
+      status: "muted",
+      headline: view.headline,
+      sub: cell?.sub ?? view.sub,
+      badges: [],
+    };
   }
   return { status: view.status, headline: view.headline, sub: view.sub, badges: view.badges };
 };

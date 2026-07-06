@@ -4,6 +4,7 @@ import { Modal } from "@dynatrace/strato-components/overlays";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Checkbox } from "@dynatrace/strato-components/forms";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   ServicesIcon,
   AgentIcon,
@@ -24,6 +25,7 @@ import {
   type SpanCategory,
   type IndicatorState,
 } from "./TraceTree";
+import { handleRadioGroupKeyDown, radioTabIndex } from "./radioNav";
 import type { TraceSpan } from "./useTraceSpans";
 
 /**
@@ -544,7 +546,7 @@ const TopologyGraph = ({
           type="button"
           style={{ ...iconBtnStyle, width: pngState === "idle" ? 26 : 64, color: pngState !== "idle" ? "var(--green-2)" : "var(--text-2)", gap: 4 }}
           title="Copy graph as PNG"
-          onClick={copyPng}
+          onClick={() => void copyPng()}
         >
           <ImageIcon size={15} />
           {pngState === "copied" ? <span style={{ fontSize: 11 }}>Copied</span> : pngState === "saved" ? <span style={{ fontSize: 11 }}>Saved</span> : null}
@@ -689,6 +691,66 @@ const TopologyGraph = ({
   );
 };
 
+const fmtMetric = (v: number, by: SizeBy): string =>
+  by === "duration" ? fmtMs(v) : by === "cost" ? fmtCost(v) : fmtTokens(v);
+
+/**
+ * Quantitative key for the graph (Prompts-13): what the blue entry ring/edges
+ * and red error ring mean, plus — when Size-by is active — the magnitude range
+ * a circle's size encodes, so a large node has a stated scale.
+ */
+const TopoLegend = ({ layout, sizeBy }: { layout: Layout; sizeBy: SizeBy }) => {
+  const metricLabel =
+    SIZE_OPTIONS.find((o) => o.value === sizeBy)?.label ?? "";
+  let sizeNote: string | null = null;
+  if (sizeBy !== "none") {
+    const vals = layout.nodes
+      .map((n) => metricOf(n, sizeBy))
+      .filter((v) => v > 0);
+    if (vals.length) {
+      sizeNote = `size ∝ ${metricLabel.toLowerCase()}: ${fmtMetric(
+        Math.min(...vals),
+        sizeBy,
+      )}–${fmtMetric(Math.max(...vals), sizeBy)}`;
+    }
+  }
+  const Ring = ({ color }: { color: string }) => (
+    <span
+      aria-hidden
+      style={{
+        width: 11,
+        height: 11,
+        borderRadius: "50%",
+        border: `2px solid ${color}`,
+        background: "var(--surface)",
+        flex: "0 0 auto",
+      }}
+    />
+  );
+  return (
+    <Flex
+      alignItems="center"
+      gap={12}
+      flexWrap="wrap"
+      style={{ fontSize: 11, color: "var(--text-3)" }}
+    >
+      <Flex alignItems="center" gap={6}>
+        <Ring color="var(--blue)" />
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+          trace entry (blue ring &amp; edges)
+        </Text>
+      </Flex>
+      <Flex alignItems="center" gap={6}>
+        <Ring color="var(--red)" />
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>errored node</Text>
+      </Flex>
+      {sizeNote && (
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sizeNote}</Text>
+      )}
+    </Flex>
+  );
+};
+
 const BottomControls = ({
   indicators,
   setIndicators,
@@ -741,6 +803,7 @@ const BottomControls = ({
       <div
         role="radiogroup"
         aria-label="Size nodes by"
+        onKeyDown={handleRadioGroupKeyDown}
         style={{ display: "inline-flex", padding: 2, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 999 }}
       >
         {SIZE_OPTIONS.map((o) => {
@@ -751,6 +814,7 @@ const BottomControls = ({
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active)}
               onClick={() => setSizeBy(o.value)}
               style={{
                 all: "unset",
@@ -794,9 +858,10 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
 
   if (isLoading) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading topology…</Text>
-      </div>
+      <Flex flexDirection="column" gap={8} style={{ padding: 12 }}>
+        <Skeleton style={{ height: 200, borderRadius: 8 }} />
+        <Skeleton style={{ height: 16, width: "40%" }} />
+      </Flex>
     );
   }
   if (spans.length === 0) {
@@ -824,6 +889,7 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
         height={440}
         onMaximize={() => setMaximized(true)}
       />
+      <TopoLegend layout={layout} sizeBy={sizeBy} />
       {controls}
 
       <Modal
@@ -843,6 +909,7 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
             sizeBy={sizeBy}
             height={Math.round(window.innerHeight * 0.62)}
           />
+          <TopoLegend layout={layout} sizeBy={sizeBy} />
           {controls}
         </Flex>
       </Modal>

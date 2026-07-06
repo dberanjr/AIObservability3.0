@@ -7,6 +7,9 @@ import {
   OpenSidebarIcon,
   FilterIcon,
   XmarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  WarningIcon,
 } from "@dynatrace/strato-icons";
 import { promptsFocusChip } from "./focus";
 import { ErrorBanner } from "../../components/ErrorState";
@@ -19,7 +22,120 @@ import { GuardrailsStrip } from "../../guardrails/GuardrailsStrip";
 import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
 import { decodePromptsFilter } from "./findingFilter";
+import { describeFilter } from "./filterScope";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+
+/**
+ * A single dismissible/expandable "Data coverage" callout that folds the two
+ * instrumentation caveats (metadata-only notice + telemetry-gap note) into one
+ * collapsed line, instead of stacking two always-on gray/amber blocks above the
+ * table (Prompts-10). Collapsed + dismissed state persist across visits.
+ */
+const DataCoverageCallout = ({
+  showMetadata,
+  hasContent,
+  hasEval,
+}: {
+  showMetadata: boolean;
+  hasContent: boolean;
+  hasEval: boolean;
+}) => {
+  const [dismissed, setDismissed] = usePersistedState<boolean>(
+    "ai-obs.prompts-coverage-dismissed",
+    false,
+  );
+  const [open, setOpen] = usePersistedState<boolean>(
+    "ai-obs.prompts-coverage-open",
+    false,
+  );
+  if (dismissed) return null;
+  const Chevron = open ? ChevronDownIcon : ChevronRightIcon;
+  return (
+    <div
+      style={{
+        borderRadius: 6,
+        border: "1px solid color-mix(in oklab, var(--amber) 35%, transparent)",
+        background: "color-mix(in oklab, var(--amber) 7%, var(--surface))",
+      }}
+    >
+      <Flex alignItems="center" gap={8} style={{ padding: "6px 10px" }}>
+        <WarningIcon size={14} style={{ color: "var(--amber)", flex: "0 0 auto" }} />
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flex: 1,
+            minWidth: 0,
+            color: "var(--text)",
+          }}
+        >
+          <Chevron size={14} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
+          <Text style={{ fontSize: 11.5 }}>
+            <strong>Data coverage</strong> — some AI telemetry is missing on this
+            tenant (quality scoring, content capture, conversation grouping).
+          </Text>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss data-coverage notice"
+          title="Dismiss"
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "inline-flex",
+            color: "var(--text-3)",
+            flex: "0 0 auto",
+          }}
+        >
+          <XmarkIcon size={12} />
+        </button>
+      </Flex>
+      {open && (
+        <Flex flexDirection="column" gap={8} style={{ padding: "0 12px 12px 34px" }}>
+          {showMetadata && (
+            <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+              <strong>Metadata-only.</strong> This environment doesn't instrument
+              {!hasContent && (
+                <>
+                  {" "}prompt/response content (<code>gen_ai.prompt.*</code> /{" "}
+                  <code>gen_ai.completion.*</code>)
+                </>
+              )}
+              {!hasContent && !hasEval ? " or" : ""}
+              {!hasEval && (
+                <>
+                  {" "}evaluation scores (<code>gen_ai.evaluation.*</code>)
+                </>
+              )}
+              , so the table shows LLM-call metadata (model, tokens, latency,
+              agent) and the masking / quality-analytics panels stay inert until
+              those attributes are emitted.
+            </Text>
+          )}
+          <DataGapNote
+            tone="warn"
+            message="Multi-turn conversation grouping is unavailable and prompts often resolve to a single app/agent: no conversation id is emitted, and prompt content is captured on only a small share of spans. Prompts also can't be attributed to an agent because gen_ai.agent.name isn't set on LLM spans."
+            attributes={[
+              "gen_ai.conversation.id",
+              "gen_ai.prompt.0.content (sparse)",
+              "gen_ai.agent.name (on LLM spans)",
+            ]}
+            bestPractice="Emit a stable gen_ai.conversation.id per dialogue, raise prompt/response content capture coverage (behind privacy controls), and propagate trace context / agent name to LLM spans. See INSTRUMENTATION-REQUIREMENTS.md P1.1 and P2.6."
+            href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
+            hrefLabel="OTel GenAI spans"
+          />
+        </Flex>
+      )}
+    </div>
+  );
+};
 
 export const PromptsPage = () => {
   const { search, pathname } = useLocation();
@@ -77,14 +193,17 @@ export const PromptsPage = () => {
   // an old search string).
   const clearFocusRef = useRef(clearFocus);
   clearFocusRef.current = clearFocus;
+  // Reset everything: sidebar filter, the applied-filter ref, and the URL focus.
+  // Shared by the toolbar's global Reset and the table's filtered-empty recovery
+  // action (Prompts-7).
+  const resetAll = useCallback(() => {
+    appliedFilterRef.current = "";
+    setFilter({});
+    clearFocusRef.current();
+  }, []);
   useEffect(
-    () =>
-      registerResetHandler(() => {
-        appliedFilterRef.current = "";
-        setFilter({});
-        clearFocusRef.current();
-      }),
-    [registerResetHandler],
+    () => registerResetHandler(resetAll),
+    [registerResetHandler, resetAll],
   );
   const [view, setView] = useState<PromptView>("stream");
   // Sticky sidebar height must equal the space from its (pinned) top to the
@@ -280,53 +399,22 @@ export const PromptsPage = () => {
             </span>
           </Flex>
         )}
-        {showMetadataNotice && (
-          <Flex
-            alignItems="flex-start"
-            gap={8}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 6,
-              background: "color-mix(in oklab, var(--amber) 10%, var(--surface))",
-              border: "1px solid color-mix(in oklab, var(--amber) 40%, transparent)",
-            }}
-          >
-            <Text style={{ fontSize: 11.5, color: "var(--text)" }}>
-              <strong>Metadata-only.</strong> This environment doesn't instrument
-              {!hasContent && (
-                <>
-                  {" "}prompt/response content (<code>gen_ai.prompt.*</code> /{" "}
-                  <code>gen_ai.completion.*</code>)
-                </>
-              )}
-              {!hasContent && !hasEval ? " or" : ""}
-              {!hasEval && (
-                <>
-                  {" "}evaluation scores (<code>gen_ai.evaluation.*</code>)
-                </>
-              )}
-              , so the table shows LLM-call metadata (model, tokens, latency,
-              agent) and the masking / quality-analytics panels stay inert until
-              those attributes are emitted.
-            </Text>
-          </Flex>
-        )}
         {/* Guardrails gate the prompt/response I/O analyzed below — surface the
             fleet intervention context (Bedrock metrics; full view on Pulse). */}
         <GuardrailsStrip />
         <PromptsTilesRow
           filter={filter}
           onFilterChange={setFilter}
+          focus={focus}
         />
-        <DataGapNote
-          tone="warn"
-          message="Multi-turn conversation grouping is unavailable and prompts often resolve to a single app/agent: no conversation id is emitted, and prompt content is captured on only a small share of spans. Prompts also can't be attributed to an agent because gen_ai.agent.name isn't set on LLM spans."
-          attributes={["gen_ai.conversation.id", "gen_ai.prompt.0.content (sparse)", "gen_ai.agent.name (on LLM spans)"]}
-          bestPractice="Emit a stable gen_ai.conversation.id per dialogue, raise prompt/response content capture coverage (behind privacy controls), and propagate trace context / agent name to LLM spans. See INSTRUMENTATION-REQUIREMENTS.md P1.1 and P2.6."
-          href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
-          hrefLabel="OTel GenAI spans"
+        {/* One consolidated, dismissible coverage callout instead of two stacked
+            always-on caveat blocks (Prompts-10). */}
+        <DataCoverageCallout
+          showMetadata={showMetadataNotice}
+          hasContent={hasContent}
+          hasEval={hasEval}
         />
-        <PromptQualityAnalytics />
+        <PromptQualityAnalytics filter={filter} focus={focus} rows={filtered} />
 
         <PromptsTable
           view={view}
@@ -335,6 +423,8 @@ export const PromptsPage = () => {
           isLoading={isLoading}
           privacy={privacy}
           onRefresh={refetch}
+          onResetFilters={resetAll}
+          filterSummary={describeFilter(filter, focusChip?.label ?? null)}
         />
       </Flex>
     </div>

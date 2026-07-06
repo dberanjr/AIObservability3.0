@@ -129,6 +129,9 @@ const DrawerChart = ({
   format: (n: number) => string;
 }) => {
   if (!data || data.length < 2) return null;
+  // Skip an all-zero series (e.g. a tier with no errors) so the drawer doesn't
+  // stack a flat, low-signal line for every metric a tier happens not to emit.
+  if (!data.some((v) => v > 0)) return null;
   return (
     <div className="am-dsection">
       <div className="am-dsection-h">{title}</div>

@@ -36,6 +36,7 @@ import { dqlTimeArg, LOGICAL_ERROR_EXPR } from "../../../scope/queries";
 import { AI_SPAN_POPULATION, dbSystemIsVectorStore } from "../../../detection/attributeFields";
 import { fmtCount, fmtTokens, fmtMs, fmtUSD, fmtPercent, toNum } from "../../../data/format";
 import { usePulseSeries, type PulseSeries } from "./usePulseSeries";
+import { perceptualEdgeWeight } from "./edgeScale";
 import { useSpendBreakdown } from "../useSpendBreakdown";
 import { useClientUpstream, type ClientUpstream } from "./useClientUpstream";
 import type { Finding } from "../../../components/drawers/types";
@@ -92,6 +93,8 @@ export interface ArchData {
   empty: boolean;
   isLoading: boolean;
   error?: Error;
+  /** Re-run the map's own summarize (surfaced on the inline error state). */
+  refetch: () => void;
 }
 
 interface Rec {
@@ -127,7 +130,6 @@ const WARN_LOOP_PCT = 5;
 const CRIT_LOOP_PCT = 20;
 const WARN_MS = 2000;
 const CRIT_MS = 5000;
-const EDGE_FLOOR = 0.12;
 
 const rateStatus = (r: number): NodeStatus =>
   r >= CRIT_ERR ? "critical" : r >= WARN_ERR ? "warning" : "healthy";
@@ -208,7 +210,7 @@ export const useArchitectureData = (): ArchData => {
   const { anomalies, isLoading: anomLoading } = useAnomalies();
   const clientUpstream = useClientUpstream();
 
-  const { data, isLoading, error } = useScopedDql<Rec>(
+  const { data, isLoading, error, refetch } = useScopedDql<Rec>(
     buildQuery(scope.timeframe.from, scope.timeframe.to ?? "now()"),
     { staleTime: 60_000 },
   );
@@ -379,8 +381,10 @@ export const useArchitectureData = (): ArchData => {
       p90.agent = aP90;
       errCount.agent = num(rec.agentErr);
       if (agentRuntime > 0) {
+        // The headline colour already conveys error status (Pulse-6 status tag +
+        // tinted number), so the plain "err%" pill is dropped from the card; the
+        // rate stays available in the drawer's Errors chart and the Errors lens.
         const baseBadges: Badge[] = [
-          { text: `${fmtPercent(aErr * 100)} err`, tone: aErr >= WARN_ERR ? "warning" : "neutral" },
           { text: `p90 ${fmtMs(aP90)}`, tone: "neutral" },
         ];
         const runaway = finding("agent", ["runaway-agent"]);
@@ -419,8 +423,8 @@ export const useArchitectureData = (): ArchData => {
           state: "live",
           headline: fmtCount(ex(tS)),
           sub: "tool calls",
+          // "err%" pill dropped — the headline colour + status tag convey it (Pulse-6).
           badges: [
-            { text: `${fmtPercent(tErr * 100)} err`, tone: tErr >= WARN_ERR ? "warning" : "neutral" },
             { text: `p90 ${fmtMs(tP90)}`, tone: "neutral" },
           ],
           findings: findingBadge("tools").n,
@@ -452,10 +456,11 @@ export const useArchitectureData = (): ArchData => {
       if (lS > 0) {
         let s = rateStatus(lErr);
         if (has429 || truncRate >= WARN_ERR) s = worse(s, "warning");
+        // Card badges are capped to the headline cost figure plus any anomalous
+        // signals (truncation / 429s, appended below). Raw tokens + p90 move to
+        // the drawer's Tokens / Latency charts so the busiest tile stays legible.
         const baseBadges: Badge[] = [
           { text: `≈ ${usd}`, tone: "cost" },
-          { text: `${fmtTokens(tokens)} tok`, tone: "neutral" },
-          { text: `p90 ${fmtMs(lP90)}`, tone: "neutral" },
         ];
         const errBadges: Badge[] = [];
         if (truncRate > 0) {
@@ -637,7 +642,9 @@ export const useArchitectureData = (): ArchData => {
       const key = edgeKey(e.from, e.to);
       const c = count[e.to];
       if (c != null && maxCount > 0) {
-        edgeWeight[key] = c > 0 ? Math.max(EDGE_FLOOR, c / maxCount) : EDGE_FLOOR;
+        // √-scaled so mid-volume edges stay distinguishable from the busiest one
+        // instead of all collapsing to the floor (see edgeScale.ts).
+        edgeWeight[key] = perceptualEdgeWeight(c, maxCount);
         edgeRate[key] = c > 0 ? `${fmtCount(ex(c))} ${noun[e.to] ?? "spans"}` : "no spans in scope";
       } else {
         edgeWeight[key] = e.baseW;
@@ -708,9 +715,13 @@ export const useArchitectureData = (): ArchData => {
       empty,
       isLoading: isLoading || loops.isLoading || anomLoading,
       error: error ?? undefined,
+      refetch: () => {
+        void refetch();
+      },
     };
   }, [
     data,
+    refetch,
     pulse,
     spendBreakdown.total,
     clientUpstream,

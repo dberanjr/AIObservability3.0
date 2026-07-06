@@ -9,6 +9,7 @@ import {
 } from "@dynatrace/strato-components/forms";
 import { FacetGroup } from "../../components/FacetGroup";
 import { PROMPTS_FOCUS_OPTIONS } from "./focus";
+import { handleRadioGroupKeyDown, radioTabIndex } from "./radioNav";
 import type {
   PromptKind,
   PromptsFacets,
@@ -207,6 +208,7 @@ const PrivacySegment = ({
       <div
         role="radiogroup"
         aria-label="Privacy"
+        onKeyDown={handleRadioGroupKeyDown}
         style={{
           display: "inline-flex",
           padding: 2,
@@ -223,6 +225,7 @@ const PrivacySegment = ({
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active)}
               onClick={() => onChange(opt.value)}
               style={{
                 all: "unset",
@@ -273,6 +276,7 @@ const ProblemPatternSelect = ({
       type="button"
       role="radio"
       aria-checked={active}
+      tabIndex={radioTabIndex(active)}
       onClick={onClick}
       style={{
         all: "unset",
@@ -315,7 +319,11 @@ const ProblemPatternSelect = ({
   return (
     <Flex flexDirection="column" gap={6}>
       <SegLabel>Problem patterns</SegLabel>
-      <div role="radiogroup" aria-label="Problem patterns">
+      <div
+        role="radiogroup"
+        aria-label="Problem patterns"
+        onKeyDown={handleRadioGroupKeyDown}
+      >
         <Flex flexDirection="column" gap={2}>
           <Row
             active={!focus}

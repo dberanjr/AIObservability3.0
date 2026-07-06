@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -904,6 +905,8 @@ const IndicatorsMenu = ({
       </button>
       {open && (
         <div
+          role="group"
+          aria-label="Indicators"
           style={{
             position: "absolute",
             right: 0,
@@ -1061,9 +1064,11 @@ export const TraceTree = ({
 
   if (isLoading) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading trace...</Text>
-      </div>
+      <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} style={{ height: 22 }} />
+        ))}
+      </Flex>
     );
   }
 
@@ -1141,6 +1146,38 @@ export const TraceTree = ({
             </Text>
           </div>
         </div>
+
+        {/* Always-visible category key so the waterfall colours are decodable
+            without opening the Indicators popover (Prompts-13). */}
+        <Flex
+          alignItems="center"
+          gap={12}
+          flexWrap="wrap"
+          style={{ padding: "5px 0 7px" }}
+        >
+          {(
+            [
+              ["agent", "Agent"],
+              ["llm", "LLM"],
+              ["tool", "Tool"],
+              ["other", "Other"],
+            ] as [SpanCategory, string][]
+          ).map(([cat, label]) => (
+            <Flex key={cat} alignItems="center" gap={6} style={{ flex: "0 0 auto" }}>
+              <span
+                aria-hidden
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  background: CAT_COLOR[cat],
+                  flex: "0 0 auto",
+                }}
+              />
+              <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>{label}</Text>
+            </Flex>
+          ))}
+        </Flex>
 
         <div style={{ maxHeight, overflowY: "auto" }}>
           {rows.length === 0 ? (

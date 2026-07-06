@@ -24,6 +24,8 @@ import { TraceTopology } from "./TraceTopology";
 import { LogsPanel } from "./LogsPanel";
 import { TraceModal } from "./TraceModal";
 import { openSpanInTraces } from "../../lib/intents";
+import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
+import { handleRadioGroupKeyDown, radioTabIndex } from "./radioNav";
 
 type DetailTab = "prompts" | "trace" | "logs" | "topology" | "eval" | "info";
 
@@ -51,7 +53,7 @@ const CopyButton = ({
   return (
     <button
       type="button"
-      onClick={onCopy}
+      onClick={(e) => void onCopy(e)}
       title={title ?? "Copy to clipboard"}
       style={{
         all: "unset",
@@ -129,6 +131,8 @@ const TabSegmented = ({
 }) => (
   <div
     role="radiogroup"
+    aria-label="Detail view"
+    onKeyDown={handleRadioGroupKeyDown}
     style={{
       display: "inline-flex",
       padding: 2,
@@ -143,6 +147,7 @@ const TabSegmented = ({
         type="button"
         role="radio"
         aria-checked={opt.value === value}
+        tabIndex={radioTabIndex(opt.value === value)}
         onClick={() => onChange(opt.value)}
         style={{
           all: "unset",
@@ -233,7 +238,6 @@ export interface PromptDetailPanelProps {
 export const PromptDetailPanel = ({
   prompt,
   privacy,
-  onClose,
 }: PromptDetailPanelProps) => {
   const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
   const [search, setSearch] = useState("");
@@ -438,36 +442,70 @@ export const PromptDetailPanel = ({
           </Flex>
         )}
 
-        {activeTab === "eval" && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 12,
-            }}
-          >
-            <ScoreCard
-              label="Hallucination"
-              value={prompt.evalHallucination}
-              color="var(--red)"
-            />
-            <ScoreCard
-              label="Correctness"
-              value={prompt.evalCorrectness}
-              color="var(--green)"
-            />
-            <ScoreCard
-              label="Faithfulness"
-              value={prompt.evalFaithfulness}
-              color="var(--green)"
-            />
-            <ScoreCard
-              label="Relevance"
-              value={prompt.evalRelevance}
-              color="var(--green)"
-            />
-          </div>
-        )}
+        {activeTab === "eval" &&
+          (prompt.evalHallucination == null &&
+          prompt.evalCorrectness == null &&
+          prompt.evalFaithfulness == null &&
+          prompt.evalRelevance == null ? (
+            // No eval scores on this span — guide setup instead of four dashes
+            // (Prompts-12), matching the aggregate panel + Evaluations empty state.
+            <Flex
+              flexDirection="column"
+              gap={8}
+              alignItems="flex-start"
+              style={{
+                padding: "12px 14px",
+                borderRadius: 6,
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <Text style={{ fontSize: 12.5, color: "var(--text-2)" }}>
+                No evaluation scores on this span. Emit{" "}
+                <code>gen_ai.evaluation.hallucination</code> /{" "}
+                <code>.correctness</code> / <code>.faithfulness</code> /{" "}
+                <code>.relevance</code> on the producing span, run a Workflow
+                LLM-as-judge, or push offline eval results as business events.
+              </Text>
+              <Button
+                as="a"
+                href={QUALITY_EVAL_SETUP_GUIDE}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                How to add them
+              </Button>
+            </Flex>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 12,
+              }}
+            >
+              <ScoreCard
+                label="Hallucination"
+                value={prompt.evalHallucination}
+                color="var(--red)"
+              />
+              <ScoreCard
+                label="Correctness"
+                value={prompt.evalCorrectness}
+                color="var(--green)"
+              />
+              <ScoreCard
+                label="Faithfulness"
+                value={prompt.evalFaithfulness}
+                color="var(--green)"
+              />
+              <ScoreCard
+                label="Relevance"
+                value={prompt.evalRelevance}
+                color="var(--green)"
+              />
+            </div>
+          ))}
 
         {activeTab === "info" && (
           <div

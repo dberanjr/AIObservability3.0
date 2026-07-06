@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildPromptsListQuery } from "./queries";
+import {
+  buildPromptsListQuery,
+  buildPromptsSummaryQuery,
+  buildPromptQualityQuery,
+} from "./queries";
 import type { Timeframe } from "../../scope/types";
 
 const TF: Timeframe = { from: "now()-24h" };
@@ -49,5 +53,49 @@ describe("buildPromptsListQuery — content filter relaxation", () => {
     expect(
       buildPromptsListQuery(null, TF, undefined, { onlyWarnings: true }),
     ).not.toContain(CONTENT);
+  });
+});
+
+describe("summary + quality aggregates honor the sidebar/focus scope (Prompts-2)", () => {
+  it("summary applies status toggles and same-span focus predicates", () => {
+    const q = buildPromptsSummaryQuery(
+      null,
+      TF,
+      undefined,
+      { onlyErrors: true },
+      "llm-rate-limit",
+    );
+    expect(q).toContain(
+      'filter isNotNull(exception.type) or span.status_code == "error"',
+    );
+    // Same-span focus predicate (rate-limit → http 429) is injected.
+    expect(q).toContain("== 429");
+    expect(q).toContain("/* focus: llm-rate-limit */");
+  });
+
+  it("quality applies provider facet + latency range", () => {
+    const q = buildPromptQualityQuery(null, TF, undefined, {
+      providers: ["openai"],
+      latency: { op: "gt", min: 3000 },
+    });
+    expect(q).toContain("gen_ai.system, gen_ai.provider.name");
+    expect(q).toContain("duration > 3000ms");
+  });
+
+  it("does not inject the free-text search or agent join into aggregates", () => {
+    const q = buildPromptsSummaryQuery(null, TF, undefined, {
+      search: "refund",
+      agents: ["agent-x"],
+    });
+    // search matches the list query's computed prompt_text — absent here.
+    expect(q).not.toContain("prompt_text");
+    // agent JOIN would change count semantics — excluded from aggregates.
+    expect(q).not.toContain("| join [");
+  });
+
+  it("is unchanged when no sidebar/focus is passed", () => {
+    const plain = buildPromptsSummaryQuery(null, TF);
+    expect(plain).not.toContain("/* focus:");
+    expect(plain).not.toContain("onlyErrors");
   });
 });

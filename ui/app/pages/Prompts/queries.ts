@@ -298,18 +298,56 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Aggregate counts/averages for the 6-tile summary row.
+ * Server-side clauses shared by the summary + quality aggregates so their
+ * totals respond to the same sidebar / focus scope the list obeys (Prompts-2).
+ *
+ * Only clauses that reference RAW span attributes are injected — the free-text
+ * `search` (which matches the list query's computed prompt_text/response_text
+ * fields, absent from these aggregates) and the cross-span agent JOIN are
+ * deliberately excluded; the page captions those as unreflected. Same-span
+ * problem-pattern focus predicates ARE applied (they compare raw attributes).
+ */
+export const serverSideScopeClauses = (
+  sidebar?: PromptsSidebarFilter,
+  focus?: string | null,
+): string => {
+  const lines: string[] = [];
+  if (sidebar?.services?.length) {
+    lines.push(`| filter in(${SVC_EXPR}, array(${dqlIdArray(sidebar.services)}))`);
+  }
+  const kinds = sidebar?.kinds ?? [];
+  if (kinds.length === 1) {
+    lines.push(
+      kinds[0] === "Agent"
+        ? "| filter isNotNull(gen_ai.agent.name)"
+        : "| filter isNull(gen_ai.agent.name)",
+    );
+  }
+  const extra = sidebarClauses(sidebar);
+  if (extra) lines.push(extra);
+  const preset = promptsFocusPreset(focus);
+  if (preset) lines.push(`| filter (${preset.predicate}) /* focus: ${focus} */`);
+  return lines.filter(Boolean).join("\n");
+};
+
+/**
+ * Aggregate counts/averages for the 6-tile summary row. Accepts the same
+ * sidebar + focus scope as the list so the tiles don't silently disagree with
+ * the rows beneath them (Prompts-2).
  */
 export const buildPromptsSummaryQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  sidebar?: PromptsSidebarFilter,
+  focus?: string | null,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)
 | filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
+${serverSideScopeClauses(sidebar, focus)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -337,11 +375,14 @@ export const buildPromptQualityQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  sidebar?: PromptsSidebarFilter,
+  focus?: string | null,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.provider.name)
+${serverSideScopeClauses(sidebar, focus)}
 | fieldsAdd
     has_halluc = if(isNotNull(gen_ai.evaluation.hallucination), 1, else: 0),
     has_correct = if(isNotNull(gen_ai.evaluation.correctness), 1, else: 0),

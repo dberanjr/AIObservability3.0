@@ -164,6 +164,19 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
     return { active: false, nodes: new Set<LayerKey>(), edges: new Set<string>() };
   }, [hoverNode, hoverEdge, lensId, data.spotlight]);
 
+  // The 2 highest-volume edges get an always-on rate label so throughput is
+  // comparable at rest (not hover-only). Edges that already carry a finding pill
+  // or have no real span data are skipped to avoid stacking labels on one spot.
+  const labeledEdges = useMemo(() => {
+    const ranked = EDGES.map((e) => {
+      const key = edgeKey(e.from, e.to);
+      return { key, w: data.edgeWeight[key] ?? 0, rate: data.edgeRate[key] ?? "" };
+    })
+      .filter((x) => x.rate && !x.rate.startsWith("no ") && !data.edgeFinding[x.key])
+      .sort((a, b) => b.w - a.w);
+    return new Set(ranked.slice(0, 2).map((x) => x.key));
+  }, [data.edgeWeight, data.edgeRate, data.edgeFinding]);
+
   const nodeDim = (k: LayerKey): boolean => focus.active && !focus.nodes.has(k);
   const edgeState = (key: string): "normal" | "lit" | "dim" =>
     !focus.active ? "normal" : focus.edges.has(key) ? "lit" : "dim";
@@ -239,6 +252,19 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
           >
             {ef.label}
           </button>,
+        );
+      } else if (labeledEdges.has(key) && (!hoverEdge || hoverEdge.key !== key)) {
+        // Always-on volume label on the busiest edges (hidden while that edge is
+        // hovered, where the richer tooltip takes over).
+        overlays.push(
+          <div
+            key={`er${i}`}
+            className="am-edge-rate-static"
+            data-dim={st === "dim" ? "true" : "false"}
+            style={{ left: (x1 + x2) / 2, top: (y1 + y2) / 2 }}
+          >
+            {data.edgeRate[key]}
+          </div>,
         );
       }
     });

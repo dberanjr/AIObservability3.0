@@ -9,28 +9,117 @@ import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useCapability } from "../../scope/CapabilityContext";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
 import { usePromptQuality, type QualityMetricSnapshot } from "./usePromptQuality";
+import { qualityColor, coverageLabel } from "./promptCells";
+import { isScopeFiltered } from "./filterScope";
+import { worstModelsForMetric, type EvalMetric } from "./evalTable";
+import type { PromptRow, PromptsFilter } from "./usePrompts";
 
 interface MetricTileProps {
   label: string;
   snapshot: QualityMetricSnapshot;
+  /** Total LLM-span population, for the coverage denominator (Prompts-6). */
+  total: number;
+  /** Eval field driving the per-model breakdown (Prompts-4). */
+  metric: EvalMetric;
+  /** Loaded rows the breakdown is computed from. */
+  rows: PromptRow[];
   inverted?: boolean;
 }
 
-const colorFor = (pct: number | null, inverted?: boolean): string => {
-  if (pct == null) return "var(--text-4)";
-  if (inverted) {
-    if (pct > 10) return "var(--red)";
-    if (pct > 3) return "var(--amber)";
-    return "var(--green-2)";
-  }
-  if (pct < 60) return "var(--red)";
-  if (pct < 80) return "var(--amber)";
-  return "var(--green-2)";
+/**
+ * Worst-models breakdown under a metric (Prompts-4). Computed from the loaded
+ * rows that carry a score, so it answers "which model is driving this" without
+ * a second aggregate query.
+ */
+const ModelBreakdown = ({
+  rows,
+  metric,
+  inverted,
+}: {
+  rows: PromptRow[];
+  metric: EvalMetric;
+  inverted?: boolean;
+}) => {
+  const worst = worstModelsForMetric(rows, metric, 3);
+  if (worst.length === 0) return null;
+  return (
+    <Flex flexDirection="column" gap={4} style={{ marginTop: 2 }}>
+      <Text
+        style={{
+          fontSize: 9.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "var(--text-4)",
+        }}
+      >
+        Worst models · scored spans in view
+      </Text>
+      {worst.map((m) => {
+        const pct = m.score * 100;
+        const c = qualityColor(pct, inverted);
+        return (
+          <Flex key={m.model} alignItems="center" gap={6}>
+            <Text
+              style={{
+                fontSize: 10.5,
+                color: "var(--text-2)",
+                fontFamily: "var(--mono, monospace)",
+                flex: "0 0 96px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={`${m.model} · ${m.count} scored`}
+            >
+              {m.model}
+            </Text>
+            <div
+              style={{
+                flex: 1,
+                height: 6,
+                borderRadius: 3,
+                background: "var(--surface-3)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.max(3, Math.min(100, pct))}%`,
+                  height: "100%",
+                  background: c,
+                }}
+              />
+            </div>
+            <Text
+              style={{
+                fontSize: 10.5,
+                color: c,
+                fontVariantNumeric: "tabular-nums",
+                flex: "0 0 auto",
+                fontWeight: 600,
+              }}
+            >
+              {fmtPercent(pct, 0)}
+            </Text>
+          </Flex>
+        );
+      })}
+    </Flex>
+  );
 };
 
-const MetricTile = ({ label, snapshot, inverted }: MetricTileProps) => {
-  const color = colorFor(snapshot.pct, inverted);
+const MetricTile = ({
+  label,
+  snapshot,
+  total,
+  metric,
+  rows,
+  inverted,
+}: MetricTileProps) => {
+  const color = qualityColor(snapshot.pct, inverted);
   const isEmpty = snapshot.pct == null;
+  const coverage = coverageLabel(snapshot.coverage, total);
   return (
     <Surface elevation="raised" padding={12}>
       <Flex flexDirection="column" gap={8}>
@@ -76,22 +165,55 @@ const MetricTile = ({ label, snapshot, inverted }: MetricTileProps) => {
             Setup guide
           </Button>
         ) : (
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-            {snapshot.coverage.toLocaleString()} spans with this attribute
-          </Text>
+          <>
+            <Text
+              style={{
+                fontSize: 11,
+                color: coverage.low ? "var(--amber)" : "var(--text-3)",
+              }}
+              title={
+                coverage.low
+                  ? "Low coverage — this average is built on a small share of the population; interpret with caution."
+                  : undefined
+              }
+            >
+              {coverage.low ? "⚠ " : ""}
+              {coverage.text}
+            </Text>
+            <ModelBreakdown rows={rows} metric={metric} inverted={inverted} />
+          </>
         )}
       </Flex>
     </Surface>
   );
 };
 
+export interface PromptQualityAnalyticsProps {
+  /** Sidebar filter — scopes the aggregate averages (Prompts-2). */
+  filter?: PromptsFilter;
+  /** Active problem-pattern focus. */
+  focus?: string | null;
+  /** Loaded rows for the per-model worst-offenders breakdown (Prompts-4). */
+  rows?: PromptRow[];
+}
+
 // Body is a separate component so the query (usePromptQuality) only runs while
 // the section is expanded — CollapsibleCard renders children solely when open,
 // so a collapsed section issues no DQL.
-const PromptQualityBody = () => {
-  const quality = usePromptQuality();
+const PromptQualityBody = ({
+  filter,
+  focus,
+  rows = [],
+}: PromptQualityAnalyticsProps) => {
+  const quality = usePromptQuality(filter, focus);
+  const scoped = isScopeFiltered(filter, focus);
   return (
     <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
+      {scoped && (
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+          Scores reflect the current sidebar / focus scope.
+        </Text>
+      )}
       {quality.isLoading && !quality.hasAnyEval ? (
         <div
           style={{
@@ -115,17 +237,32 @@ const PromptQualityBody = () => {
           <MetricTile
             label="Hallucination rate"
             snapshot={quality.hallucination}
+            total={quality.totalLlmSpans}
+            metric="evalHallucination"
+            rows={rows}
             inverted
           />
           <MetricTile
             label="Correctness score"
             snapshot={quality.correctness}
+            total={quality.totalLlmSpans}
+            metric="evalCorrectness"
+            rows={rows}
           />
           <MetricTile
             label="Faithfulness"
             snapshot={quality.faithfulness}
+            total={quality.totalLlmSpans}
+            metric="evalFaithfulness"
+            rows={rows}
           />
-          <MetricTile label="Relevance" snapshot={quality.relevance} />
+          <MetricTile
+            label="Relevance"
+            snapshot={quality.relevance}
+            total={quality.totalLlmSpans}
+            metric="evalRelevance"
+            rows={rows}
+          />
         </div>
       )}
 
@@ -137,7 +274,7 @@ const PromptQualityBody = () => {
   );
 };
 
-export const PromptQualityAnalytics = () => {
+export const PromptQualityAnalytics = (props: PromptQualityAnalyticsProps) => {
   // Collapse by default when no eval data exists in this tenant. The evalScore
   // capability (gen_ai.evaluation.*) is probed cheaply app-wide, so we can
   // decide without running the section's own query. Mount only once the probe
@@ -155,7 +292,7 @@ export const PromptQualityAnalytics = () => {
       {/* One shared scope: usePromptQuality runs once in the body and feeds all
           four metric tiles, so the scan is attributed at the card level. */}
       <ScanScopedTile name="Prompt quality">
-        <PromptQualityBody />
+        <PromptQualityBody {...props} />
       </ScanScopedTile>
     </CollapsibleCard>
   );

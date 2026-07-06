@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
 import type { TraceLogLine } from "./useTraceLogs";
 
@@ -176,9 +177,11 @@ export const LogsPanel = ({ logs, isLoading, highlight }: LogsPanelProps) => {
 
   if (isLoading) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading logs…</Text>
-      </div>
+      <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} style={{ height: 28 }} />
+        ))}
+      </Flex>
     );
   }
 
