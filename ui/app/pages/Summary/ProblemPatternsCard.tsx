@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount } from "../../data/format";
 import { useTabNav, type FocusParam } from "../../lib/nav";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import {
   useProblemPatternCounts,
@@ -34,7 +35,10 @@ const PatternRow = ({
   max: number;
   onDrive: (p: ProblemPatternCount) => void;
 }) => {
-  const pct = max > 0 ? (Math.sqrt(p.count) / Math.sqrt(max)) * 100 : 0;
+  // Linear fill (count/max) so the bar length honestly encodes the volume this
+  // list is ranked by — sqrt compression made a 9-match detector look nearly as
+  // loud as a 100-match one, understating the dominant pattern (SUM-7).
+  const pct = max > 0 ? (p.count / max) * 100 : 0;
   const color = CLASS_COLOR[p.cls];
   return (
     <button
@@ -97,7 +101,7 @@ const PatternRow = ({
  * use), so the findings/board scope to that pattern.
  */
 export const ProblemPatternsCard = () => {
-  const { patterns, isLoading } = useProblemPatternCounts();
+  const { patterns, isLoading, error } = useProblemPatternCounts();
   const goToTab = useTabNav();
   const max = Math.max(1, ...patterns.map((p) => p.count));
 
@@ -161,6 +165,8 @@ export const ProblemPatternsCard = () => {
             </Flex>
           ))}
         </Flex>
+      ) : error ? (
+        <ErrorState bare error={error} />
       ) : (
         <Flex flexDirection="column" gap={16}>
           {renderGroup("Problem detectors", detectors)}

@@ -5,6 +5,8 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { StackedBar, type StackedSegment } from "../../components/charts/StackedBar";
 import { MiniPartialDonut } from "../../components/charts/TileGlyphs";
 import { fmtCount } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useTokenEfficiency } from "../Pulse/useTokenEfficiency";
 import { useProviderMix } from "../Pulse/useProviderMix";
@@ -38,13 +40,21 @@ export const EfficiencyMixCard = () => {
           {eff.isLoading && eff.score == null ? (
             <Skeleton style={{ height: 80, width: 80, borderRadius: "50%" }} />
           ) : (
-            <MiniPartialDonut
-              size={80}
-              thickness={12}
-              percent={eff.score ?? 0}
-              color="var(--primary, var(--blue))"
-              centerValue={eff.score != null ? String(Math.round(eff.score)) : "—"}
-            />
+            // Caption the gauge as a /100 score + track ring so it reads as a
+            // distinct metric from the output-per-dollar figure beside it, not
+            // a second scale of the same number (SUM-12).
+            <Flex flexDirection="column" alignItems="center" gap={2} style={{ flex: "0 0 auto" }}>
+              <MiniPartialDonut
+                size={80}
+                thickness={12}
+                track
+                percent={eff.score ?? 0}
+                color="var(--primary, var(--blue))"
+                centerValue={eff.score != null ? String(Math.round(eff.score)) : "—"}
+                ariaLabel={`Token-efficiency score ${eff.score != null ? Math.round(eff.score) : "unavailable"} of 100`}
+              />
+              <Text style={{ fontSize: 9.5, color: "var(--text-3)" }}>score / 100</Text>
+            </Flex>
           )}
           <Flex flexDirection="column" gap={4}>
             <Text
@@ -91,8 +101,14 @@ export const EfficiencyMixCard = () => {
           </Text>
           {mix.isLoading && slices.length === 0 ? (
             <Skeleton style={{ height: 120, borderRadius: 8 }} />
+          ) : mix.error ? (
+            <ErrorState bare error={mix.error} />
           ) : slices.length === 0 ? (
-            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>No provider activity in scope.</Text>
+            <EmptyState
+              bare
+              title="No provider activity in scope"
+              description="No spans carried a gen_ai.provider.name for this timeframe and scope."
+            />
           ) : (
             <StackedBar segments={slices} height={16} />
           )}

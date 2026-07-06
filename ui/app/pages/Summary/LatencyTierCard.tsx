@@ -1,8 +1,9 @@
 import React from "react";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { Text } from "@dynatrace/strato-components/typography";
 import { StackedBar, type StackedSegment } from "../../components/charts/StackedBar";
 import { fmtMs } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useLatencyDecomposition } from "../Agents/useLatencyDecomposition";
 import type { LatencyTier } from "../Agents/useLatencyDecomposition";
@@ -21,7 +22,7 @@ const TIER_COLOR: Record<LatencyTier, string> = {
  * shows the fleet P95 (passed from the shared summary). Drills to Agents.
  */
 export const LatencyTierCard = ({ summary }: { summary: PulseSummary }) => {
-  const { tiers, isLoading } = useLatencyDecomposition();
+  const { tiers, isLoading, error } = useLatencyDecomposition();
 
   const segs: StackedSegment[] = tiers
     .filter((t) => t.sharePct > 0)
@@ -37,17 +38,23 @@ export const LatencyTierCard = ({ summary }: { summary: PulseSummary }) => {
     <SummaryCard title="Latency by tier" subtitle="share of wall-clock time" drill={{ label: "Agents", to: "/agents" }}>
       {isLoading && segs.length === 0 ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
+      ) : error ? (
+        <ErrorState bare error={error} />
       ) : segs.length === 0 ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>No latency data in scope.</Text>
+        <EmptyState
+          bare
+          title="No latency spans in scope"
+          description="No spans carried a per-tier duration for this timeframe and scope."
+        />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>P95</span>
-            <span style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>
-              {fmtMs(summary.p95Ms)}
-            </span>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Lead with the tier mix — the fleet P95 headline already lives in
+              the hero KPIs, so here it's a small caption, not a duplicate big
+              number (SUM-1). */}
           <StackedBar segments={segs} height={16} />
+          <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+            Fleet P95 {fmtMs(summary.p95Ms)} · share of wall-clock by tier
+          </span>
         </div>
       )}
     </SummaryCard>

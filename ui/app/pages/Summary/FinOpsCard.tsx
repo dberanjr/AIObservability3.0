@@ -4,6 +4,8 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { fmtUSDCompact } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useModelConcentration } from "./useModelConcentration";
 import { useFinOps, type DailyCostSummary } from "../Models/useFinOps";
@@ -169,10 +171,14 @@ export const FinOpsCard = () => {
       <Flex flexDirection="column" gap={16} style={{ height: "100%" }}>
         {conc.isLoading && items.length === 0 ? (
           <Skeleton style={{ height: 130, borderRadius: 8 }} />
+        ) : conc.error ? (
+          <ErrorState bare error={conc.error} />
         ) : items.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No priced model spend in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            title="No priced model spend in scope"
+            description="No spans matched a priced model for this timeframe and scope — needs gen_ai.request.model plus a known price in the model catalog."
+          />
         ) : (
           <Flex flexDirection="column" gap={8}>
             <Flex alignItems="baseline" gap={6}>

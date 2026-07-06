@@ -1,8 +1,9 @@
 import React from "react";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Histogram, type HistogramBar } from "../../components/charts/Histogram";
 import { fmtCount, fmtCountCompact } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useActivityHistogram } from "../Pulse/useActivityHistogram";
 
@@ -11,7 +12,7 @@ import { useActivityHistogram } from "../Pulse/useActivityHistogram";
  * which owns the full activity + brush-zoom view.
  */
 export const ActivityCard = () => {
-  const { buckets, peakHour, isLoading } = useActivityHistogram();
+  const { buckets, peakHour, isLoading, error } = useActivityHistogram();
 
   const bars: HistogramBar[] = buckets.map((b) => ({
     label: `${String(b.hour).padStart(2, "0")}:00`,
@@ -21,13 +22,36 @@ export const ActivityCard = () => {
   const hasData = bars.some((b) => b.value > 0);
 
   return (
-    <SummaryCard title="Activity · 24h" drill={{ label: "Pulse", to: "/pulse" }}>
+    <SummaryCard
+      title="Activity · 24h"
+      drill={{ label: "Pulse", to: "/pulse" }}
+      headerRight={
+        <span
+          title="Fixed 24-hour overview — independent of the global timeframe"
+          style={{
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: "0.02em",
+            color: "var(--text-3)",
+            background: "var(--surface-2)",
+            borderRadius: 4,
+            padding: "1px 5px",
+          }}
+        >
+          fixed 24h
+        </span>
+      }
+    >
       {isLoading && !hasData ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
+      ) : error ? (
+        <ErrorState bare error={error} />
       ) : !hasData ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No requests in the last 24 hours.
-        </Text>
+        <EmptyState
+          bare
+          title="No requests in the last 24 hours"
+          description="No AI requests were recorded in the fixed 24-hour window."
+        />
       ) : (
         <Histogram
           bars={bars}

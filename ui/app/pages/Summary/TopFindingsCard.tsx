@@ -1,7 +1,8 @@
 import React from "react";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { FindingCard } from "../../components/FindingCard";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import type { Finding } from "../../components/drawers/types";
 import { SummaryCard } from "./SummaryCard";
 import { useAnomalies } from "../Pulse/anomalies/useAnomalies";
@@ -39,7 +40,7 @@ export const TopFindingsCard = ({
 }: {
   onSelect: (finding: Finding) => void;
 }) => {
-  const { anomalies, isLoading } = useAnomalies();
+  const { anomalies, isLoading, error } = useAnomalies();
   const cards = anomalies.slice(0, MAX_CARDS);
 
   return (
@@ -54,10 +55,15 @@ export const TopFindingsCard = ({
             <Skeleton key={i} style={{ height: 96, borderRadius: 10 }} />
           ))}
         </div>
+      ) : error ? (
+        // Never let a failed findings query read as "no issues detected" (SUM-3).
+        <ErrorState bare error={error} />
       ) : cards.length === 0 ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No issues detected in the current scope.
-        </Text>
+        <EmptyState
+          bare
+          title="No signals in this window"
+          description="No threshold anomalies fired for the current scope and timeframe. This reflects the detectors' inputs — it depends on the underlying metrics being instrumented."
+        />
       ) : (
         <div
           style={{

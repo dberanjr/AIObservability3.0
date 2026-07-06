@@ -4,6 +4,8 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { fmtCount } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useHiddenFailures } from "./useHiddenFailures";
 
@@ -28,10 +30,14 @@ export const HiddenFailuresCard = () => {
     <SummaryCard title="Hidden · 200-OK" drill={{ label: "Explorer", to: "/explorer" }}>
       {hidden.isLoading && items.length === 0 ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
+      ) : hidden.error ? (
+        <ErrorState bare error={hidden.error} />
       ) : hidden.total === 0 ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No hidden 200-OK failures in scope.
-        </Text>
+        <EmptyState
+          bare
+          title="No hidden failures in this window"
+          description="No 200-OK responses matched a refusal, truncation, or content-filter signal. Absence here depends on finish_reasons / status instrumentation being present — it isn't a guaranteed all-clear."
+        />
       ) : (
         <Flex flexDirection="column" gap={12}>
           <Flex alignItems="baseline" gap={8}>

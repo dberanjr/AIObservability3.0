@@ -1,8 +1,9 @@
 import React from "react";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { Text } from "@dynatrace/strato-components/typography";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { fmtCount, fmtUSD, fmtUSDCompact } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useAgentCosts } from "../Pulse/useAgentCosts";
 
@@ -12,7 +13,7 @@ import { useAgentCosts } from "../Pulse/useAgentCosts";
  * Drills to Agents.
  */
 export const TopAgentsCard = () => {
-  const { rows, isLoading } = useAgentCosts();
+  const { rows, isLoading, error } = useAgentCosts();
 
   const items: BarListItem[] = rows.slice(0, 5).map((r) => ({
     key: r.agent,
@@ -29,10 +30,14 @@ export const TopAgentsCard = () => {
     <SummaryCard title="Top agents by cost" drill={{ label: "Agents", to: "/agents" }}>
       {isLoading && items.length === 0 ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
+      ) : error ? (
+        <ErrorState bare error={error} />
       ) : items.length === 0 ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No attributed agent cost in scope.
-        </Text>
+        <EmptyState
+          bare
+          title="No attributed agent cost"
+          description="No agent spans carried a priced model cost in this scope — needs gen_ai.agent.name plus a priced model on the same trace."
+        />
       ) : (
         <BarList items={items} color="var(--blue-purple)" />
       )}
