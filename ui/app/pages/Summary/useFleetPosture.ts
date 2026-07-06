@@ -8,7 +8,12 @@ import {
 import { usePulseHealth } from "../Pulse/usePulseHealth";
 import type { Pillar } from "../Pulse/types";
 import { buildFleetCountsQuery } from "./queries";
-import { compositeTrust, scoreToGrade } from "./posture";
+import {
+  compositeTrust,
+  scoreToGrade,
+  buildPostureHeadline,
+  isGradeIncomplete,
+} from "./posture";
 
 interface CountsRecord {
   services?: number;
@@ -29,6 +34,10 @@ export interface FleetPosture {
   /** Number of health pillars in a warning/critical state (0–3). */
   attentionCount: number;
   pillarsTotal: number;
+  /** How many pillars actually contributed a score to the grade (0–3). */
+  pillarsScored: number;
+  /** True when a high-weight pillar (quality) is unmeasured — grade is partial. */
+  gradeIncomplete: boolean;
   /** The three scored health pillars (operational, quality, cost). */
   pillars: Pillar[];
   isLoading: boolean;
@@ -59,24 +68,37 @@ export const useFleetPosture = (): FleetPosture => {
   );
 
   return useMemo<FleetPosture>(() => {
-    const trustIndex = compositeTrust({
+    const pillarScores = {
       operational: health.operational.score,
       quality: health.quality.score,
       cost: health.cost.score,
-    });
+    };
+    const trustIndex = compositeTrust(pillarScores);
     const grade = trustIndex != null ? scoreToGrade(trustIndex) : null;
     const status = statusWord(trustIndex);
+    const gradeIncomplete = isGradeIncomplete(pillarScores);
 
     // Weakest pillar drives the headline detail — critical outranks warning.
     const pillars: Pillar[] = [health.operational, health.quality, health.cost];
     const attention = pillars.filter(needsAttention);
     const worst =
       attention.find((p) => p.status === "critical") ?? attention[0] ?? null;
-    const headline = worst
-      ? `${status} — ${worst.label.toLowerCase()} needs attention.`
-      : trustIndex != null
-        ? `${status} across operational, quality, and cost.`
-        : status;
+
+    // Headline only claims the dimensions it actually measured — a null quality
+    // pillar must never be silently folded into "healthy across ... quality ...".
+    const hasScore = (p: Pillar): boolean =>
+      p.score != null && Number.isFinite(p.score);
+    const scoredLabels = pillars.filter(hasScore).map((p) => p.label.toLowerCase());
+    const missingLabels = pillars
+      .filter((p) => !hasScore(p))
+      .map((p) => p.label.toLowerCase());
+    const headline = buildPostureHeadline(
+      status,
+      worst ? worst.label.toLowerCase() : null,
+      scoredLabels,
+      missingLabels,
+      trustIndex != null,
+    );
 
     const row = counts.data?.records?.[0];
 
@@ -89,6 +111,8 @@ export const useFleetPosture = (): FleetPosture => {
       agentCount: row?.agents ?? null,
       attentionCount: attention.length,
       pillarsTotal: pillars.length,
+      pillarsScored: scoredLabels.length,
+      gradeIncomplete,
       pillars,
       isLoading: health.isLoading || counts.isLoading,
       error: health.error ?? counts.error ?? undefined,

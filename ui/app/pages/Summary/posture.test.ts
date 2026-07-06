@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { compositeTrust, scoreToGrade, trendPct } from "./posture";
+import {
+  compositeTrust,
+  scoreToGrade,
+  trendPct,
+  scoredPillars,
+  isGradeIncomplete,
+  buildPostureHeadline,
+  deltaTone,
+} from "./posture";
 
 /**
  * Fleet-posture math for the Summary hero. The composite "trust index" blends
@@ -105,5 +113,69 @@ describe("trendPct", () => {
 
   it("returns null when the baseline half is zero (no meaningful ratio)", () => {
     expect(trendPct([0, 0, 5, 5])).toBeNull();
+  });
+});
+
+describe("scoredPillars", () => {
+  it("lists only pillars carrying a finite score", () => {
+    expect(scoredPillars({ operational: 80, quality: null, cost: 70 })).toEqual([
+      "operational",
+      "cost",
+    ]);
+  });
+  it("is empty when no pillar has data", () => {
+    expect(scoredPillars({ operational: null, quality: null, cost: null })).toEqual([]);
+  });
+});
+
+describe("isGradeIncomplete", () => {
+  it("is true when the quality pillar (weight .35) is unmeasured", () => {
+    expect(isGradeIncomplete({ operational: 80, quality: null, cost: 70 })).toBe(true);
+  });
+  it("is false when only the low-weight cost pillar (.20) is missing", () => {
+    expect(isGradeIncomplete({ operational: 80, quality: 75, cost: null })).toBe(false);
+  });
+  it("is false when every pillar is scored", () => {
+    expect(isGradeIncomplete({ operational: 80, quality: 75, cost: 70 })).toBe(false);
+  });
+});
+
+describe("buildPostureHeadline", () => {
+  it("names the worst pillar when one needs attention", () => {
+    expect(buildPostureHeadline("Needs attention", "quality", ["operational", "cost"], [], true)).toBe(
+      "Needs attention — quality needs attention.",
+    );
+  });
+  it("lists only the scored pillars and flags the unmeasured ones", () => {
+    expect(buildPostureHeadline("Healthy", null, ["operational", "cost"], ["quality"], true)).toBe(
+      "Healthy across operational and cost. Quality unmeasured.",
+    );
+  });
+  it("claims all three only when all three are scored", () => {
+    expect(
+      buildPostureHeadline("Healthy", null, ["operational", "quality", "cost"], [], true),
+    ).toBe("Healthy across operational, quality, and cost.");
+  });
+  it("falls back to the bare status when there is no index", () => {
+    expect(buildPostureHeadline("Awaiting data", null, [], ["operational", "quality", "cost"], false)).toBe(
+      "Awaiting data",
+    );
+  });
+});
+
+describe("deltaTone", () => {
+  it("marks a good movement good regardless of magnitude", () => {
+    expect(deltaTone(-80, { invert: true })).toBe("good"); // spend DOWN 80% = good
+    expect(deltaTone(5)).toBe("good"); // tokens UP 5% = good (not inverted)
+  });
+  it("escalates a large bad movement to severe", () => {
+    expect(deltaTone(400, { invert: true, severeAt: 50 })).toBe("severe"); // spend UP 400% = bad+severe
+    expect(deltaTone(-60, { severeAt: 50 })).toBe("severe"); // non-inverted metric DOWN 60% = bad+severe
+  });
+  it("keeps a moderate bad movement as warn", () => {
+    expect(deltaTone(10, { invert: true, severeAt: 50 })).toBe("warn"); // spend UP 10% = bad but mild
+  });
+  it("treats zero as flat", () => {
+    expect(deltaTone(0)).toBe("flat");
   });
 });

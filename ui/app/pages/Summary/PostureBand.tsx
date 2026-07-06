@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../../components/charts/Sparkline";
 import { MiniPartialDonut } from "../../components/charts/TileGlyphs";
 import {
@@ -19,19 +20,32 @@ import { useDailySpend } from "../Pulse/useDailySpend";
 import type { Pillar, PillarStatus } from "../Pulse/types";
 import type { FleetPosture } from "./useFleetPosture";
 import { useHiddenFailures } from "./useHiddenFailures";
-import { trendPct } from "./posture";
+import { trendPct, deltaTone, type DeltaTone } from "./posture";
 
 type Delta = { text: string; color: string } | null;
 
-const deltaLabel = (pct: number | null, invert = false): Delta => {
+const TONE_COLOR: Record<DeltaTone, string> = {
+  flat: "var(--text-3)",
+  good: "var(--green-2)",
+  warn: "var(--amber)",
+  severe: "var(--red)",
+};
+
+/**
+ * Directional delta chip. `invert` marks metrics where a rise is bad; `severeAt`
+ * is the |percent| at which a bad movement escalates from amber to red, so a
+ * regression worth paging on doesn't read like a 3% wobble (SUM-8). The arrow
+ * glyph stays the non-color cue for accessibility.
+ */
+const deltaLabel = (
+  pct: number | null,
+  opts?: { invert?: boolean; severeAt?: number },
+): Delta => {
   if (pct == null) return null;
-  const up = pct > 0;
-  const good = invert ? !up : up;
-  const arrow = pct === 0 ? "→" : up ? "▲" : "▼";
+  const arrow = pct === 0 ? "→" : pct > 0 ? "▲" : "▼";
   return {
     text: `${arrow} ${Math.abs(pct)}%`,
-    color:
-      pct === 0 ? "var(--text-3)" : good ? "var(--green-2)" : "var(--amber)",
+    color: TONE_COLOR[deltaTone(pct, opts)],
   };
 };
 
@@ -70,24 +84,55 @@ const fmtPerReq = (n: number | null): string => {
 // ---- Health pillar bar ----------------------------------------------------
 
 const PillarBar = ({ pillar }: { pillar: Pillar }) => {
+  const measured = pillar.score != null && Number.isFinite(pillar.score);
   const color = pillarColor(pillar.status);
-  const score = pillar.score;
   const attention = pillar.status === "warning" || pillar.status === "critical";
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11.5,
+    color: "var(--text-2)",
+    width: 82,
+    flex: "0 0 auto",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  };
+  // An unmeasured pillar (e.g. quality with no gen_ai.evaluation.* data) must
+  // read as "not measured" — a dashed empty track — never a 0% bar that looks
+  // like a failing score and folds silently into the grade (SUM-2).
+  if (!measured) {
+    return (
+      <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
+        <Text style={labelStyle}>{pillar.label}</Text>
+        <div
+          aria-hidden
+          style={{
+            flex: 1,
+            minWidth: 0,
+            height: 8,
+            borderRadius: 999,
+            border: "1px dashed var(--border)",
+            background:
+              "repeating-linear-gradient(90deg, var(--surface-2, var(--border)) 0 6px, transparent 6px 12px)",
+            opacity: 0.6,
+          }}
+        />
+        <Text
+          style={{
+            fontSize: 10.5,
+            color: "var(--text-3)",
+            fontStyle: "italic",
+            whiteSpace: "nowrap",
+            flex: "0 0 auto",
+          }}
+        >
+          not measured
+        </Text>
+      </Flex>
+    );
+  }
   return (
     <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
-      <Text
-        style={{
-          fontSize: 11.5,
-          color: "var(--text-2)",
-          width: 82,
-          flex: "0 0 auto",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {pillar.label}
-      </Text>
+      <Text style={labelStyle}>{pillar.label}</Text>
       <div
         style={{
           flex: 1,
@@ -100,7 +145,7 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
       >
         <div
           style={{
-            width: `${Math.max(0, Math.min(100, score ?? 0))}%`,
+            width: `${Math.max(0, Math.min(100, pillar.score as number))}%`,
             height: "100%",
             borderRadius: 999,
             background: color,
@@ -118,7 +163,7 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
           flex: "0 0 auto",
         }}
       >
-        {score != null ? Math.round(score) : "—"}
+        {Math.round(pillar.score as number)}
       </Text>
       <span
         aria-hidden
@@ -164,6 +209,13 @@ interface KpiTileProps {
   tone?: "default" | "risk";
   /** Custom footer visual (e.g. the hidden-risk composition bar). */
   footer?: React.ReactNode;
+  /** Chip naming the tile's time basis when it differs from the global
+   *  timeframe, e.g. "30d proj" (SUM-11). */
+  window?: string;
+  /** Suffix on the delta chip naming its basis, e.g. "d/d" (SUM-5). */
+  deltaSuffix?: string;
+  /** Caption under the sparkline naming the series' window (SUM-5). */
+  sparkCaption?: string;
 }
 
 const KpiTile = ({
@@ -179,6 +231,9 @@ const KpiTile = ({
   referenceLabel,
   tone = "default",
   footer,
+  window,
+  deltaSuffix,
+  sparkCaption,
 }: KpiTileProps) => {
   // The Summary page ignores the tile-style tweak (see tokens.ts immunity CSS).
   const risk = tone === "risk";
@@ -202,18 +257,40 @@ const KpiTile = ({
           : {}),
       }}
     >
-      <Text
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
-          color: risk ? "var(--red)" : "var(--text-3)",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {label}
-      </Text>
+      <Flex alignItems="center" gap={6} justifyContent="space-between" style={{ minWidth: 0 }}>
+        <Text
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: risk ? "var(--red)" : "var(--text-3)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {label}
+        </Text>
+        {window && (
+          <Text
+            title="This tile's time basis"
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              letterSpacing: "0.02em",
+              color: "var(--text-3)",
+              background: "var(--surface-2, var(--border))",
+              borderRadius: 4,
+              padding: "1px 5px",
+              whiteSpace: "nowrap",
+              flex: "0 0 auto",
+            }}
+          >
+            {window}
+          </Text>
+        )}
+      </Flex>
       {/* Value + trend, vertically centered in the remaining space so the tile
           reads as one balanced block rather than a number pinned above a void. */}
       <Flex
@@ -244,6 +321,7 @@ const KpiTile = ({
               }}
             >
               {delta.text}
+              {deltaSuffix ? ` ${deltaSuffix}` : ""}
             </Text>
           )}
         </Flex>
@@ -264,6 +342,11 @@ const KpiTile = ({
               reference={reference ?? undefined}
               referenceLabel={referenceLabel}
             />
+            {sparkCaption && (
+              <Text style={{ fontSize: 9, color: "var(--text-3)", whiteSpace: "nowrap" }}>
+                {sparkCaption}
+              </Text>
+            )}
           </div>
         )}
       </Flex>
@@ -271,7 +354,19 @@ const KpiTile = ({
   );
 };
 
-/** Stacked composition bar for the hidden-risk tile (no trend series exists). */
+/** Short legend labels so the composition legend fits the compact KPI tile. */
+const HIDDEN_SHORT: Record<string, string> = {
+  refusals: "Refusals",
+  truncations: "Truncation",
+  content_filters: "Content filter",
+  other: "Other",
+};
+
+/**
+ * Stacked composition bar for the hidden-risk tile (no trend series exists),
+ * with an inline legend so the four-color split is decipherable without hovering
+ * and each segment carries its own tooltip (SUM-6).
+ */
 const CompositionBar = ({
   segments,
 }: {
@@ -280,20 +375,45 @@ const CompositionBar = ({
   const total = segments.reduce((a, s) => a + s.count, 0);
   if (total <= 0) return null;
   return (
-    <Flex
-      style={{ height: 8, borderRadius: 999, overflow: "hidden", gap: 2 }}
-      title={segments.map((s) => `${s.label}: ${fmtCount(s.count)}`).join(" · ")}
-    >
-      {segments.map((s) => (
-        <div
-          key={s.key}
-          style={{
-            width: `${(s.count / total) * 100}%`,
-            background: s.color,
-            minWidth: s.count > 0 ? 3 : 0,
-          }}
-        />
-      ))}
+    <Flex flexDirection="column" gap={4}>
+      <Flex style={{ height: 8, borderRadius: 999, overflow: "hidden", gap: 2 }}>
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            title={`${s.label}: ${fmtCount(s.count)}`}
+            style={{
+              width: `${(s.count / total) * 100}%`,
+              background: s.color,
+              minWidth: s.count > 0 ? 3 : 0,
+            }}
+          />
+        ))}
+      </Flex>
+      <Flex style={{ gap: 8, flexWrap: "wrap" }}>
+        {segments.map((s) => (
+          <Flex
+            key={s.key}
+            alignItems="center"
+            gap={4}
+            style={{ minWidth: 0 }}
+            title={`${s.label}: ${fmtCount(s.count)}`}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 2,
+                background: s.color,
+                flex: "0 0 auto",
+              }}
+            />
+            <Text style={{ fontSize: 9.5, color: "var(--text-3)", whiteSpace: "nowrap" }}>
+              {HIDDEN_SHORT[s.key] ?? s.label} {fmtCount(s.count)}
+            </Text>
+          </Flex>
+        ))}
+      </Flex>
     </Flex>
   );
 };
@@ -319,12 +439,22 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
 
   const spendDelta = deltaLabel(
     daily.delta24h != null ? Math.round(daily.delta24h) : null,
-    true,
+    { invert: true },
   );
   const tokenDelta = deltaLabel(trendPct(s.tokens));
-  const p95Delta = deltaLabel(trendPct(s.p95Ms), true);
-  const errDelta = deltaLabel(trendPct(s.errorRatePct), true);
-  const costDelta = deltaLabel(trendPct(s.costPerReq), true);
+  const p95Delta = deltaLabel(trendPct(s.p95Ms), { invert: true });
+  // Error rate is the most sensitive metric — a +25% swing is already severe.
+  const errDelta = deltaLabel(trendPct(s.errorRatePct), {
+    invert: true,
+    severeAt: 25,
+  });
+  const costDelta = deltaLabel(trendPct(s.costPerReq), { invert: true });
+
+  // Hidden-risk base rate: 200-OK failures as a share of LLM responses (SUM-6).
+  const hiddenRate =
+    summary.requests != null && summary.requests > 0
+      ? (hidden.total / summary.requests) * 100
+      : null;
 
   const footprint = [
     summary.tokens != null ? `${fmtTokens(summary.tokens)} tokens` : null,
@@ -366,10 +496,15 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       <KpiTile
         label="Spend · 30d proj"
         value={fmtUSDCompact(daily.projected30d)}
+        window="30d proj"
         delta={spendDelta}
+        deltaSuffix="d/d"
         spark={s.spend}
         sparkLabels={s.labels}
         sparkColor={spendDelta?.color}
+        reference={mean(s.spend)}
+        referenceLabel="avg"
+        sparkCaption="spend · current timeframe"
       />,
     ),
     kpi(
@@ -420,7 +555,11 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       <KpiTile
         label="Hidden risk"
         value={hidden.isLoading ? "…" : fmtCount(hidden.total)}
-        sub="200-OK failures"
+        sub={
+          !hidden.isLoading && hiddenRate != null
+            ? `${fmtPercent(hiddenRate)} of LLM responses`
+            : "200-OK failures"
+        }
         tone="risk"
         footer={<CompositionBar segments={hidden.categories} />}
       />,
@@ -446,20 +585,48 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
 
           <Flex alignItems="center" gap={16}>
             <Flex flexDirection="column" alignItems="center" gap={4} style={{ flex: "0 0 auto" }}>
-              <MiniPartialDonut
-                size={104}
-                thickness={12}
-                track
-                percent={posture.trustIndex ?? 0}
-                color={dot}
-                centerValue={
-                  posture.isLoading && posture.grade == null
-                    ? "…"
-                    : (posture.grade ?? "—")
-                }
-                centerSub={posture.trustIndex != null ? String(posture.trustIndex) : undefined}
-              />
+              <div style={{ position: "relative" }}>
+                <MiniPartialDonut
+                  size={104}
+                  thickness={12}
+                  track
+                  percent={posture.trustIndex ?? 0}
+                  color={dot}
+                  centerValue={posture.grade ?? "—"}
+                  centerSub={posture.trustIndex != null ? String(posture.trustIndex) : undefined}
+                  ariaLabel={`Fleet trust index ${posture.trustIndex ?? "unavailable"} of 100${posture.grade ? `, grade ${posture.grade}` : ""}${posture.gradeIncomplete ? " — partial, quality unmeasured" : ""}`}
+                />
+                {posture.gradeIncomplete && posture.grade != null && (
+                  <span
+                    title="This grade excludes an unmeasured pillar (quality)"
+                    style={{
+                      position: "absolute",
+                      top: -2,
+                      right: -2,
+                      fontSize: 8.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      textTransform: "uppercase",
+                      color: "var(--amber)",
+                      background: "var(--surface)",
+                      border: "1px solid var(--amber)",
+                      borderRadius: 999,
+                      padding: "1px 5px",
+                    }}
+                  >
+                    partial
+                  </span>
+                )}
+              </div>
               <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>trust index</Text>
+              {posture.pillarsScored > 0 &&
+                posture.pillarsScored < posture.pillarsTotal && (
+                  <Text
+                    style={{ fontSize: 9.5, color: "var(--text-3)", fontStyle: "italic" }}
+                  >
+                    grade from {posture.pillarsScored} of {posture.pillarsTotal} pillars
+                  </Text>
+                )}
             </Flex>
 
             <Flex flexDirection="column" gap={6} style={{ minWidth: 0 }}>
@@ -503,27 +670,26 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
             >
               Health pillars
             </Text>
-            {posture.pillars.length > 0 ? (
+            {posture.isLoading && posture.pillarsScored === 0 ? (
+              // Skeleton bars during load — one loading idiom with the cards
+              // below, not the ad-hoc "Scoring pillars…" text (SUM-10).
+              [0, 1, 2].map((i) => (
+                <Flex key={i} alignItems="center" gap={8}>
+                  <Skeleton style={{ width: 82, height: 12, borderRadius: 4 }} />
+                  <Skeleton style={{ flex: 1, height: 8, borderRadius: 999 }} />
+                </Flex>
+              ))
+            ) : posture.pillars.length > 0 ? (
               posture.pillars.map((p) => <PillarBar key={p.key} pillar={p} />)
             ) : (
               <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-                {posture.isLoading ? "Scoring pillars…" : "No pillar data in scope."}
+                No pillar data in scope.
               </Text>
             )}
           </Flex>
 
-          <Flex alignItems="baseline" gap={8} style={{ marginTop: "auto" }}>
-            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>30-day spend</Text>
-            <Text style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-              {daily.isLoading ? "…" : fmtUSDCompact(daily.projected30d)}
-            </Text>
-            {!daily.isLoading && spendDelta && (
-              <Text as="span" style={{ fontSize: 11, fontWeight: 600, color: spendDelta.color }}>
-                {spendDelta.text} d/d
-              </Text>
-            )}
-          </Flex>
-
+          {/* The 30-day spend footer line was removed — it duplicated the
+              "Spend · 30d proj" KPI tile (SUM-1). */}
           <TileScanFooter group={scanGroup} opts={SUMMARY_SCAN_OPTS} />
         </Flex>
       </Surface>

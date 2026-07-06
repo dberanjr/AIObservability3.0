@@ -98,7 +98,7 @@ export const MiniDonut = ({
       ? values
           .map((v, originalIdx) => ({ v, originalIdx }))
           .filter((p) => p.v > 0)
-          .map((p, _, arr) => {
+          .map((p) => {
             const frac = p.v / total;
             const start = angle;
             const end = angle + Math.min(frac * Math.PI * 2, Math.PI * 2 - 0.0001);
@@ -248,6 +248,10 @@ export interface MiniPartialDonutProps {
   centerSub?: string;
   /** Draw a faint full-ring track behind the arc (reads as "out of 100"). */
   track?: boolean;
+  /** Accessible label describing the value AND its meaning; when set, the gauge
+   *  is exposed as role="img" so a screen reader announces both together
+   *  (e.g. "Fleet trust index 92 of 100, grade A"). */
+  ariaLabel?: string;
 }
 
 /**
@@ -263,6 +267,7 @@ export const MiniPartialDonut = ({
   centerValue,
   centerSub,
   track = false,
+  ariaLabel,
 }: MiniPartialDonutProps) => {
   const cx = size / 2;
   const cy = size / 2;
@@ -278,6 +283,8 @@ export const MiniPartialDonut = ({
 
   return (
     <div
+      role={ariaLabel ? "img" : undefined}
+      aria-label={ariaLabel}
       style={{
         position: "relative",
         width: size,
