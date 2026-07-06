@@ -1,4 +1,5 @@
 import React from "react";
+import { CATEGORICAL } from "../../theme/palette";
 
 /**
  * Small inline SVG primitives used inside the Pulse summary tiles. They're
@@ -55,18 +56,10 @@ export interface MiniDonutProps {
   centerLabel?: string;
 }
 
-const DEFAULT_PALETTE = [
-  "var(--blue)",
-  "var(--purple-2)",
-  "var(--cyan)",
-  "var(--green-2)",
-  "var(--pink)",
-  "var(--amber)",
-  "var(--blue-purple)",
-  "var(--purple-dark)",
-  "var(--red)",
-  "var(--green-lime)",
-];
+// Shared, perceptually-spaced categorical ramp (theme/palette.ts). Fixed hexes
+// so the accent Tweak can't collapse two slices onto one hue (UX report
+// Chart-3/4). Spread to a mutable array for the default-prop signature.
+const DEFAULT_PALETTE = [...CATEGORICAL];
 
 /**
  * Compact donut for the summary tiles. Renders slices proportional to
@@ -361,7 +354,8 @@ export interface MiniScaleProps {
   max: number;
   /** Optional tick markers (in the same units as value) for quick context. */
   ticks?: number[];
-  /** Color gradient. Defaults to a green→amber→red "intensity" gradient. */
+  /** Color gradient. Defaults to a colorblind-safe single-hue light→dark
+   *  --blue sequential ramp (magnitude, not a red/green good-vs-bad judgment). */
   gradient?: string;
   height?: number;
 }
@@ -370,14 +364,17 @@ export interface MiniScaleProps {
  * Thin horizontal gradient bar with a marker dot — used for the Cost /
  * request tile so it has its own visual idiom distinct from donuts and
  * sparklines. The dot's horizontal position encodes where the value falls
- * between `min` and `max`.
+ * between `min` and `max`. The track is a single-hue light→dark --blue
+ * sequential ramp (colorblind-safe magnitude) rather than the old
+ * green→amber→red good/bad gradient (UX report Chart-7); it follows the active
+ * accent since it is single-accent UI.
  */
 export const MiniScale = ({
   value,
   min = 0,
   max,
   ticks,
-  gradient = "linear-gradient(90deg, var(--green-2), var(--amber), var(--red))",
+  gradient = "linear-gradient(90deg, color-mix(in oklab, var(--blue) 12%, transparent), var(--blue))",
   height = 8,
 }: MiniScaleProps) => {
   const span = Math.max(1e-9, max - min);

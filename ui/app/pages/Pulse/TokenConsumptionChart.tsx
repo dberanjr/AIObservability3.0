@@ -201,8 +201,10 @@ const TokenConsumptionBody = () => {
   const chart = (chartHeight: number) => (
     <AreaChart
       height={chartHeight}
+      ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost on the right axis (cost = tokens times the blended rate)`}
       formatLeft={(n) => fmtTokens(n)}
       formatRight={(n) => fmtUSDCompact(n)}
+      rightAxisFromLeftMax={tokensToCost}
       xLabels={xLabels}
       axisTicks={axisTicks}
       forecasts={forecastBands}
@@ -230,7 +232,8 @@ const TokenConsumptionBody = () => {
       <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         <Flex alignItems="baseline" justifyContent="space-between">
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Tokens (solid) · Est. cost (dashed, right axis) · per {intervalPhrase}
+            Tokens (solid) · Est. cost (dashed, right axis = tokens × blended
+            rate) · per {intervalPhrase}
             {forecastEnabled ? " · Forecast (dashed purple)" : ""}
           </Text>
           <Flex alignItems="center" gap={12}>
@@ -262,8 +265,10 @@ const TokenConsumptionBody = () => {
         ) : (
           <AreaChart
             height={220}
+            ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost on the right axis (cost = tokens times the blended rate)`}
             formatLeft={(n) => fmtTokens(n)}
             formatRight={(n) => fmtUSDCompact(n)}
+            rightAxisFromLeftMax={tokensToCost}
             xLabels={xLabels}
             axisTicks={axisTicks}
             forecasts={forecastBands}
@@ -296,7 +301,7 @@ const TokenConsumptionBody = () => {
           open={expander.open}
           onClose={() => expander.setOpen(false)}
           title="Token consumption"
-          subtitle={`Tokens (solid) · Est. cost (dashed, right axis) · per ${intervalPhrase}${forecastEnabled ? " · Forecast (dashed)" : ""}`}
+          subtitle={`Tokens (solid) · Est. cost (dashed, right axis = tokens × blended rate) · per ${intervalPhrase}${forecastEnabled ? " · Forecast (dashed)" : ""}`}
           stats={stats}
         >
           {chart(440)}
@@ -308,7 +313,7 @@ const TokenConsumptionBody = () => {
 export const TokenConsumptionChart = () => (
   <CollapsibleCard
     title="Token consumption"
-    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; dashed line is estimated cost (per interval, from token usage) on the right axis. The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range."
+    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; dashed line is estimated cost on the right axis. The right axis is locked to the left one at the fleet blended rate (cost = tokens × blended rate), so the two lines share a scale — where the cost line pulls away from the token line, that gap is the model-mix effect, not an independent trend. The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range; focus the chart and use arrow keys to read values."
     defaultOpen
   >
     <TokenConsumptionBody />

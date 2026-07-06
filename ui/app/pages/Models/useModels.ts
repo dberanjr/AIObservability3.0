@@ -11,6 +11,7 @@ import { costOf, getPricing, type ModelPricing } from "../../data/pricing";
 import {
   canonicalizeModel,
   normalizeProvider,
+  PROVIDER_COLOR,
   type ProviderId,
 } from "../../detection/attributes";
 import { toNum } from "../../data/format";
@@ -78,17 +79,6 @@ export interface ModelRow {
   /** True when pricing.ts didn't have this model. */
   pricingUnknown: boolean;
 }
-
-const PROVIDER_COLOR_LIGHT: Record<ProviderId, string> = {
-  anthropic: "var(--purple-2)",
-  openai: "var(--green-2)",
-  google: "var(--green-2)",
-  "aws-bedrock": "var(--cyan)",
-  azure: "var(--blue)",
-  cohere: "var(--blue-purple)",
-  mistral: "var(--amber)",
-  unknown: "var(--text-4)",
-};
 
 export interface UseModelsResult {
   models: ModelRow[];
@@ -235,7 +225,7 @@ export const useModels = (serviceName?: string | null): UseModelsResult => {
         modelKey: agg.key,
         rawModels: Array.from(agg.rawModels),
         provider,
-        providerColor: PROVIDER_COLOR_LIGHT[provider.id],
+        providerColor: PROVIDER_COLOR[provider.id],
         type,
         typeInferredFromName,
         requests,

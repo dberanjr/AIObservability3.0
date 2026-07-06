@@ -11,6 +11,7 @@ import {
   type Theme,
   type ToolsMode,
 } from "./TweaksContext";
+import { ACCENT_HEX } from "../theme/palette";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <Text
@@ -114,7 +115,7 @@ const Swatch = ({
   active: boolean;
   onChange: (a: Accent) => void;
 }) => {
-  const swatch = ACCENT_SWATCH[accent];
+  const swatch = ACCENT_HEX[accent];
   return (
     <button
       type="button"
@@ -281,28 +282,6 @@ const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
   { value: "off", label: "Off" },
   { value: "on", label: "On" },
 ];
-
-/**
- * Accent options render as colour swatches so users can preview the
- * mapping. Hex pulled from `theme/tokens.ts` brand palette.
- */
-const ACCENT_SWATCH: Record<Exclude<Accent, "custom">, string> = {
-  blue: "#1C5BE5",
-  purple: "#B23BE4",
-  cyan: "#54C8E9",
-  green: "#73BE28",
-  pink: "#E436FF",
-  amber: "#B45F06",
-  red: "#C0291E",
-  indigo: "#4635D6",
-  lime: "#BDDF28",
-  teal: "#0EA5A5",
-  purpleDeep: "#6C3AD6",
-  gray25: "#bfbfbf",
-  gray50: "#808080",
-  gray75: "#404040",
-  black: "#000000",
-};
 
 export const TweaksPanel = () => {
   const t = useTweaks();

@@ -119,14 +119,22 @@ export const ALL_PROVIDER_IDS: ProviderId[] = [
   "mistral",
 ];
 
+/**
+ * Provider -> brand-token color. Single source of truth for donut arcs, badges,
+ * table chips, bubble/topology nodes. Every provider maps to a DISTINCT token
+ * so a legend row can always be matched back to its mark by color (UX report
+ * Chart-2): Google was previously the same green as OpenAI, and Mistral shared
+ * amber with nobody but sat next to Google's new amber, so Google took amber and
+ * Mistral moved to red.
+ */
 export const PROVIDER_COLOR: Record<ProviderId, string> = {
   anthropic: "var(--purple-2)",
   openai: "var(--green-2)",
-  google: "var(--green-2)",
+  google: "var(--amber)",
   "aws-bedrock": "var(--cyan)",
   azure: "var(--blue)",
   cohere: "var(--blue-purple)",
-  mistral: "var(--amber)",
+  mistral: "var(--red)",
   unknown: "var(--text-4)",
 };
 

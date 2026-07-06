@@ -9,16 +9,12 @@ import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
 import { useModelConcentration } from "./useModelConcentration";
 import { useFinOps, type DailyCostSummary } from "../Models/useFinOps";
+import { CATEGORICAL } from "../../theme/palette";
 
-const SERIES_COLORS = [
-  "var(--purple-2)",
-  "var(--blue)",
-  "var(--cyan)",
-  "var(--amber)",
-  "var(--green-2)",
-  "var(--pink)",
-  "var(--text-4)",
-];
+// Shared, perceptually-spaced categorical ramp (theme/palette.ts). Fixed hexes
+// so the accent Tweak can't collapse adjacent stacked-bar segments onto one hue
+// (UX report Chart-3/4).
+const SERIES_COLORS = CATEGORICAL;
 
 /**
  * Compact stacked daily-cost bars (last 7 days, stacked by model) — a slim

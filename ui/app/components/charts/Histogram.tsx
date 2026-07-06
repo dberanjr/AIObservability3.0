@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { BrushRange, ChartTimeDomain } from "./AreaChart";
+import { SR_ONLY, type BrushRange, type ChartTimeDomain } from "./AreaChart";
 
 export interface HistogramBar {
   label: string;
@@ -23,6 +23,13 @@ export interface HistogramProps {
   showYAxis?: boolean;
   /** Compact formatter for the Y-axis tick labels (kept short to fit PAD_L). */
   yAxisFormatter?: (n: number) => string;
+  /**
+   * Accessible name for the chart. Callers pass the real content (e.g.
+   * "Requests per hour, last 24 hours") so a screen reader announces this
+   * chart rather than a fixed shared string (UX report Chart-5). Falls back to
+   * a generic name.
+   */
+  ariaLabel?: string;
 }
 
 // Show the tooltip after a short, deliberate delay: long enough that it doesn't
@@ -51,10 +58,14 @@ export const Histogram = ({
   onBrushSelect,
   showYAxis = false,
   yAxisFormatter = (n) => String(Math.round(n)),
+  ariaLabel,
 }: HistogramProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tipReady, setTipReady] = useState(false);
+  // Screen-reader readout for the keyboard cursor; only set on key nav so a
+  // pointer sweep never spams the aria-live region.
+  const [srText, setSrText] = useState("");
   const tipTimer = useRef<number | undefined>(undefined);
   const [tipPx, setTipPx] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
@@ -157,9 +168,44 @@ export const Histogram = ({
     if (from && to && from !== to) onBrushSelect({ from, to });
   };
 
+  // Keyboard cursor: arrow keys walk the bars, Home/End jump to the ends,
+  // Escape clears — mirrors the pointer tooltip so keyboard users reach the
+  // same values (UX report Chart-5).
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (bars.length === 0) return;
+    const last = bars.length - 1;
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = Math.min(last, (hoverIdx ?? -1) + 1);
+    else if (e.key === "ArrowLeft") next = Math.max(0, (hoverIdx ?? bars.length) - 1);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    else if (e.key === "Escape") {
+      setHoverIdx(null);
+      setSrText("");
+      return;
+    } else return;
+    e.preventDefault();
+    setHoverIdx(next);
+    setTipPx(PAD_L + next * slot + slot / 2);
+    const b = bars[next];
+    setSrText(`${b.label}, ${valueFormatter(b.value)}`);
+  };
+
+  const handleBlur = () => {
+    setHoverIdx(null);
+    setSrText("");
+    setBrush(null);
+  };
+
+  const accessibleLabel = ariaLabel ?? "Activity histogram";
+
   return (
+    <>
     <div
       ref={wrapRef}
+      role="img"
+      aria-label={accessibleLabel}
+      tabIndex={0}
       style={{
         position: "relative",
         width: "100%",
@@ -171,13 +217,14 @@ export const Histogram = ({
       onMouseLeave={handleLeave}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
     >
       <svg
         width={VIEW_W}
         height={height}
         viewBox={`0 0 ${VIEW_W} ${height}`}
-        role="img"
-        aria-label="24h activity histogram"
+        aria-hidden
       >
         <line
           x1={PAD_L}
@@ -319,5 +366,11 @@ export const Histogram = ({
         </div>
       )}
     </div>
+    {/* Keyboard-cursor readout. Sibling of the role="img" chart (an img is a
+        leaf, so a nested live region would be ignored); only set on key nav. */}
+    <div aria-live="polite" style={SR_ONLY}>
+      {srText}
+    </div>
+    </>
   );
 };

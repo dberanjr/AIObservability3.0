@@ -1,4 +1,10 @@
 import Colors from "@dynatrace/strato-design-tokens/colors";
+import {
+  ACCENT_FG_LIGHT,
+  ACCENT_HEX,
+  CATEGORICAL,
+  pickAccentForeground,
+} from "./palette";
 
 /**
  * Brand accents for AI Observability v3.
@@ -34,28 +40,13 @@ export const brand = {
 } as const;
 
 export const chartPalette = {
-  series: [
-    brand.blue,
-    brand.purpleDeep,
-    brand.cyan,
-    brand.bluePurple,
-    brand.green,
-    brand.purple,
-  ],
+  // Shared, perceptually-spaced categorical ramp (see theme/palette.ts). Fixed
+  // hexes, decoupled from the accent Tweak so multi-series charts never collapse
+  // two series onto one hue.
+  series: CATEGORICAL,
   anomaly: Colors.Charts.Status.Critical.Default,
   warning: Colors.Charts.Status.Warning.Default,
   success: Colors.Charts.Status.Ideal.Default,
-} as const;
-
-/**
- * Provider color mapping. Used by donut charts, badges, and topology nodes.
- */
-export const providerColors = {
-  Anthropic: brand.purple,
-  OpenAI: brand.green,
-  Bedrock: brand.cyan,
-  Google: brand.green,
-  Azure: brand.blue,
 } as const;
 
 const lightSurfaces = {
@@ -120,6 +111,22 @@ const toBlock = (vars: Record<string, string>) =>
     .join("\n");
 
 /**
+ * Per-accent foreground for text/marks that sit ON the accent fill (today the
+ * active-nav pill). Derived from each accent's luminance so light accents
+ * (cyan, lime, gray25, ...) get near-black text instead of failing-contrast
+ * white (UX report Chart-1). Generated from the shared ACCENT_HEX map so the
+ * swatches, this CSS, and the contrast unit test all stay in lockstep.
+ */
+const accentForegroundCss = Object.entries(ACCENT_HEX)
+  .map(
+    ([name, hex]) =>
+      `:root[data-aiobs-accent="${name}"] { --accent-fg: ${pickAccentForeground(
+        hex,
+      )}; }`,
+  )
+  .join("\n");
+
+/**
  * Global CSS that overrides Strato AppRoot theming with our brand palette,
  * plus visual rules driven by the Tweaks panel's data-aiobs-* attributes
  * (see TweaksContext).
@@ -138,6 +145,9 @@ export const themeCss = `
 ${toBlock(brandVars)}
 ${toBlock(density)}
 ${toBlock(radii)}
+  /* Default foreground for marks sitting on the accent fill; per-accent
+     overrides below refine it from each accent's luminance. */
+  --accent-fg: ${ACCENT_FG_LIGHT};
 }
 :root[data-theme="light"] {
 ${toBlock(lightSurfaces)}
@@ -199,23 +209,30 @@ ${toBlock(darkSurfaces)}
 :root[data-aiobs-accent="gray75"]     { --blue: ${brand.gray75};     --blue-pale: ${brand.black}; }
 :root[data-aiobs-accent="black"]      { --blue: ${brand.black};      --blue-pale: ${brand.gray75}; }
 
+/* ---- Accessible foreground on the accent fill (generated) ----
+ * Light accents get near-black text; dark accents keep white. See
+ * accentForegroundCss above. */
+${accentForegroundCss}
+
 /* ---- Active top-nav tab highlight ----
  * The Header tags the current tab with .aiobs-nav-active (plus isSelected /
- * aria-current). We render a solid brand-color pill with inverted (white) text
- * so the active tab stands out cleanly — no underline. !important wins over
+ * aria-current). We render a solid accent-color pill with an accessible
+ * foreground (var(--accent-fg): white on dark accents, near-black on light
+ * ones) so the active tab label always meets contrast against the accent fill
+ * regardless of the user's accent pick. !important wins over
  * Strato's Button classes (which also otherwise add a selected underline). */
 .aiobs-nav-active,
 .aiobs-nav-active:hover,
 .aiobs-nav-active:focus {
-  color: #ffffff !important;
+  color: var(--accent-fg) !important;
   font-weight: 700 !important;
   background: var(--blue) !important;
   border-radius: 8px !important;
   box-shadow: none !important;
 }
-/* Keep any icon/text descendants white too. */
+/* Keep any icon/text descendants on the same accessible foreground. */
 .aiobs-nav-active * {
-  color: #ffffff !important;
+  color: var(--accent-fg) !important;
 }
 
 /* Topology graph canvas: user-resizable height. Height lives on the class (not

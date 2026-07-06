@@ -1,14 +1,11 @@
 import { useMemo } from "react";
 import { useModels } from "../Models/useModels";
+import { CATEGORICAL } from "../../theme/palette";
 
-const SLICE_COLORS = [
-  "var(--purple-2)",
-  "var(--blue)",
-  "var(--cyan)",
-  "var(--amber)",
-  "var(--green-2)",
-  "var(--pink)",
-];
+// Shared, perceptually-spaced categorical ramp (theme/palette.ts). Fixed hexes
+// so the accent Tweak can't collapse the concentration donut into duplicate
+// hues (UX report Chart-3/4).
+const SLICE_COLORS = CATEGORICAL;
 
 export interface ConcentrationSlice {
   key: string;

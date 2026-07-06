@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { usePersistedState } from "../state/usePersistedState";
+import { pickAccentForeground } from "../theme/palette";
 
 export type Theme = "light" | "dark";
 export type Accent =
@@ -193,8 +194,16 @@ export const TweaksProvider = ({
     // tie-breaker rule).
     if (tweaks.accent === "custom") {
       root.style.setProperty("--blue", tweaks.customAccent);
+      // Derive an accessible pill/mark foreground for the picked hex too, so a
+      // light custom accent doesn't leave white-on-light text (UX report
+      // Chart-1). Named accents get this from the generated CSS in tokens.ts.
+      root.style.setProperty(
+        "--accent-fg",
+        pickAccentForeground(tweaks.customAccent),
+      );
     } else {
       root.style.removeProperty("--blue");
+      root.style.removeProperty("--accent-fg");
     }
     // Colorblind filter on the app body so SVG / canvas / IMG all get
     // remapped through the matrix.

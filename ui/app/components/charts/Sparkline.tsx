@@ -23,6 +23,13 @@ export interface SparklineProps {
   reference?: number;
   /** Short label rendered at the right end of the reference line. */
   referenceLabel?: string;
+  /**
+   * Accessible name for the sparkline — typically the metric it trends (e.g.
+   * "P95 latency"). The component appends a spoken latest/min/max summary so a
+   * screen reader gets the values, not an empty aria-hidden graphic (UX report
+   * Chart-5).
+   */
+  ariaLabel?: string;
 }
 
 const VIEW_W = 100;
@@ -42,6 +49,7 @@ export const Sparkline = ({
   variant = "line",
   reference,
   referenceLabel,
+  ariaLabel,
 }: SparklineProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -98,9 +106,22 @@ export const Sparkline = ({
       ? (labels?.[hoverIdx] ?? `Point ${hoverIdx + 1} / ${values.length}`)
       : null;
 
+  // Accessible name: the metric plus a spoken latest/min/max so the trend's
+  // values aren't locked behind the (pointer-only) tooltip. Summarised from the
+  // raw series (not the reference-expanded domain).
+  const lastVal = values[values.length - 1];
+  const loVal = Math.min(...values);
+  const hiVal = Math.max(...values);
+  const summary = `latest ${valueFormatter(lastVal)}, range ${valueFormatter(
+    loVal,
+  )} to ${valueFormatter(hiVal)}`;
+  const accessibleLabel = ariaLabel ? `${ariaLabel}: ${summary}` : `Trend: ${summary}`;
+
   return (
     <div
       ref={wrapRef}
+      role="img"
+      aria-label={accessibleLabel}
       style={{ position: "relative", width: "100%", height }}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}

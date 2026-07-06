@@ -60,6 +60,7 @@ export const ActivityCard = () => {
           showYAxis
           yAxisFormatter={fmtCountCompact}
           valueFormatter={(n) => `${fmtCount(n)} req`}
+          ariaLabel="Requests per hour over the last 24 hours"
         />
       )}
     </SummaryCard>

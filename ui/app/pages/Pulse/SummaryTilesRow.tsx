@@ -24,6 +24,7 @@ import {
   fmtUSDCompact,
 } from "../../data/format";
 
+import { CATEGORICAL } from "../../theme/palette";
 import { useScope } from "../../scope/ScopeContext";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import type { PulseSummary } from "./usePulseSummary";
@@ -34,18 +35,10 @@ import { useAnomalies } from "./anomalies/useAnomalies";
 
 type DonutColumnMode = "tokens" | "mcp";
 
-const SLICE_COLORS = [
-  "var(--blue)",
-  "var(--purple-2)",
-  "var(--cyan)",
-  "var(--green-2)",
-  "var(--pink)",
-  "var(--amber)",
-  "var(--blue-purple)",
-  "var(--purple-dark)",
-  "var(--red)",
-  "var(--green-lime)",
-];
+// Shared, perceptually-spaced categorical ramp (theme/palette.ts). Fixed hexes
+// so the accent Tweak can't collapse the donut into duplicate hues
+// (UX report Chart-3/4).
+const SLICE_COLORS = CATEGORICAL;
 
 type McpSortKey =
   | "value" | "p50" | "p95" | "p99"
@@ -599,6 +592,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
     values: number[],
     color: string,
     fmt: (n: number) => string,
+    ariaLabel?: string,
   ) =>
     values.length > 1 ? (
       <Sparkline
@@ -607,6 +601,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         height={24}
         valueFormatter={fmt}
         labels={summary.spark.labels}
+        ariaLabel={ariaLabel}
       />
     ) : null;
 
@@ -816,7 +811,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
             ? `${fmtCount(summary.requests)} req`
             : undefined
         }
-        bottom={renderSpark(summary.spark.tokens, "var(--blue)", fmtTokens)}
+        bottom={renderSpark(summary.spark.tokens, "var(--blue)", fmtTokens, "Tokens trend")}
         expanded={() =>
           sparklineExpanded(
             "Tokens",
@@ -833,7 +828,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         info="USD spend = actual (models priced in the table) + estimated (models not in the table, costed at a blended fallback rate). The sub-line splits the two. Counts are extrapolated to the unsampled population when sampling is on."
         value={fmtUSDCompact(totalSpend)}
         sub={spendSub}
-        bottom={renderSpark(summary.spark.spend, "var(--blue)", fmtUSDCompact)}
+        bottom={renderSpark(summary.spark.spend, "var(--blue)", fmtUSDCompact, "Spend trend")}
         expanded={() =>
           sparklineExpanded(
             "Spend",
@@ -849,7 +844,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         label="P95 latency"
         info="95th percentile request duration across all GenAI spans in scope. Percentile statistics are sampling-invariant — toggling sampling won't change this number."
         value={fmtMs(summary.p95Ms)}
-        bottom={renderSpark(summary.spark.p95Ms, "var(--blue)", fmtMs)}
+        bottom={renderSpark(summary.spark.p95Ms, "var(--blue)", fmtMs, "P95 latency trend")}
         expanded={() =>
           sparklineExpanded(
             "P95 latency",
@@ -869,6 +864,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           summary.spark.errorRatePct,
           "var(--blue)",
           (n) => fmtPercent(n, 1),
+          "Error rate trend",
         )}
         expanded={() =>
           sparklineExpanded(
@@ -1026,7 +1022,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
       <ScanScopedTile name="Cost / request">
       <Tile
         label="Cost / request"
-        info="Total spend (actual + estimated) divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (green = cheap, red = expensive). Ratio is sampling-invariant."
+        info="Total spend (actual + estimated) divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (darker = higher cost per request). Ratio is sampling-invariant."
         value={fmtUSD(costPerReq)}
         sub={costPerReqSub}
         bottom={

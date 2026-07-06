@@ -66,6 +66,15 @@ const ActivityHistogramBody = () => {
       valueFormatter={(n) => `${fmtCount(n)} req`}
       xDomain={xDomain}
       onBrushSelect={(range) => setTimeframe(range)}
+      showYAxis
+      yAxisFormatter={fmtCount}
+      ariaLabel={`Requests per hour over the last 24 hours${
+        result.peakHour != null
+          ? `, peak ${formatHour(result.peakHour)} at ${fmtCount(
+              result.peakRequests,
+            )} requests`
+          : ""
+      }`}
     />
   );
 

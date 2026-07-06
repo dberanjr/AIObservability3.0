@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -7,7 +7,12 @@ import { EmptyState } from "../../components/EmptyState";
 import type { DailyCostSummary } from "./useFinOps";
 import { assignSeriesColors } from "./finopsLogic";
 
-const VIEW_W = 720;
+// Fallback width used before the ResizeObserver measures the container. Real
+// rendering drives the viewBox from the observed width so 9px axis labels and
+// bar geometry stay at native size instead of being horizontally stretched by
+// a fixed viewBox + preserveAspectRatio="none" (UX report Chart-8) — matching
+// the AreaChart/Histogram pattern.
+const FALLBACK_VIEW_W = 720;
 const HEIGHT = 240;
 const PAD_L = 48;
 const PAD_R = 16;
@@ -32,6 +37,23 @@ export const DailyCostStackedBar = ({
   isLoading,
 }: DailyCostStackedBarProps) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [viewW, setViewW] = useState<number>(FALLBACK_VIEW_W);
+
+  // Callback ref: (re)attaches a ResizeObserver whenever the plotting div
+  // mounts. A callback ref (rather than useEffect + useRef) is needed because
+  // the div lives inside the loading/empty conditional, so it mounts after the
+  // first render.
+  const roRef = useRef<ResizeObserver | null>(null);
+  const measureRef = useCallback((node: HTMLDivElement | null) => {
+    roRef.current?.disconnect();
+    if (node && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(([entry]) => {
+        setViewW(Math.max(200, Math.floor(entry.contentRect.width)));
+      });
+      ro.observe(node);
+      roRef.current = ro;
+    }
+  }, []);
 
   const { stacks, max, colorFor } = useMemo(() => {
     // Colour each model series by its provider so a model reads the same hue
@@ -59,7 +81,7 @@ export const DailyCostStackedBar = ({
     };
   }, [daily]);
 
-  const innerW = VIEW_W - PAD_L - PAD_R;
+  const innerW = viewW - PAD_L - PAD_R;
   const innerH = HEIGHT - PAD_T - PAD_B;
   const slot = daily.dayLabels.length > 0 ? innerW / daily.dayLabels.length : innerW;
   const barW = Math.max(8, slot * 0.6);
@@ -111,14 +133,15 @@ export const DailyCostStackedBar = ({
             hint="Each day is scanned at a 1:100 sampling floor; widen the scope or check that priced models are in use."
           />
         ) : (
-          <div style={{ position: "relative" }}>
+          <div ref={measureRef} style={{ position: "relative", width: "100%" }}>
             <svg
               width="100%"
               height={HEIGHT}
-              viewBox={`0 0 ${VIEW_W} ${HEIGHT}`}
-              preserveAspectRatio="none"
+              viewBox={`0 0 ${viewW} ${HEIGHT}`}
               role="img"
-              aria-label="Daily cost stacked bar chart"
+              aria-label={`Daily cost over the last 7 days, stacked by model, total ${fmtUSDCompact(
+                daily.totals.reduce((a, b) => a + b, 0),
+              )}`}
               onMouseLeave={() => setHoverIndex(null)}
             >
               {/* Y axis grid + ticks */}
@@ -128,7 +151,7 @@ export const DailyCostStackedBar = ({
                   <g key={t} pointerEvents="none">
                     <line
                       x1={PAD_L}
-                      x2={VIEW_W - PAD_R}
+                      x2={viewW - PAD_R}
                       y1={y}
                       y2={y}
                       stroke="var(--border)"

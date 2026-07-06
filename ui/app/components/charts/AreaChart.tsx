@@ -145,7 +145,39 @@ export interface AreaChartProps {
    * accidental clicks don't trigger a zoom.
    */
   onBrushSelect?: (range: BrushRange) => void;
+  /**
+   * Accessible name for the chart. Callers pass the real series/metric name so
+   * a screen reader announces *this* chart's content — not a fixed string that
+   * every reuse of the component would share (UX report Chart-5). Falls back to
+   * a name built from the series labels.
+   */
+  ariaLabel?: string;
+  /**
+   * Lock the right y-axis to a function of the (nice-rounded) left-axis max
+   * instead of scaling it independently. Use when the right series is a known
+   * transform of the left — e.g. cost = tokens x blended rate. Equal
+   * blended-rate points then line up across both axes, so the right-axis line
+   * can't be misread as an independent trend; where it deviates from the left
+   * curve, that deviation is the real signal, not axis noise (UX report
+   * Chart-9).
+   */
+  rightAxisFromLeftMax?: (leftMax: number) => number;
 }
+
+// Visually-hidden but screen-reader-available. Used for the keyboard cursor
+// live-readout so blind/keyboard users get bucket values (the visual tooltip is
+// pointer-only). clip + 1px keeps it out of the layout and off-screen.
+export const SR_ONLY: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
 
 // VIEW_W is the fallback width used before the ResizeObserver has measured
 // the container. Real rendering uses the observed container width so the
@@ -185,9 +217,15 @@ export const AreaChart = ({
   forecasts,
   xDomain,
   onBrushSelect,
+  ariaLabel,
+  rightAxisFromLeftMax,
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // Screen-reader readout for the current keyboard cursor position. Updated
+  // ONLY on key nav (never on mouse move) so a pointer sweep doesn't spam the
+  // aria-live region.
+  const [srText, setSrText] = useState("");
   const [tipReady, setTipReady] = useState(false);
   const tipTimer = useRef<number | undefined>(undefined);
   const [tipPx, setTipPx] = useState<number>(0);
@@ -255,12 +293,14 @@ export const AreaChart = ({
       leftForecasts.reduce((acc, f) => Math.max(acc, forecastMax(f)), 0),
     ),
   );
-  const rightMax = niceMax(
-    Math.max(
-      rightSeries.reduce((acc, s) => Math.max(acc, finiteMax(s.values)), 0),
-      rightForecasts.reduce((acc, f) => Math.max(acc, forecastMax(f)), 0),
-    ),
-  );
+  const rightMax = rightAxisFromLeftMax
+    ? Math.max(1, rightAxisFromLeftMax(leftMax))
+    : niceMax(
+        Math.max(
+          rightSeries.reduce((acc, s) => Math.max(acc, finiteMax(s.values)), 0),
+          rightForecasts.reduce((acc, f) => Math.max(acc, forecastMax(f)), 0),
+        ),
+      );
 
   const innerW = VIEW_W - PAD_L - PAD_R;
   const innerH = height - PAD_T - PAD_B;
@@ -411,9 +451,67 @@ export const AreaChart = ({
     }
   };
 
+  const fmtForAxis = (axis: AreaSeries["axis"]) =>
+    (axis === "right" ? formatRight : formatLeft) ??
+    ((n: number) => String(Math.round(n)));
+
+  // Spoken readout of every series value at bucket `idx` — fed to the aria-live
+  // region on keyboard nav so the data is available without a pointer.
+  const readoutFor = (idx: number): string => {
+    const parts: string[] = [];
+    const xl = xLabels?.[idx];
+    parts.push(xl ? xl : `Point ${idx + 1} of ${length}`);
+    for (const s of series) {
+      const v = s.values[idx];
+      if (v == null) continue;
+      parts.push(`${s.label} ${fmtForAxis(s.axis)(v)}`);
+    }
+    return parts.join(", ");
+  };
+
+  // Keyboard cursor: arrow keys walk the buckets, Home/End jump to the ends,
+  // Escape clears. Mirrors the pointer crosshair + tooltip so keyboard users
+  // reach the same values (UX report Chart-5).
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (length <= 1) return;
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = Math.min(length - 1, (hoverIdx ?? -1) + 1);
+    else if (e.key === "ArrowLeft") next = Math.max(0, (hoverIdx ?? length) - 1);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = length - 1;
+    else if (e.key === "Escape") {
+      setHoverIdx(null);
+      setSrText("");
+      return;
+    } else return;
+    e.preventDefault();
+    setHoverIdx(next);
+    setTipPx(PAD_L + next * step);
+    setSrText(readoutFor(next));
+  };
+
+  const handleBlur = () => {
+    setHoverIdx(null);
+    setSrText("");
+    setBrush(null);
+  };
+
+  const accessibleLabel =
+    ariaLabel ??
+    (() => {
+      const names = series.map((s) => s.label).filter(Boolean);
+      return names.length > 0
+        ? `${names.join(" and ")} over time`
+        : "Time series chart";
+    })();
+
   return (
+    <>
     <div
       ref={wrapRef}
+      role="img"
+      aria-label={accessibleLabel}
+      tabIndex={0}
       style={{
         position: "relative",
         width: "100%",
@@ -425,13 +523,14 @@ export const AreaChart = ({
       onMouseLeave={handleLeave}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
     >
       <svg
         width={VIEW_W}
         height={height}
         viewBox={`0 0 ${VIEW_W} ${height}`}
-        role="img"
-        aria-label="Token consumption over time"
+        aria-hidden
       >
         {yTicks.map((t) => (
           <line
@@ -460,7 +559,7 @@ export const AreaChart = ({
           </text>
         ))}
 
-        {rightSeries.length > 0 &&
+        {(rightSeries.length > 0 || rightAxisFromLeftMax) &&
           yTicks.map((t) => (
             <text
               key={`r${t}`}
@@ -970,5 +1069,12 @@ export const AreaChart = ({
         </div>
       )}
     </div>
+    {/* Keyboard-cursor readout. Sibling of the role="img" chart (an img is a
+        leaf, so a nested live region would be ignored by AT); only populated on
+        key nav, so pointer users never trigger an announcement. */}
+    <div aria-live="polite" style={SR_ONLY}>
+      {srText}
+    </div>
+    </>
   );
 };
