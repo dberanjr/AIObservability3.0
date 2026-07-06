@@ -808,7 +808,7 @@ export const AttributeAuditPage = () => {
                         <HeroStat
                           label="AI spans in window"
                           value={loadingCounts ? "—" : fmtCount(overview.aiSpansInWindow)}
-                          info="The largest single category span population — a defensible lower-bound estimate of AI spans in the window. (Summing categories would double-count the spans they share.) Extrapolated for sampling."
+                          info="The largest single category span population — a defensible lower-bound estimate of AI spans in the window. Excludes the Infrastructure section and ordinary db.system database spans, which ride on non-AI traffic and would overstate the count. (Summing categories would double-count the spans they share.) Extrapolated for sampling."
                         />
                       </Flex>
 

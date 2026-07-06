@@ -249,7 +249,11 @@ export const useAttributeAudit = (
       ).length,
       sectionCount: sections.length,
       spansScanned: sections.reduce((a, s) => a + s.sectionSpans, 0),
-      aiSpansInWindow: sections.reduce((m, s) => Math.max(m, s.sectionSpans), 0),
+      // The estimate excludes sections flagged out of it (Infrastructure): its
+      // population rides on non-AI platform spans and would overstate AI spans.
+      aiSpansInWindow: sections
+        .filter((s) => !s.section.excludeFromSpanEstimate)
+        .reduce((m, s) => Math.max(m, s.sectionSpans), 0),
       mandatoryCoveragePct,
       coverageExDPct: exDTotal > 0 ? (exDPresent / exDTotal) * 100 : 0,
       sparseTotal: sections.reduce((a, s) => a + s.sparseCount, 0),

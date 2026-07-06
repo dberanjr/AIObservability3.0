@@ -96,6 +96,14 @@ export interface AuditSection {
    * population — the denominator the attribute counts are measured against.
    */
   population: string;
+  /**
+   * When true, this section's population is EXCLUDED from the "AI spans in
+   * window" estimate (the max-population figure). Set on Infrastructure, whose
+   * population rides on platform attributes present on non-AI spans; the
+   * AI-specific spans it does hold are already counted by another section's
+   * population, so nothing AI-specific is lost by excluding it.
+   */
+  excludeFromSpanEstimate?: boolean;
   /** Spec / best-practice links for the whole section. */
   links: SpecLink[];
   attributes: AttrSpec[];
@@ -422,7 +430,12 @@ export const SECTIONS: AuditSection[] = [
     blurb:
       "Retrieval-augmented generation telemetry: the vector store, the query, the returned chunks, and embedding dimensionality. The OTel spec has added gen_ai.retrieval.* as the canonical namespace — vector_db.* attributes are now deprecated in favour of these. These explain why a model answered the way it did and where RAG quality breaks down.",
     iconKey: "vectordb",
-    population: either("db.system", "vector_db.query.text", "gen_ai.retrieval.query.text", "gen_ai.request.embedding_dimensions"),
+    // NB: db.system is intentionally NOT in the population. It rides on every
+    // ordinary database span (redis, postgres, …), not just vector stores, so
+    // including it would count non-AI DB traffic as RAG spans and inflate the
+    // "AI spans in window" estimate. db.system remains a measured attribute
+    // below — its presence still counts, it just doesn't define the population.
+    population: either("vector_db.query.text", "gen_ai.retrieval.query.text", "gen_ai.request.embedding_dimensions"),
     links: [
       { label: "OTel database attributes", url: OTEL_DB },
       { label: "OpenLLMetry semantic conventions", url: TRACELOOP },
@@ -456,6 +469,11 @@ export const SECTIONS: AuditSection[] = [
       "Where the workload runs and the platform-level signals that surface failures. These connect AI spans to services, Kubernetes placement, hosts, and the HTTP/RPC/exception attributes Davis uses for problem detection.",
     iconKey: "infra",
     population: either("gen_ai.request.model", "traceloop.span.kind", "mcp.response.value"),
+    // Platform/infrastructure spans overstate AI spans (service.name, host, HTTP
+    // attributes ride on non-AI spans too), and the gen_ai.request.model spans
+    // here are already counted by Section 1 — so keep this section out of the
+    // "AI spans in window" estimate.
+    excludeFromSpanEstimate: true,
     links: [
       { label: "OTel service attributes", url: OTEL_SERVICE },
       { label: "OTel Kubernetes attributes", url: OTEL_K8S },
