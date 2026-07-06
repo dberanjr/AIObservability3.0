@@ -18,6 +18,7 @@ import { TopAgentsCard } from "./TopAgentsCard";
 import { ActivityCard } from "./ActivityCard";
 import { ProblemPatternsCard } from "./ProblemPatternsCard";
 import { TopFindingsCard } from "./TopFindingsCard";
+import { GuardrailsSummaryCard } from "../../guardrails/GuardrailsSummaryCard";
 
 /**
  * A titled band that segments the page into a logical reading order for both
@@ -88,6 +89,7 @@ export const SummaryPage = () => {
     makeTile("quality", "Is it good? · Quality & trust", 4, <QualityTrustCard />),
     makeTile("finops", "Spend · FinOps", 4, <FinOpsCard />),
     makeTile("efficiency", "Efficiency & mix", 4, <EfficiencyMixCard />),
+    makeTile("guardrails", "AI Guardrails", 4, <GuardrailsSummaryCard />),
   ];
   const opsTiles: GridTile[] = [
     makeTile("latency", "Latency by tier", 3, <LatencyTierCard summary={summary} />),

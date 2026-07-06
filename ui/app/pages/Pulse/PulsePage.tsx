@@ -14,6 +14,7 @@ import { ProviderMixDonut } from "./ProviderMixDonut";
 import { SummaryTilesRow } from "./SummaryTilesRow";
 import { SafetyPanel } from "./SafetyPanel";
 import { FeedbackPanel } from "./FeedbackPanel";
+import { GuardrailsPanel } from "../../guardrails/GuardrailsPanel";
 import { CapabilityGate } from "../../components/CapabilityGate";
 import { TokenEfficiencyTiles } from "./TokenEfficiencyTiles";
 import { TokenConsumptionChart } from "./TokenConsumptionChart";
@@ -70,6 +71,10 @@ export const PulsePage = () => {
         <CapabilityGate id={["guardrails", "piiCategories"]}>
           <SafetyPanel />
         </CapabilityGate>
+        {/* AWS Bedrock guardrail metrics — real intervention data, independent
+            of the span-based SafetyPanel capability above (guardrails emit no
+            spans in this tenant). Has its own empty/loading/error states. */}
+        <GuardrailsPanel />
         <CapabilityGate id={["feedback", "promptVersion"]}>
           <FeedbackPanel />
         </CapabilityGate>

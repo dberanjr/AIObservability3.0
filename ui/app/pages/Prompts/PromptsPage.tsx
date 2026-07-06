@@ -15,6 +15,7 @@ import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
 import { PromptsTable, type PromptView } from "./PromptsTable";
 import { PromptsTilesRow } from "./PromptsTilesRow";
+import { GuardrailsStrip } from "../../guardrails/GuardrailsStrip";
 import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
 import { decodePromptsFilter } from "./findingFilter";
@@ -310,6 +311,9 @@ export const PromptsPage = () => {
             </Text>
           </Flex>
         )}
+        {/* Guardrails gate the prompt/response I/O analyzed below — surface the
+            fleet intervention context (Bedrock metrics; full view on Pulse). */}
+        <GuardrailsStrip />
         <PromptsTilesRow
           filter={filter}
           onFilterChange={setFilter}
