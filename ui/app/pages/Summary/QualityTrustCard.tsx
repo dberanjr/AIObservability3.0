@@ -2,13 +2,11 @@ import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { EmptyState } from "../../components/EmptyState";
-import { fmtCount, fmtPercent } from "../../data/format";
+import { fmtPercent } from "../../data/format";
 import { useCapability } from "../../scope/CapabilityContext";
 import { useTweaks } from "../../tweaks/TweaksContext";
 import { SummaryCard } from "./SummaryCard";
 import { useAgentEval } from "../Agents/useAgentEval";
-import { useHiddenFailures } from "./useHiddenFailures";
-import type { FleetPosture } from "./useFleetPosture";
 
 const QualBar = ({
   label,
@@ -118,11 +116,10 @@ const EXAMPLE = {
   coverage: 35,
 };
 
-export const QualityTrustCard = ({ posture }: { posture: FleetPosture }) => {
+export const QualityTrustCard = () => {
   const cap = useCapability();
   const { pageConfig } = useTweaks();
   const eval_ = useAgentEval();
-  const hidden = useHiddenFailures();
 
   const hasEval = cap.has("evalScore") || eval_.hasAnyEval;
   const showExample = !hasEval && pageConfig.showExampleData;
@@ -162,29 +159,22 @@ export const QualityTrustCard = ({ posture }: { posture: FleetPosture }) => {
       title="Is it good? · Quality & trust"
       drill={{ label: "Agents", to: "/agents" }}
       headerRight={
-        <Flex gap={8} alignItems="center">
-          {posture.grade ? (
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-2)" }}>
-              {posture.grade} · {posture.trustIndex}
-            </span>
-          ) : null}
-          {showExample ? (
-            <span
-              style={{
-                fontSize: 9.5,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                color: "var(--amber)",
-                border: "1px solid var(--amber)",
-                borderRadius: 4,
-                padding: "0 5px",
-              }}
-            >
-              Example data
-            </span>
-          ) : null}
-        </Flex>
+        showExample ? (
+          <span
+            style={{
+              fontSize: 9.5,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--amber)",
+              border: "1px solid var(--amber)",
+              borderRadius: 4,
+              padding: "0 5px",
+            }}
+          >
+            Example data
+          </span>
+        ) : undefined
       }
     >
       <Flex flexDirection="column" gap={16} style={{ height: "100%" }}>
@@ -200,7 +190,6 @@ export const QualityTrustCard = ({ posture }: { posture: FleetPosture }) => {
             value={v.hallucination != null ? fmtPercent(v.hallucination) : "—"}
             tone="risk"
           />
-          <MiniTile label="Behind 200" value={hidden.isLoading ? "…" : fmtCount(hidden.total)} tone="risk" />
           <MiniTile label="Coverage" value={v.coverage != null ? fmtPercent(v.coverage, 0) : "—"} />
         </Flex>
       </Flex>

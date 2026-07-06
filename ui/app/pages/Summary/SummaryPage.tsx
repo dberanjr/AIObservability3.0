@@ -58,6 +58,9 @@ export const SummaryPage = () => {
   const summary = usePulseSummary();
   const posture = useFleetPosture();
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  // Layout customization is opt-in: the default landing is calm and read-only,
+  // with drag/resize/reset revealed only in edit mode (SUM-4).
+  const [editLayout, setEditLayout] = useState(false);
 
   const firstError = summary.error ?? posture.error ?? null;
 
@@ -82,7 +85,7 @@ export const SummaryPage = () => {
   });
 
   const qualityTiles: GridTile[] = [
-    makeTile("quality", "Is it good? · Quality & trust", 4, <QualityTrustCard posture={posture} />),
+    makeTile("quality", "Is it good? · Quality & trust", 4, <QualityTrustCard />),
     makeTile("finops", "Spend · FinOps", 4, <FinOpsCard />),
     makeTile("efficiency", "Efficiency & mix", 4, <EfficiencyMixCard />),
   ];
@@ -107,6 +110,27 @@ export const SummaryPage = () => {
       >
         {firstError && <ErrorBanner error={firstError} />}
 
+        <Flex justifyContent="flex-end">
+          <button
+            type="button"
+            onClick={() => setEditLayout((v) => !v)}
+            title="Rearrange and resize the tiles below"
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "5px 12px",
+              borderRadius: 8,
+              border: `1px solid ${editLayout ? "var(--blue)" : "var(--border)"}`,
+              color: editLayout ? "#fff" : "var(--text-2)",
+              background: editLayout ? "var(--blue)" : "transparent",
+            }}
+          >
+            {editLayout ? "Done editing" : "⚙ Customize layout"}
+          </button>
+        </Flex>
+
         {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}
         <ScanScope name="posture">
           <PostureBand summary={summary} posture={posture} />
@@ -115,9 +139,13 @@ export const SummaryPage = () => {
         {/* Value story — is it good, what does it cost, how efficient is it. */}
         <Section
           label="Quality, cost & efficiency"
-          hint="Trust, spend, and how much output each dollar buys · drag to reorder, drag a corner to resize"
+          hint={
+            editLayout
+              ? "Drag a tile's top strip to reorder, drag a corner to resize · Done editing to lock"
+              : "Trust, spend, and how much output each dollar buys"
+          }
         >
-          <CustomizableGrid storageKey="quality" columns={12} tiles={qualityTiles} />
+          <CustomizableGrid storageKey="quality" columns={12} tiles={qualityTiles} editable={editLayout} />
         </Section>
 
         {/* Operations — where latency, hidden failures, and load actually live. */}
@@ -125,7 +153,7 @@ export const SummaryPage = () => {
           label="Operations & activity"
           hint="Latency, silent failures, cost drivers, and 24-hour load"
         >
-          <CustomizableGrid storageKey="operations" columns={12} tiles={opsTiles} />
+          <CustomizableGrid storageKey="operations" columns={12} tiles={opsTiles} editable={editLayout} />
         </Section>
 
         {/* Signals — the detectors and findings that drive investigation. */}
@@ -133,7 +161,7 @@ export const SummaryPage = () => {
           label="Problem signals"
           hint="Detector volume and the findings worth opening first"
         >
-          <CustomizableGrid storageKey="signals" columns={12} tiles={signalTiles} />
+          <CustomizableGrid storageKey="signals" columns={12} tiles={signalTiles} editable={editLayout} />
         </Section>
       </Flex>
       </div>

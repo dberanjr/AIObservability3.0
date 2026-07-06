@@ -59,10 +59,15 @@ export const CustomizableGrid = ({
   storageKey,
   columns,
   tiles,
+  editable = false,
 }: {
   storageKey: string;
   columns: number;
   tiles: GridTile[];
+  /** When false (default) the section is read-only: no drag strips, resize
+   *  handles, or reset button, so the default landing is calm. Collapse
+   *  (CollapsibleTile) stays available regardless. (SUM-4) */
+  editable?: boolean;
 }) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [containerW, setContainerW] = useState(1200);
@@ -181,7 +186,7 @@ export const CustomizableGrid = ({
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
-      {isCustomized && (
+      {editable && isCustomized && (
         <button
           type="button"
           className="aiobs-tile-reset"
@@ -208,8 +213,9 @@ export const CustomizableGrid = ({
               key={t.id}
               span={span}
               height={size.height}
+              editable={editable}
               dragging={draggingId === t.id}
-              draggable={dragArmedId === t.id}
+              draggable={editable && dragArmedId === t.id}
               onArm={(armed) => setDragArmedId(armed ? t.id : null)}
               onDragStart={() => setDraggingId(t.id)}
               onDragEnd={() => {
@@ -233,6 +239,7 @@ export const CustomizableGrid = ({
 const GridItem = ({
   span,
   height,
+  editable,
   dragging,
   draggable,
   onArm,
@@ -246,6 +253,7 @@ const GridItem = ({
 }: {
   span: number;
   height: number | null;
+  editable: boolean;
   dragging: boolean;
   draggable: boolean;
   onArm: (armed: boolean) => void;
@@ -281,20 +289,22 @@ const GridItem = ({
         opacity: dragging ? 0.5 : 1,
       }}
     >
-      <DragStrip onArm={onArm} />
+      {editable && <DragStrip onArm={onArm} />}
       {children}
-      <div
-        className="aiobs-tile-resize"
-        title="Drag to resize"
-        onPointerDown={(e) => onResizeStart(e, elRef.current)}
-        onPointerMove={onResizeMove}
-        onPointerUp={onResizeEnd}
-        aria-hidden
-      >
-        <svg width={12} height={12} viewBox="0 0 12 12" fill="none">
-          <path d="M11 4L4 11M11 8L8 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-        </svg>
-      </div>
+      {editable && (
+        <div
+          className="aiobs-tile-resize"
+          title="Drag to resize"
+          onPointerDown={(e) => onResizeStart(e, elRef.current)}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeEnd}
+          aria-hidden
+        >
+          <svg width={12} height={12} viewBox="0 0 12 12" fill="none">
+            <path d="M11 4L4 11M11 8L8 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 };
