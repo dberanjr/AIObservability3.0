@@ -86,10 +86,13 @@ export const SummaryPage = () => {
   });
 
   const qualityTiles: GridTile[] = [
-    makeTile("quality", "Is it good? · Quality & trust", 4, <QualityTrustCard />),
-    makeTile("finops", "Spend · FinOps", 4, <FinOpsCard />),
-    makeTile("efficiency", "Efficiency & mix", 4, <EfficiencyMixCard />),
-    makeTile("guardrails", "AI Guardrails", 4, <GuardrailsSummaryCard />),
+    // Four quarter-width tiles so Quality, Spend, Efficiency, and Guardrails
+    // share ONE row at equal (stretched) height — Guardrails no longer wraps
+    // to a second row leaving the Quality tile tall and half-empty.
+    makeTile("quality", "Is it good? · Quality & trust", 3, <QualityTrustCard />),
+    makeTile("finops", "Spend · FinOps", 3, <FinOpsCard />),
+    makeTile("efficiency", "Efficiency & mix", 3, <EfficiencyMixCard />),
+    makeTile("guardrails", "AI Guardrails", 3, <GuardrailsSummaryCard />),
   ];
   const opsTiles: GridTile[] = [
     makeTile("latency", "Latency by tier", 3, <LatencyTierCard summary={summary} />),
@@ -147,7 +150,7 @@ export const SummaryPage = () => {
               : "Trust, spend, and how much output each dollar buys"
           }
         >
-          <CustomizableGrid storageKey="quality" columns={12} tiles={qualityTiles} editable={editLayout} />
+          <CustomizableGrid storageKey="quality2" columns={12} tiles={qualityTiles} editable={editLayout} />
         </Section>
 
         {/* Operations — where latency, hidden failures, and load actually live. */}

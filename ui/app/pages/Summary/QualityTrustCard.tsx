@@ -184,7 +184,7 @@ export const QualityTrustCard = () => {
           {v.taskSuccess != null && <QualBar label="Task-success rate" pct={v.taskSuccess} />}
           {v.toolCorrectness != null && <QualBar label="Tool-call correctness" pct={v.toolCorrectness} />}
         </Flex>
-        <Flex gap={8} style={{ marginTop: "auto" }}>
+        <Flex gap={8}>
           <MiniTile
             label="Halluc."
             value={v.hallucination != null ? fmtPercent(v.hallucination) : "—"}
