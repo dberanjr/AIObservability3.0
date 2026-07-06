@@ -5,6 +5,10 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import {
+  ChartModal,
+  useChartExpander,
+} from "../../components/charts/ChartExpander";
 import { useTokenEfficiency } from "./useTokenEfficiency";
 import { usePulseSeries } from "./archMap/usePulseSeries";
 import { useSpendBreakdown } from "./useSpendBreakdown";
@@ -16,33 +20,39 @@ const TileShell = ({
   label,
   hint,
   info,
+  headerRight,
   children,
 }: {
   label: string;
   hint?: string;
   info?: string;
+  /** Right-aligned header slot (e.g. the expand button). */
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }) => (
   <Surface elevation="raised" padding={16}>
     <Flex flexDirection="column" gap={8} style={{ minWidth: 0 }}>
-      <Flex flexDirection="column" gap={2}>
-        <Flex alignItems="center" gap={6}>
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "var(--text-3)",
-            }}
-          >
-            {label}
-          </Text>
-          {info && <InfoTooltip text={info} />}
+      <Flex alignItems="flex-start" justifyContent="space-between" gap={8}>
+        <Flex flexDirection="column" gap={2}>
+          <Flex alignItems="center" gap={6}>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--text-3)",
+              }}
+            >
+              {label}
+            </Text>
+            {info && <InfoTooltip text={info} />}
+          </Flex>
+          {hint && (
+            <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>{hint}</Text>
+          )}
         </Flex>
-        {hint && (
-          <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>{hint}</Text>
-        )}
+        {headerRight && <div style={{ flex: "0 0 auto" }}>{headerRight}</div>}
       </Flex>
       {children}
     </Flex>
@@ -124,10 +134,66 @@ const Driver = ({
 const scoreColor = (score: number): string =>
   score >= 70 ? "var(--green-2)" : score >= 40 ? "var(--amber)" : "var(--red)";
 
+/**
+ * One driver series rendered large inside a ChartModal: a labelled header row
+ * with the current value, and the same `Spark` stretched tall/fluid. Hover the
+ * line to read per-bucket values (with bucket-time labels).
+ */
+const EnlargedSpark = ({
+  label,
+  value,
+  data,
+  color,
+  format,
+  labels,
+}: {
+  label: string;
+  value: string;
+  data?: number[];
+  color: string;
+  format?: (n: number) => string;
+  labels?: string[];
+}) => (
+  <Flex flexDirection="column" gap={6}>
+    <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
+      <Text style={{ fontSize: 12.5, color: "var(--text-2)" }}>{label}</Text>
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--text)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {value}
+      </Text>
+    </Flex>
+    {data ? (
+      <div style={{ height: 150 }}>
+        <Spark
+          data={data}
+          color={color}
+          height={150}
+          fluid
+          area
+          format={format}
+          labels={labels}
+        />
+      </div>
+    ) : (
+      <Text style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+        Not enough history to chart in the current scope.
+      </Text>
+    )}
+  </Flex>
+);
+
 const TokenEfficiencyBody = () => {
   const eff = useTokenEfficiency();
   const series = usePulseSeries();
   const spend = useSpendBreakdown();
+  const scoreExpander = useChartExpander();
+  const opdExpander = useChartExpander();
 
   // Derived per-bucket driver series. Spend per bucket distributes the REAL
   // per-model total (useSpendBreakdown) by token share — no flat blended rate.
@@ -142,6 +208,7 @@ const TokenEfficiencyBody = () => {
   const tokPerSec = series.outputTokens.map((out) => (secPerBucket > 0 ? out / secPerBucket : 0));
 
   return (
+    <>
     <div
       style={{
         display: "grid",
@@ -152,6 +219,7 @@ const TokenEfficiencyBody = () => {
       <TileShell
         label="Token efficiency score"
         hint="Cost / throughput / waste — not quality-adjusted"
+        headerRight={scoreExpander.expandButton("Expand token efficiency score")}
         info={
           "0–100 composite of how effectively tokens are turned into output. " +
           "Weighted: output leverage 50% (output ÷ total tokens), completion 30% " +
@@ -206,6 +274,7 @@ const TokenEfficiencyBody = () => {
       <TileShell
         label="Output per dollar"
         hint="Output tokens generated per $ spent"
+        headerRight={opdExpander.expandButton("Expand output per dollar")}
         info={
           "Output tokens produced per US dollar of model spend (total output " +
           "tokens ÷ total cost). A plain, benchmark-free efficiency metric — " +
@@ -248,6 +317,96 @@ const TokenEfficiencyBody = () => {
         )}
       </TileShell>
     </div>
+
+    <ChartModal
+      open={scoreExpander.open}
+      onClose={() => scoreExpander.setOpen(false)}
+      title="Token efficiency score"
+      subtitle="0–100 composite of how effectively tokens become output (cost / throughput / waste), with its per-bucket drivers over the active timeframe."
+      stats={[
+        {
+          label: "Score",
+          value: eff.score == null ? "—" : `${eff.score} / 100`,
+        },
+        {
+          label: "Output share (leverage)",
+          value: fmtPercent(eff.leverage * 100, 1),
+        },
+        {
+          label: "Input tokens / request",
+          value: fmtTokens(eff.inputTokensPerRequest),
+        },
+        {
+          label: "Truncation (waste)",
+          value: fmtPercent(eff.truncationRatePct, 1),
+        },
+      ]}
+    >
+      <Flex flexDirection="column" gap={24}>
+        <EnlargedSpark
+          label="Input tokens / request"
+          value={fmtTokens(eff.inputTokensPerRequest)}
+          data={ok(inputPerReq)}
+          color="var(--blue)"
+          format={fmtTokens}
+          labels={series.labels}
+        />
+        <EnlargedSpark
+          label="Truncation (waste)"
+          value={fmtPercent(eff.truncationRatePct, 1)}
+          data={ok(series.truncation)}
+          color="var(--amber)"
+          format={fmtCount}
+          labels={series.labels}
+        />
+      </Flex>
+    </ChartModal>
+
+    <ChartModal
+      open={opdExpander.open}
+      onClose={() => opdExpander.setOpen(false)}
+      title="Output per dollar"
+      subtitle="Output tokens produced per US dollar of model spend, with its cost and throughput drivers over the active timeframe."
+      stats={[
+        {
+          label: "Output per dollar",
+          value:
+            eff.outputPerDollar == null
+              ? "—"
+              : `${fmtTokens(eff.outputPerDollar)} tok / $`,
+        },
+        {
+          label: "Cost / 1K output tokens",
+          value: eff.costPer1kOutput == null ? "—" : fmtUSD(eff.costPer1kOutput),
+        },
+        {
+          label: "Throughput",
+          value: `${Math.round(eff.tokensPerSec).toLocaleString()} tok/s`,
+        },
+      ]}
+    >
+      <Flex flexDirection="column" gap={24}>
+        <EnlargedSpark
+          label="Cost / 1K output tokens"
+          value={
+            eff.costPer1kOutput == null ? "—" : fmtUSD(eff.costPer1kOutput)
+          }
+          data={ok(costPer1kOut)}
+          color="var(--green-2)"
+          format={(n) => fmtUSD(n)}
+          labels={series.labels}
+        />
+        <EnlargedSpark
+          label="Throughput"
+          value={`${Math.round(eff.tokensPerSec).toLocaleString()} tok/s`}
+          data={ok(tokPerSec)}
+          color="var(--purple)"
+          format={(n) => `${Math.round(n).toLocaleString()} tok/s`}
+          labels={series.labels}
+        />
+      </Flex>
+    </ChartModal>
+    </>
   );
 };
 

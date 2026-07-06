@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -96,9 +96,16 @@ const TokenConsumptionBody = () => {
   const { setTimeframe } = useScope();
   const spend = useSpendBreakdown();
   const spendTotal = !spend.isLoading && spend.total > 0 ? spend.total : result.totalCost;
+  // Reconcile the per-bucket cost to the ACTUAL fleet spend. The raw per-bucket
+  // estCost is a blended estimate; scale it so the dashed cost line's total
+  // matches the accurate (per-model) spend figure shown beside the chart,
+  // distributed across intervals by token share. (True per-model-per-bucket cost
+  // would need a per-model time query.)
+  const costScale =
+    result.totalCost > 0 && spendTotal > 0 ? spendTotal / result.totalCost : 1;
   const intervalPhrase = intervalPhraseFromMs(result.intervalMs);
   const historicalTokens = result.points.map((p) => p.tokens);
-  const historicalCosts = result.points.map((p) => p.estCost);
+  const historicalCosts = result.points.map((p) => p.estCost * costScale);
   const histLen = historicalTokens.length;
   const fc = forecast.forecast;
   const forecastLen = forecastEnabled && fc ? fc.values.length : 0;
@@ -132,12 +139,13 @@ const TokenConsumptionBody = () => {
     [histLen, result.intervalMs, forecastLen],
   );
 
-  // Per-bucket cost is derived from per-bucket tokens via the same blended
-  // pricing as the historical Est. cost line, so the forecasted cost band
-  // tracks the forecasted token band 1:1.
-  // Fleet-aggregate buckets priced at the blended rate (model: null) through
-  // the cache-aware cost model.
-  const tokensToCost = (n: number) => costOf(n / 2, n / 2, null);
+  // Forecasted per-bucket cost, reconciled to the actual spend rate (costScale)
+  // exactly like the historical Est. cost line, so the forecast cost band tracks
+  // the forecast token band on the same scale.
+  const tokensToCost = useCallback(
+    (n: number) => costOf(n / 2, n / 2, null) * costScale,
+    [costScale],
+  );
 
   const forecastBands: ForecastBand[] = useMemo(() => {
     if (!forecastEnabled || !fc || histLen === 0) return [];
@@ -165,7 +173,7 @@ const TokenConsumptionBody = () => {
         axis: "right",
       },
     ];
-  }, [forecastEnabled, fc, histLen]);
+  }, [forecastEnabled, fc, histLen, tokensToCost]);
 
   // Time domain spans `now - histLen*intervalMs` (historical start) through
   // the last forecast bucket if present, otherwise `now`. Brush emits ISO
@@ -203,10 +211,9 @@ const TokenConsumptionBody = () => {
   const chart = (chartHeight: number) => (
     <AreaChart
       height={chartHeight}
-      ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost on the right axis (cost = tokens times the blended rate)`}
+      ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost (reconciled to actual spend) on the right axis`}
       formatLeft={(n) => fmtTokens(n)}
       formatRight={(n) => fmtUSDCompact(n)}
-      rightAxisFromLeftMax={tokensToCost}
       xLabels={xLabels}
       axisTicks={axisTicks}
       forecasts={forecastBands}
@@ -234,8 +241,7 @@ const TokenConsumptionBody = () => {
       <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         <Flex alignItems="baseline" justifyContent="space-between">
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Tokens (solid) · Est. cost (dashed, right axis = tokens × blended
-            rate) · per {intervalPhrase}
+            Tokens (solid) · Est. cost (dashed, right axis) · per {intervalPhrase}
             {forecastEnabled ? " · Forecast (dashed purple)" : ""}
           </Text>
           <Flex alignItems="center" gap={12}>
@@ -274,7 +280,7 @@ const TokenConsumptionBody = () => {
         ) : (
           <AreaChart
             height={220}
-            ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost on the right axis (cost = tokens times the blended rate)`}
+            ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost (reconciled to actual spend) on the right axis`}
             formatLeft={(n) => fmtTokens(n)}
             formatRight={(n) => fmtUSDCompact(n)}
             rightAxisFromLeftMax={tokensToCost}
@@ -310,7 +316,7 @@ const TokenConsumptionBody = () => {
           open={expander.open}
           onClose={() => expander.setOpen(false)}
           title="Token consumption"
-          subtitle={`Tokens (solid) · Est. cost (dashed, right axis = tokens × blended rate) · per ${intervalPhrase}${forecastEnabled ? " · Forecast (dashed)" : ""}`}
+          subtitle={`Tokens (solid) · Est. cost (dashed, right axis) · per ${intervalPhrase}${forecastEnabled ? " · Forecast (dashed)" : ""}`}
           stats={stats}
         >
           {chart(440)}
@@ -322,7 +328,7 @@ const TokenConsumptionBody = () => {
 export const TokenConsumptionChart = () => (
   <CollapsibleCard
     title="Token consumption"
-    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; dashed line is estimated cost on the right axis. The right axis is locked to the left one at the fleet blended rate (cost = tokens × blended rate), so the two lines share a scale — where the cost line pulls away from the token line, that gap is the model-mix effect, not an independent trend. The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range; focus the chart and use arrow keys to read values."
+    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; the dashed line is estimated cost on the right axis, reconciled to the actual fleet spend (distributed across intervals by token share, since exact per-model cost per interval needs a per-model time query). The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range; focus the chart and use arrow keys to read values."
     defaultOpen
   >
     <TokenConsumptionBody />
