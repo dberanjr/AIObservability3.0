@@ -54,6 +54,8 @@ export interface PulseSummary {
   spark: {
     tokens: number[];
     spend: number[];
+    /** Blended cost per request per bucket (sampling-invariant). */
+    costPerReq: number[];
     p95Ms: number[];
     errorRatePct: number[];
     /** Bucket interval in seconds — same for every series above. */
@@ -209,6 +211,13 @@ export const usePulseSummary = (): PulseSummary => {
     const errorRateSeries = requestsSeries.map((req, i) =>
       req > 0 ? (errorsSeries[i] / req) * 100 : 0,
     );
+    // Cost per request per bucket. spendSeries is extrapolated (from
+    // extrapolated tokens); requestsSeries is the raw sampled count, so scale
+    // it by samplingRatio to keep the quotient sampling-invariant.
+    const costPerReqSeries = spendSeries.map((bucketSpend, i) => {
+      const reqs = requestsSeries[i] * samplingRatio;
+      return reqs > 0 ? bucketSpend / reqs : 0;
+    });
 
     // Per-bucket date+time labels for the sparkline cursor tooltip. The
     // last bucket lines up with "now"; earlier buckets step back by
@@ -253,6 +262,7 @@ export const usePulseSummary = (): PulseSummary => {
       spark: {
         tokens: tokensSeries,
         spend: spendSeries,
+        costPerReq: costPerReqSeries,
         p95Ms: p95MsSeries,
         errorRatePct: errorRateSeries,
         intervalSec: sparkIntervalSec,

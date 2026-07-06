@@ -9,6 +9,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import type { Finding } from "../../components/drawers/types";
 import { CollapsibleSection } from "../../components/CollapsibleSection";
 import { CapabilityGate } from "../../components/CapabilityGate";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useUpstreamServices } from "../Agents/useUpstreamServices";
 import type { ModelRow } from "./useModels";
 import { useFinOps } from "./useFinOps";
@@ -67,7 +68,9 @@ export const ModelsFinOpsSections = ({
           title="Prompt cache & reported cost"
           subtitle="auto-detected"
         >
-          <CacheCostPanel />
+          <ScanScopedTile name="Prompt cache & cost">
+            <CacheCostPanel />
+          </ScanScopedTile>
         </CollapsibleSection>
       </CapabilityGate>
 
@@ -91,10 +94,12 @@ export const ModelsFinOpsSections = ({
       </CollapsibleSection>
 
       <CollapsibleSection title="Model A/B swap comparison">
-        <ModelComparisonPanel
-          services={serviceNames}
-          upstreamOptions={upstreamOptions}
-        />
+        <ScanScopedTile name="Model A/B comparison">
+          <ModelComparisonPanel
+            services={serviceNames}
+            upstreamOptions={upstreamOptions}
+          />
+        </ScanScopedTile>
       </CollapsibleSection>
 
       <CollapsibleSection title="Cost efficiency by service">
@@ -108,7 +113,9 @@ export const ModelsFinOpsSections = ({
         title="Session & user cost"
         subtitle="multi-turn spend per session / user"
       >
-        <SessionUserCostPanel />
+        <ScanScopedTile name="Session & user cost">
+          <SessionUserCostPanel />
+        </ScanScopedTile>
       </CollapsibleSection>
     </Flex>
   );

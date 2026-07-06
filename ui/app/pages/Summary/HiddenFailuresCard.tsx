@@ -1,0 +1,60 @@
+import React from "react";
+import { Skeleton } from "@dynatrace/strato-components/content";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
+import { BarList, type BarListItem } from "../../components/charts/BarList";
+import { fmtCount } from "../../data/format";
+import { SummaryCard } from "./SummaryCard";
+import { useHiddenFailures } from "./useHiddenFailures";
+
+/**
+ * Hidden · 200-OK donut: HTTP-200 responses that are really failures, split into
+ * refusals / max-token truncation / content-filter blocks (the load-bearing
+ * finish_reasons signal on this tenant). Drills to Explorer, where the
+ * logical-error catalog lives.
+ */
+export const HiddenFailuresCard = () => {
+  const hidden = useHiddenFailures();
+
+  const items: BarListItem[] = hidden.categories.map((c) => ({
+    key: c.key,
+    label: c.label,
+    value: c.count,
+    displayValue: fmtCount(c.count),
+  }));
+  const colorByKey = new Map(hidden.categories.map((c) => [c.key, c.color]));
+
+  return (
+    <SummaryCard title="Hidden · 200-OK" drill={{ label: "Explorer", to: "/explorer" }}>
+      {hidden.isLoading && items.length === 0 ? (
+        <Skeleton style={{ height: 130, borderRadius: 8 }} />
+      ) : hidden.total === 0 ? (
+        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+          No hidden 200-OK failures in scope.
+        </Text>
+      ) : (
+        <Flex flexDirection="column" gap={12}>
+          <Flex alignItems="baseline" gap={8}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: "var(--text)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {fmtCount(hidden.total)}
+            </Text>
+            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+              200-OK failures
+            </Text>
+          </Flex>
+          <BarList
+            items={items}
+            color={(item) => colorByKey.get(item.key) ?? "var(--red)"}
+          />
+        </Flex>
+      )}
+    </SummaryCard>
+  );
+};

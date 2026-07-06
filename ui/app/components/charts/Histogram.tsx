@@ -19,7 +19,17 @@ export interface HistogramProps {
   xDomain?: ChartTimeDomain;
   /** Fires on mouse-up after a click-and-drag brush. */
   onBrushSelect?: (range: BrushRange) => void;
+  /** Draw a minimal left Y-axis (faint gridlines + a couple of tick labels). */
+  showYAxis?: boolean;
+  /** Compact formatter for the Y-axis tick labels (kept short to fit PAD_L). */
+  yAxisFormatter?: (n: number) => string;
 }
+
+// Show the tooltip after a short, deliberate delay: long enough that it doesn't
+// flicker as the cursor crosses the chart, short enough to feel instant. A true
+// 0ms reveal races the pointer and strobes; ~150ms reads as immediate.
+const TOOLTIP_DELAY_MS = 150;
+const Y_TICKS = 2;
 
 // Fallback width used before the ResizeObserver fires; real rendering uses
 // the observed container width so SVG text isn't aspect-stretched.
@@ -39,14 +49,30 @@ export const Histogram = ({
   valueFormatter = (n) => String(Math.round(n)),
   xDomain,
   onBrushSelect,
+  showYAxis = false,
+  yAxisFormatter = (n) => String(Math.round(n)),
 }: HistogramProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [tipReady, setTipReady] = useState(false);
+  const tipTimer = useRef<number | undefined>(undefined);
   const [tipPx, setTipPx] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
   const [brush, setBrush] = useState<{ startPx: number; endPx: number } | null>(
     null,
   );
+
+  // Arm the reveal timer on first hover; clear it whenever the cursor leaves.
+  useEffect(() => {
+    if (hoverIdx == null) {
+      window.clearTimeout(tipTimer.current);
+      setTipReady(false);
+      return;
+    }
+    if (tipReady) return;
+    tipTimer.current = window.setTimeout(() => setTipReady(true), TOOLTIP_DELAY_MS);
+    return () => window.clearTimeout(tipTimer.current);
+  }, [hoverIdx, tipReady]);
 
   useEffect(() => {
     if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
@@ -162,6 +188,39 @@ export const Histogram = ({
           vectorEffect="non-scaling-stroke"
         />
 
+        {/* Minimal Y-axis: a couple of faint gridlines with compact labels, so
+            the bars have a scale without cluttering the tile. */}
+        {showYAxis &&
+          Array.from({ length: Y_TICKS + 1 }, (_, i) => i / Y_TICKS).map((t) => {
+            const y = PAD_T + innerH - t * innerH;
+            return (
+              <g key={`y${t}`}>
+                {t > 0 && (
+                  <line
+                    x1={PAD_L}
+                    x2={VIEW_W - PAD_R}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                    opacity={0.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                <text
+                  x={PAD_L - 5}
+                  y={y + 3}
+                  fontSize={9}
+                  textAnchor="end"
+                  fill="var(--text-3)"
+                  fontFamily="var(--mono, monospace)"
+                >
+                  {yAxisFormatter(max * t)}
+                </text>
+              </g>
+            );
+          })}
+
         {bars.map((b, i) => {
           const h = (b.value / max) * innerH;
           const x = PAD_L + i * slot + (slot - barW) / 2;
@@ -231,7 +290,7 @@ export const Histogram = ({
           })()}
       </svg>
 
-      {hoverIdx != null && (
+      {hoverIdx != null && tipReady && (
         <div
           role="tooltip"
           style={{

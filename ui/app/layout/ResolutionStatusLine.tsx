@@ -2,7 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { useSegments } from "@dynatrace/strato-components/filters";
 import { useResolvedCounts } from "../scope/useResolvedCounts";
+import { PageScanTotal } from "../components/ScanDebug";
+import { useTweaks } from "../tweaks/TweaksContext";
+import { parseBuckets } from "../scope/queries";
 
 const formatRelative = (ms: number): string => {
   if (ms < 1000) return "just now";
@@ -18,6 +22,15 @@ const formatCount = (n: number | null): string => (n == null ? "—" : String(n)
 
 export const ResolutionStatusLine = () => {
   const counts = useResolvedCounts();
+  const { pageConfig } = useTweaks();
+  const { segments } = useSegments();
+  // Buckets (DQL text) and segments (filterSegments request param) live on
+  // different layers, so both apply (intersection) — surface a chip so the user
+  // knows their bucket tweak isn't being overridden by the active segment.
+  const bucketAndSegment =
+    pageConfig.bucketFilterEnabled &&
+    parseBuckets(pageConfig.bucketFilterText).length > 0 &&
+    (segments?.length ?? 0) > 0;
   const { pathname } = useLocation();
   // On Pulse the architecture-map header already carries the service / agent /
   // tool / finding counts, so the strip drops them there to avoid duplication
@@ -61,6 +74,26 @@ export const ResolutionStatusLine = () => {
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
         Scope further with Segments in the toolbar above.
       </Text>
+      {bucketAndSegment && (
+        <span
+          title="Your span-bucket filter and the active segment both apply (intersection). Neither overrides the other."
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            fontSize: 10.5,
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: 999,
+            border: "1px solid var(--blue)",
+            color: "var(--blue)",
+            background: "color-mix(in oklab, var(--blue) 12%, transparent)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Buckets + segment both active
+        </span>
+      )}
+      <PageScanTotal />
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
         Last refreshed {refreshedLabel}
       </Text>

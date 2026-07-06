@@ -33,6 +33,7 @@ import { useOrchestrationNodes } from "./useOrchestrationNodes";
 import { useUpstreamServices } from "./useUpstreamServices";
 import { agentsFocusPreset, applyAgentsFocus, type FocusContext } from "./focus";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 
 const SLOW_VIEW_P90_MS = 2000;
 
@@ -209,10 +210,12 @@ const AgentsPageBody = () => {
           onConfigureSLA={() => setSlaOpen(true)}
         />
 
-        <AgentsTilesRow
-          agents={agentsResult.all}
-          isLoading={agentsResult.isLoading}
-        />
+        <ScanScopedTile name="Agent KPIs">
+          <AgentsTilesRow
+            agents={agentsResult.all}
+            isLoading={agentsResult.isLoading}
+          />
+        </ScanScopedTile>
 
         <DataGapNote
           tone="warn"
@@ -230,10 +233,12 @@ const AgentsPageBody = () => {
           emptyMessage="No agents above the slow threshold in the current scope."
         />
 
-        <AgentsHero
-          agents={agentsResult.all}
-          isLoading={agentsResult.isLoading}
-        />
+        <ScanScopedTile name="Invocations & P90 latency">
+          <AgentsHero
+            agents={agentsResult.all}
+            isLoading={agentsResult.isLoading}
+          />
+        </ScanScopedTile>
 
         {/* Agents table — full width, directly above the execution-tier
             breakdown so the per-agent detail and the where-time-goes view
@@ -247,7 +252,9 @@ const AgentsPageBody = () => {
           onOperationChange={setOperation}
         />
 
-        <LatencyTierPanel />
+        <ScanScopedTile name="Latency by tier">
+          <LatencyTierPanel />
+        </ScanScopedTile>
 
         <OrchestrationSection rows={orchestrationNodes.nodes} />
 

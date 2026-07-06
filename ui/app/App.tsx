@@ -11,8 +11,10 @@ import { ExplorerPage } from "./pages/Explorer/ExplorerPage";
 import { ModelsPage } from "./pages/Models/ModelsPage";
 import { PromptsPage } from "./pages/Prompts/PromptsPage";
 import { PulsePage } from "./pages/Pulse/PulsePage";
+import { SummaryPage } from "./pages/Summary/SummaryPage";
 import { AttributeAuditPage } from "./pages/AttributeAudit/AttributeAuditPage";
 import { About } from "./pages/About/About";
+import { FieldNotesPage } from "./pages/FieldNotes/FieldNotesPage";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
 import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
@@ -20,6 +22,7 @@ import { ScopeProvider } from "./scope/ScopeContext";
 import { GlobalFilterProvider } from "./scope/GlobalFilterContext";
 import { TraceScopeProvider } from "./scope/TraceScopeContext";
 import { CapabilityProvider } from "./scope/CapabilityContext";
+import { ScanReportProvider } from "./scope/ScanReportContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
 import { TweaksPanel } from "./tweaks/TweaksPanel";
@@ -38,6 +41,7 @@ export const App = () => {
     <GlobalFilterProvider>
     <TraceScopeProvider>
     <CapabilityProvider>
+    <ScanReportProvider>
       <ThemeStyles />
       <Page>
         <Page.Header>
@@ -54,7 +58,8 @@ export const App = () => {
           >
             <div style={{ flex: 1 }}>
               <Routes>
-                <Route path="/" element={<PulsePage />} />
+                <Route path="/" element={<SummaryPage />} />
+                <Route path="/summary" element={<SummaryPage />} />
                 <Route path="/pulse" element={<PulsePage />} />
                 <Route path="/explorer" element={<ExplorerPage />} />
                 <Route path="/agents" element={<AgentsPage />} />
@@ -81,6 +86,7 @@ export const App = () => {
                   element={<RedirectKeepingSearch to="/models" />}
                 />
                 <Route path="/about" element={<About />} />
+                <Route path="/field-notes" element={<FieldNotesPage />} />
                 <Route path="/home" element={<Home />} />
               </Routes>
             </div>
@@ -91,6 +97,7 @@ export const App = () => {
       <TweaksPanel />
       <ModelPricingPanel />
       <ColorBlindFilters />
+    </ScanReportProvider>
     </CapabilityProvider>
     </TraceScopeProvider>
     </GlobalFilterProvider>

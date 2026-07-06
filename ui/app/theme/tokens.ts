@@ -127,22 +127,11 @@ const toBlock = (vars: Record<string, string>) =>
  * AppRoot sets `data-theme="light" | "dark"` on `:root`. Tweaks mirrors the
  * same data-theme override (and adds data-aiobs-theme for symmetry).
  *
- * Tile style:
- *   data-aiobs-tile="card"     — default (Strato raised Surface)
- *   data-aiobs-tile="bordered" — drop the elevation shadow, add a 1px border
- *   data-aiobs-tile="ghost"    — strip elevation, border, and background
- *
- * Density: compact shrinks tile padding so more fits on screen.
- *
  * Accent: swaps the brand-blue and brand-purple tokens so primary accents
  * (buttons, links, charts that read `var(--blue)`) follow the user's pick.
  *
  * Left rail (data-aiobs-rail="off") hides the top navigation items so users
  * who already know the routes can free up vertical space.
- *
- * The tile-style selectors look for raised surfaces by their Strato data
- * attribute. We can't predict the exact class hash, so we target the
- * stable data-elevation marker the component sets.
  */
 export const themeCss = `
 :root {
@@ -157,52 +146,35 @@ ${toBlock(lightSurfaces)}
 ${toBlock(darkSurfaces)}
 }
 
-/* ---- Tweaks: density ---- */
-:root[data-aiobs-density="compact"] {
-  --d-row: 28px;
-  --d-row-compact: 24px;
-  --d-tile-pad-y: 10px;
-  --d-tile-pad-x: 12px;
-  --d-panel-pad: 12px;
-  --d-gap: 8px;
+/* ---- Summary: floating cards ---------------------------------------------
+   Every card on the Summary page gets the same stronger, softer shadow so it
+   reads as lifted off the page, and rises further on hover. Scoped to the page
+   wrapper so other tabs keep the default elevation. */
+.aiobs-summary-page .strato-surface .surface-background {
+  /* !important because Strato applies the raised elevation shadow inline
+     (that's why the bordered/ghost overrides also use !important). */
+  box-shadow: 0 12px 28px -6px rgba(16, 18, 27, 0.26),
+    0 4px 10px -2px rgba(16, 18, 27, 0.14) !important;
+  transition: box-shadow 160ms ease, transform 160ms ease;
 }
-:root[data-aiobs-density="compact"] [data-aiobs-tile-target] {
-  padding: 10px 12px !important;
+:root[data-theme="dark"] .aiobs-summary-page .strato-surface .surface-background {
+  box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.66),
+    0 4px 12px -2px rgba(0, 0, 0, 0.5) !important;
 }
-/* "minimal" — data-first read; strip chrome (shadows/borders) and shrink
-   padding so panels feel like reports, not cards. */
-:root[data-aiobs-density="minimal"] {
-  --d-row: 22px;
-  --d-row-compact: 20px;
-  --d-tile-pad-y: 4px;
-  --d-tile-pad-x: 6px;
-  --d-panel-pad: 8px;
-  --d-gap: 6px;
-  --shadow: none;
-  --shadow-lg: none;
+.aiobs-summary-page .aiobs-tile-item {
+  transition: transform 160ms ease;
 }
-
-/* ---- Tweaks: tile style ----
- * Strato Surface renders an outer .strato-surface div plus an inner
- * .surface-background pseudo-element div that actually carries the
- * elevation shadow + background. We override the inner element so the
- * tweak applies to every Surface across the app without each call site
- * needing to opt in.
- */
-:root[data-aiobs-tile="bordered"] .strato-surface .surface-background {
-  box-shadow: none !important;
-  background: transparent !important;
+.aiobs-summary-page .aiobs-tile-item:hover {
+  transform: translateY(-3px);
+  z-index: 2;
 }
-:root[data-aiobs-tile="bordered"] .strato-surface {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+.aiobs-summary-page .aiobs-tile-item:hover .surface-background {
+  box-shadow: 0 20px 40px -8px rgba(16, 18, 27, 0.32),
+    0 6px 14px -3px rgba(16, 18, 27, 0.18) !important;
 }
-:root[data-aiobs-tile="ghost"] .strato-surface .surface-background {
-  box-shadow: none !important;
-  background: transparent !important;
-}
-:root[data-aiobs-tile="ghost"] .strato-surface {
-  border: none;
+:root[data-theme="dark"] .aiobs-summary-page .aiobs-tile-item:hover .surface-background {
+  box-shadow: 0 22px 44px -8px rgba(0, 0, 0, 0.75),
+    0 6px 16px -3px rgba(0, 0, 0, 0.55) !important;
 }
 
 /* ---- Tweaks: accent — overrides --blue (the primary accent token most
@@ -313,6 +285,168 @@ ${toBlock(darkSurfaces)}
 }
 @media (max-width: 1180px) {
   .aiobs-pulse-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Summary (front door) layout ---------------------------------------- */
+/* The page reads top-to-bottom as a narrative, grouped into titled sections.
+   Each section owns one row grid; the eyebrow label names the question it
+   answers so executives get a story and operators get a workspace. */
+.aiobs-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aiobs-summary-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.aiobs-summary-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.aiobs-summary-section-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Row 1: the fleet-posture hero on the left, the 6 KPI tiles in a 3-col grid
+   on the right. The KPI grid drops below the hero as the viewport narrows. */
+.aiobs-summary-posture {
+  display: grid;
+  /* Hero gets the lion's share; the six KPI tiles ride in a tighter right
+     column so they read as a compact scoreboard rather than a second hero. */
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.5fr);
+  gap: 16px;
+  /* start (not stretch) so the KPI tiles keep their own short height and stand
+     on their own as cards rather than stretching to the taller hero. */
+  align-items: start;
+}
+.aiobs-summary-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+/* Rows stretch every tile to the tallest sibling so a row reads as one clean
+   band. Breathing room comes from each tile's own content (the charts carry
+   explicit heights), NOT a fixed row min-height — that way a row of collapsed
+   tiles shrinks to a slim strip instead of reserving empty space. Collapsed
+   tiles set align-self:start so they stay short next to taller neighbours. */
+.aiobs-summary-row3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+.aiobs-summary-row4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+.aiobs-summary-row-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.aiobs-summary-drill:hover {
+  text-decoration: underline;
+}
+
+/* Customizable-grid tile affordances: a drag strip along the top edge and a
+   resize handle in the bottom-right corner, both revealed on hover so the tile
+   reads as a clean card at rest. The card itself clips its content (see
+   SummaryCard) so a shrunk tile never spills onto its neighbour. */
+.aiobs-tile-item {
+  transition: opacity 120ms ease;
+}
+.aiobs-tile-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 4;
+}
+.aiobs-tile-drag:active {
+  cursor: grabbing;
+}
+.aiobs-tile-grip {
+  margin-top: 3px;
+  width: 26px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--text-4, var(--text-3));
+  opacity: 0.7;
+}
+.aiobs-tile-resize {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 4;
+  touch-action: none;
+}
+.aiobs-tile-item:hover .aiobs-tile-drag,
+.aiobs-tile-item:hover .aiobs-tile-resize {
+  opacity: 0.85;
+}
+.aiobs-tile-reset {
+  all: unset;
+  position: absolute;
+  top: -26px;
+  right: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+  z-index: 2;
+}
+.aiobs-tile-reset:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+@media (max-width: 1180px) {
+  .aiobs-summary-posture {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .aiobs-summary-row4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .aiobs-summary-row-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .aiobs-summary-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .aiobs-summary-row3,
+  .aiobs-summary-row4 {
     grid-template-columns: minmax(0, 1fr);
   }
 }

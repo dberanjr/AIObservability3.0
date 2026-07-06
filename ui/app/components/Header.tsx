@@ -16,12 +16,14 @@ import { ModelPricingButton } from "../pricing/ModelPricingButton";
  * of this bar, never a replacement for it.
  */
 const NAV_ITEMS: { to: string; label: string }[] = [
+  { to: "/summary", label: "Summary" },
   { to: "/pulse", label: "Pulse" },
   { to: "/explorer", label: "Explorer" },
   { to: "/agents", label: "Agents" },
   { to: "/prompts", label: "Prompts" },
   { to: "/models", label: "Models / FinOps" },
   { to: "/attributes", label: "Attributes" },
+  { to: "/field-notes", label: "Field Notes" },
   { to: "/about", label: "About" },
 ];
 
@@ -31,10 +33,11 @@ export const Header = () => {
   // navigation so the selected scope doesn't reset when switching pages.
   const { search, pathname } = useLocation();
 
-  // Mark the active tab so it gets a clear highlight. Pulse owns both "/" and
-  // "/pulse"; every other tab matches its own path (and nested sub-paths).
+  // Mark the active tab so it gets a clear highlight. Summary is the front door
+  // and owns both "/" and "/summary"; Pulse owns only "/pulse" now; every other
+  // tab matches its own path (and nested sub-paths).
   const isActive = (to: string): boolean => {
-    if (to === "/pulse") return pathname === "/" || pathname === "/pulse";
+    if (to === "/summary") return pathname === "/" || pathname === "/summary";
     return pathname === to || pathname.startsWith(`${to}/`);
   };
 

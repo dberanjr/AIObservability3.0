@@ -212,6 +212,37 @@ export const injectGlobalFilters = (
   );
 };
 
+/**
+ * Parse the Tweaks span-bucket field (a comma-separated list) into a clean,
+ * de-duplicated array of bucket names. Whitespace is trimmed and empties are
+ * dropped, so "bos_spans, genai_spans," → ["bos_spans", "genai_spans"].
+ */
+export const parseBuckets = (text: string): string[] => {
+  const seen = new Set<string>();
+  for (const raw of (text ?? "").split(",")) {
+    const b = raw.trim();
+    if (b) seen.add(b);
+  }
+  return [...seen];
+};
+
+/**
+ * Insert an OR-of-buckets partition filter after EVERY `fetch spans` statement
+ * — spans only, never logs (the tweak restricts *span* buckets). `dt.system.bucket`
+ * is a Grail partition key, so `| filter in(dt.system.bucket, {...})` prunes the
+ * scan to the named buckets (measured on ualpre: 500 GB → 4.74 GB for one bucket).
+ * No-op when `buckets` is empty, leaving the query (and its query key) stable.
+ */
+export const injectBucketFilter = (
+  query: string,
+  buckets: string[],
+): string => {
+  if (!query || !buckets || buckets.length === 0) return query;
+  const list = buckets.map((b) => `"${dqlEscape(b)}"`).join(", ");
+  const pipe = `| filter in(dt.system.bucket, {${list}})`;
+  return query.replace(/^([ \t]*fetch\s+spans\b[^\n]*)$/gm, `$1\n${pipe}`);
+};
+
 /* ------------------------------------------------------------------ *
  * HYBRID global filtering — per-attribute partition
  *

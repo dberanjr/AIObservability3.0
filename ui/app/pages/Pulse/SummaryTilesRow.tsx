@@ -15,7 +15,6 @@ import {
 } from "../../components/charts/ChartExpander";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { FilterTrigger } from "../../components/FilterTrigger";
-import { useTweaks } from "../../tweaks/TweaksContext";
 import {
   fmtCount,
   fmtMs,
@@ -26,6 +25,7 @@ import {
 } from "../../data/format";
 
 import { useScope } from "../../scope/ScopeContext";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
 import { useSpendBreakdown } from "./useSpendBreakdown";
@@ -361,16 +361,9 @@ const Tile = ({
   info,
   expanded,
 }: TileShellProps) => {
-  const { density, tileStyle } = useTweaks();
-  const pad = density === "minimal" ? 4 : density === "compact" ? 8 : 12;
-  const tileOverride: React.CSSProperties =
-    density === "minimal"
-      ? { boxShadow: "none", border: "none", background: "transparent" }
-      : tileStyle === "bordered"
-        ? { boxShadow: "none", border: "1px solid var(--border)" }
-        : tileStyle === "ghost"
-          ? { boxShadow: "none", border: "none", background: "transparent" }
-          : {};
+  // Fixed card padding — density/tile-style tweaks were removed; every tile
+  // renders the full raised-card look.
+  const pad = 12;
 
   const expander = useChartExpander();
   const expandedContent = expanded && expander.open ? expanded() : null;
@@ -384,7 +377,6 @@ const Tile = ({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        ...tileOverride,
       }}
     >
       <Flex
@@ -814,6 +806,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
 
   return (
     <div ref={wrapRef} style={gridStyle}>
+      <ScanScopedTile name="Tokens">
       <Tile
         label="Tokens"
         info="Total tokens (input + output) consumed by GenAI calls in the current scope. Counts/sums are extrapolated to the unsampled population when sampling is on."
@@ -833,6 +826,8 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
+      <ScanScopedTile name="Spend">
       <Tile
         label="Spend"
         info="USD spend = actual (models priced in the table) + estimated (models not in the table, costed at a blended fallback rate). The sub-line splits the two. Counts are extrapolated to the unsampled population when sampling is on."
@@ -848,6 +843,8 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
+      <ScanScopedTile name="P95 latency">
       <Tile
         label="P95 latency"
         info="95th percentile request duration across all GenAI spans in scope. Percentile statistics are sampling-invariant — toggling sampling won't change this number."
@@ -862,6 +859,8 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
+      <ScanScopedTile name="Error rate">
       <Tile
         label="Error rate"
         info="Percentage of GenAI spans with a non-null exception.type field. A ratio (not a count) — sampling-invariant."
@@ -880,8 +879,10 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
 
       {showMcp && (
+        <ScanScopedTile name="MCP error rate">
         <Tile
           label="MCP error rate"
           info="Share of MCP tool calls that errored (span errors + functional tool errors). The donut breaks errors down by tool; the center shows the overall error rate. Expand for the full per-tool table."
@@ -925,8 +926,10 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
               : undefined
           }
         />
+        </ScanScopedTile>
       )}
 
+      <ScanScopedTile name="Models">
       <Tile
         label="Models"
         info="Number of distinct gen_ai.request.model values observed in scope. The donut breaks down by request volume; model version suffixes are collapsed so e.g. claude-sonnet-4-5-20250114 and claude-sonnet-4-5 count as one model."
@@ -954,6 +957,8 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
+      <ScanScopedTile name="MCP servers">
       <Tile
         label="MCP servers"
         info="Distinct MCP servers detected via traceloop.workflow.name matching `*.mcp` (the convention this tenant's SDKs use). Donut breaks down by workflow request volume."
@@ -984,6 +989,8 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
+      <ScanScopedTile name="Tools">
       <Tile
         label="Tools"
         info="Distinct tools invoked within MCP workflows. Tool name comes from gen_ai.tool.name with a fallback to traceloop.entity.name. Donut sized by call count; center shows the distinct tool count."
@@ -1014,7 +1021,9 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           )
         }
       />
+      </ScanScopedTile>
 
+      <ScanScopedTile name="Cost / request">
       <Tile
         label="Cost / request"
         info="Total spend (actual + estimated) divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (green = cheap, red = expensive). Ratio is sampling-invariant."
@@ -1031,7 +1040,9 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
           ) : null
         }
       />
+      </ScanScopedTile>
 
+      <ScanScopedTile name="Token efficiency">
       <Tile
         label="Token efficiency"
         info="Output tokens as a share of total tokens (input + output). Higher means more of your token spend is going toward generated content vs prompt overhead. Filled arc follows the active accent color."
@@ -1047,14 +1058,18 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         }
         visualCaption="output / total"
       />
+      </ScanScopedTile>
 
+      <ScanScopedTile name="Avg tokens / request">
       <Tile
         label="Avg tokens / request"
         info="Total tokens ÷ requests — the average context size per call. A right-sizing signal alongside Cost/request. Ratio is sampling-invariant."
         value={avgTokensPerReq != null ? fmtCount(avgTokensPerReq) : "—"}
         sub="tokens ÷ requests"
       />
+      </ScanScopedTile>
 
+      <ScanScopedTile name="Active findings">
       <Tile
         label="Active findings"
         info="Open problem patterns detected in the current scope, broken down by severity (critical / warning / info). Select a finding in the list below the map for detail and the contributing prompts."
@@ -1076,6 +1091,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
             : "none open"
         }
       />
+      </ScanScopedTile>
     </div>
   );
 };

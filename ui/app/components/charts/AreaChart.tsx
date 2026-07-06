@@ -188,12 +188,29 @@ export const AreaChart = ({
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [tipReady, setTipReady] = useState(false);
+  const tipTimer = useRef<number | undefined>(undefined);
   const [tipPx, setTipPx] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
   const [brush, setBrush] = useState<{ startPx: number; endPx: number } | null>(
     null,
   );
   const { chartStyle, chartCurve, chartLabels } = useTweaks();
+
+  // Reveal the value tooltip after a short, deliberate delay (~150ms): the
+  // crosshair tracks instantly, but the data box waits just long enough not to
+  // strobe as the cursor sweeps across the series. A 0ms reveal races the
+  // pointer; ~150ms still reads as immediate.
+  useEffect(() => {
+    if (hoverIdx == null) {
+      window.clearTimeout(tipTimer.current);
+      setTipReady(false);
+      return;
+    }
+    if (tipReady) return;
+    tipTimer.current = window.setTimeout(() => setTipReady(true), 150);
+    return () => window.clearTimeout(tipTimer.current);
+  }, [hoverIdx, tipReady]);
   const gradientId = useId();
   const brushable = Boolean(xDomain && onBrushSelect);
   const smooth = chartCurve === "smooth";
@@ -849,7 +866,7 @@ export const AreaChart = ({
           })()}
       </svg>
 
-      {hoverIdx != null && (
+      {hoverIdx != null && tipReady && (
         <div
           role="tooltip"
           style={{

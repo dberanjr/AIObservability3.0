@@ -124,21 +124,28 @@ const mergeTierStats = (all: TierStats[]): TierStats => {
   return merged;
 };
 
-export const useAttributeAudit = (): UseAttributeAuditResult => {
+export const useAttributeAudit = (
+  selectedBucket?: string | null,
+): UseAttributeAuditResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
 
   // One scoped query per section. SECTIONS length is constant, so the hook
-  // order is stable across renders.
+  // order is stable across renders. When a detected AI bucket is selected, the
+  // section query is scoped to it — the changed query text makes useScopedDql
+  // refetch automatically.
   const results = SECTIONS.map((section) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useScopedDql<SectionRecord>(buildSectionQuery(section, scope.timeframe), {
-      staleTime: 60_000,
-      // The audit measures fleet-wide attribute presence — the host's global
-      // filter is trace-scoped, which would distort coverage %. Opt out so the
-      // numbers reflect the whole fleet (timeframe + service scope still apply).
-      ignoreGlobalFilter: true,
-    }),
+    useScopedDql<SectionRecord>(
+      buildSectionQuery(section, scope.timeframe, selectedBucket ?? undefined),
+      {
+        staleTime: 60_000,
+        // The audit measures fleet-wide attribute presence — the host's global
+        // filter is trace-scoped, which would distort coverage %. Opt out so
+        // the numbers reflect the whole fleet (timeframe + service scope apply).
+        ignoreGlobalFilter: true,
+      },
+    ),
   );
 
   // Stable signatures so useMemo recomputes on any query change without a

@@ -12,6 +12,7 @@ import { tenantLabel } from "../../lib/tenant";
 import { useScope } from "../../scope/ScopeContext";
 import { GROUPS, COMMUNITY_ATTRS, type AuditSection } from "./catalog";
 import { useAttributeAudit, type AttrResult, type SectionResult } from "./useAttributeAudit";
+import { useBucketDetection } from "./useBucketDetection";
 import { SectionCard, TierBadge, TIER_META } from "./SectionCard";
 import { AttributeDetailModal } from "./AttributeDetailModal";
 
@@ -206,7 +207,9 @@ const SectionOverview = ({
 
 export const AttributeAuditPage = () => {
   const { scope } = useScope();
-  const audit = useAttributeAudit();
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
+  const audit = useAttributeAudit(selectedBucket);
+  const detection = useBucketDetection();
   const subtitle = `${tenantLabel()} · ${timeframeLabel(scope.timeframe.from, scope.timeframe.to)}`;
   const { overview } = audit;
 
@@ -345,6 +348,113 @@ export const AttributeAuditPage = () => {
             placeholder="Search attributes by name or description…"
             style={{ maxWidth: 560, marginTop: 8 }}
           />
+
+          {/* AI-bucket detection: find which Grail buckets hold AI spans in the
+              current timeframe, then scope the whole page to one of them. */}
+          <Flex flexDirection="column" gap={6} style={{ marginTop: 10, maxWidth: 560 }}>
+            <Flex alignItems="center" gap={8} style={{ flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={detection.run}
+                disabled={detection.isLoading}
+                style={{
+                  appearance: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 12px",
+                  borderRadius: 8,
+                  border: "1px solid var(--blue)",
+                  background: "color-mix(in oklab, var(--blue) 10%, transparent)",
+                  color: "var(--blue)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: detection.isLoading ? "default" : "pointer",
+                  opacity: detection.isLoading ? 0.6 : 1,
+                }}
+              >
+                {detection.isLoading ? "Detecting…" : "Detect AI buckets"}
+              </button>
+              {selectedBucket && (
+                <Flex alignItems="center" gap={6}>
+                  <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+                    Scoped to bucket{" "}
+                    <strong style={{ color: "var(--blue)", fontFamily: "var(--mono, monospace)" }}>
+                      {selectedBucket}
+                    </strong>
+                  </Text>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBucket(null)}
+                    style={{
+                      all: "unset",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      color: "var(--text-3)",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Clear
+                  </button>
+                </Flex>
+              )}
+            </Flex>
+            {detection.hasRun && !detection.isLoading && (
+              detection.error ? (
+                <Text style={{ fontSize: 11.5, color: "var(--red)" }}>
+                  Detection failed: {detection.error.message}
+                </Text>
+              ) : detection.buckets.length === 0 ? (
+                <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                  No AI spans found in any bucket for this timeframe.
+                </Text>
+              ) : (
+                <Flex flexDirection="column" gap={4}>
+                  {detection.limitHit && (
+                    <Text style={{ fontSize: 11, color: "var(--amber, var(--text-3))", fontStyle: "italic" }}>
+                      Detection hit the scan limit — some buckets may be missing.
+                      Raise the scan limit or narrow the timeframe.
+                    </Text>
+                  )}
+                  <Text style={{ fontSize: 10.5, color: "var(--text-3)", fontWeight: 600 }}>
+                    Buckets with AI spans — click one to scope this page:
+                  </Text>
+                  {detection.buckets.map((b) => {
+                    const active = b.bucket === selectedBucket;
+                    return (
+                      <button
+                        key={b.bucket}
+                        type="button"
+                        onClick={() => setSelectedBucket(active ? null : b.bucket)}
+                        style={{
+                          appearance: "none",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          padding: "5px 10px",
+                          borderRadius: 8,
+                          border: `1px solid ${active ? "var(--blue)" : "var(--border)"}`,
+                          background: active
+                            ? "color-mix(in oklab, var(--blue) 10%, transparent)"
+                            : "transparent",
+                          cursor: "pointer",
+                          textAlign: "left",
+                        }}
+                      >
+                        <Text style={{ fontFamily: "var(--mono, monospace)", fontSize: 12, color: "var(--text-1)" }}>
+                          {b.bucket}
+                        </Text>
+                        <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                          {fmtCount(b.spans)} spans
+                        </Text>
+                      </button>
+                    );
+                  })}
+                </Flex>
+              )
+            )}
+          </Flex>
 
           {/* Tier filter toggles */}
           <Flex alignItems="center" gap={6} style={{ flexWrap: "wrap", marginTop: 6 }}>

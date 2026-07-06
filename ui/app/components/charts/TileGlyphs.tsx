@@ -244,11 +244,16 @@ export interface MiniPartialDonutProps {
   color?: string;
   /** Optional center text (already formatted by the caller). */
   centerValue?: string;
+  /** Small second line under the center value (e.g. the numeric score). */
+  centerSub?: string;
+  /** Draw a faint full-ring track behind the arc (reads as "out of 100"). */
+  track?: boolean;
 }
 
 /**
- * Single-arc donut used for percentage-style tiles (e.g. Token efficiency).
- * Background track is a faint full ring; the filled arc spans `percent`%.
+ * Single-arc donut used for percentage-style tiles (e.g. Token efficiency) and
+ * the fleet-posture gauge. With `track`, a faint full ring shows the 0–100
+ * scale; `centerSub` stacks a small score under the big center value.
  */
 export const MiniPartialDonut = ({
   size = 56,
@@ -256,6 +261,8 @@ export const MiniPartialDonut = ({
   percent,
   color = "var(--blue)",
   centerValue,
+  centerSub,
+  track = false,
 }: MiniPartialDonutProps) => {
   const cx = size / 2;
   const cy = size / 2;
@@ -279,28 +286,59 @@ export const MiniPartialDonut = ({
       }}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-        {/* No visible "track" — the unfilled portion is the tile background. */}
+        {track && (
+          <circle
+            cx={cx}
+            cy={cy}
+            r={(r + rInner) / 2}
+            fill="none"
+            stroke="var(--border)"
+            strokeWidth={thickness}
+            opacity={0.5}
+          />
+        )}
         {clamped > 0 && (
           <path d={arcPath(cx, cy, r, rInner, start, end)} fill={color} />
         )}
       </svg>
-      {centerValue && (
+      {(centerValue || centerSub) && (
         <div
           style={{
             position: "absolute",
             inset: 0,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             pointerEvents: "none",
-            fontSize: Math.max(13, Math.round(size * 0.22)),
-            fontWeight: 700,
-            lineHeight: 1,
-            fontVariantNumeric: "tabular-nums",
             color: "var(--text)",
           }}
         >
-          {centerValue}
+          {centerValue && (
+            <span
+              style={{
+                fontSize: Math.max(13, Math.round(size * 0.3)),
+                fontWeight: 800,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {centerValue}
+            </span>
+          )}
+          {centerSub && (
+            <span
+              style={{
+                fontSize: Math.max(9, Math.round(size * 0.13)),
+                fontWeight: 600,
+                lineHeight: 1.1,
+                color: "var(--text-3)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {centerSub}
+            </span>
+          )}
         </div>
       )}
     </div>

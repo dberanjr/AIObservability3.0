@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useId, useMemo } from "react";
 import {
   useDql,
   type DqlQueryParams,
@@ -12,8 +12,16 @@ import { useSampling } from "./SamplingContext";
 import { useGlobalFilters } from "./GlobalFilterContext";
 import { useTraceScope } from "./TraceScopeContext";
 import {
+  readScanMeta,
+  useScanReporter,
+  useScanScope,
+} from "./ScanReportContext";
+import { useTweaks } from "../tweaks/TweaksContext";
+import {
+  injectBucketFilter,
   injectGlobalFilters,
   injectTraceScope,
+  parseBuckets,
   partitionConditions,
 } from "./queries";
 import { injectScanLimit } from "./dqlScanLimit";
@@ -51,6 +59,20 @@ export interface UseScopedDqlExtra {
    */
   ignoreGlobalFilter?: boolean;
   /**
+   * Opt this query out of the app-wide span-bucket filter tweak (the
+   * `| filter in(dt.system.bucket, {...})` injection). Used by the AI-bucket
+   * detection query, which must scan ALL buckets to find where AI spans live,
+   * regardless of the user's current bucket selection.
+   */
+  ignoreBucketFilter?: boolean;
+  /**
+   * Opt this query out of the active platform Segments (the `filterSegments`
+   * request param). Unlike `ignoreGlobalFilter`, this ALSO suppresses segments —
+   * used by the bucket-detection query so it is immune to both the bucket tweak
+   * and any active segment while still honouring timeframe/scan-limit/sampling.
+   */
+  ignoreSegments?: boolean;
+  /**
    * Force this query's sampling ratio instead of the toolbar selection. Used by
    * heavy multi-window background estimates (e.g. the 8-day spend glance) that
    * scan multiple TB per window and cannot complete within the platform's query
@@ -81,7 +103,10 @@ export function useScopedDql<T = ResultRecord>(
   const { segments } = useSegments();
   const { filters } = useGlobalFilters();
   const { traceIds, hasScopeConditions, isResolving } = useTraceScope();
+  const { bucketFilterEnabled, bucketFilterText } = useTweaks().pageConfig;
   const ignoreGlobalFilter = Boolean(options?.ignoreGlobalFilter);
+  const ignoreBucketFilter = Boolean(options?.ignoreBucketFilter);
+  const ignoreSegments = Boolean(options?.ignoreSegments);
   // A per-query override wins over the toolbar ratio (used by heavy background
   // estimates that can't run at full fidelity — see UseScopedDqlExtra).
   const effectiveSampling = options?.samplingRatioOverride ?? samplingRatio;
@@ -92,6 +117,10 @@ export function useScopedDql<T = ResultRecord>(
   const directConditions = useMemo(
     () => partitionConditions(filters.conditions).direct,
     [filters.conditions],
+  );
+  const buckets = useMemo(
+    () => parseBuckets(bucketFilterText),
+    [bucketFilterText],
   );
 
   const queryInput = useMemo<string | DqlQueryParams>(() => {
@@ -108,6 +137,12 @@ export function useScopedDql<T = ResultRecord>(
     //    pages built on OTHER span types (e.g. agent → Prompts LLM spans).
     // Both AND together when both subsets are active.
     let rewritten = scanned;
+    // App-wide span-bucket pruning (Tweaks). Injected right after the scan
+    // limit so the `dt.system.bucket` partition filter sits directly on each
+    // `fetch spans`, pruning the scan before any other pipe.
+    if (bucketFilterEnabled && !ignoreBucketFilter && buckets.length > 0) {
+      rewritten = injectBucketFilter(rewritten, buckets);
+    }
     if (!ignoreGlobalFilter) {
       rewritten = injectGlobalFilters(rewritten, { conditions: directConditions });
       if (hasScopeConditions) {
@@ -115,7 +150,7 @@ export function useScopedDql<T = ResultRecord>(
       }
     }
     if (!rewritten) return rewritten;
-    if (!segments || segments.length === 0) return rewritten;
+    if (ignoreSegments || !segments || segments.length === 0) return rewritten;
     return {
       query: rewritten,
       // Strato's useSegments returns QueryFilterSegment[] which is exactly
@@ -128,6 +163,10 @@ export function useScopedDql<T = ResultRecord>(
     effectiveSampling,
     segments,
     ignoreGlobalFilter,
+    ignoreBucketFilter,
+    ignoreSegments,
+    bucketFilterEnabled,
+    buckets,
     directConditions,
     hasScopeConditions,
     traceIds,
@@ -143,5 +182,36 @@ export function useScopedDql<T = ResultRecord>(
     !(!ignoreGlobalFilter && hasScopeConditions && isResolving);
 
   // `ignoreGlobalFilter` is an extra key useDql ignores; forward options as-is.
-  return useDql<T>(queryInput, { ...options, enabled });
+  const result = useDql<T>(queryInput, { ...options, enabled });
+
+  // Scanned-data debug (Tweaks-gated): report this query's Grail scan
+  // telemetry to the ScanReport aggregator, tagged with the nearest ScanScope
+  // group. Zero cost when the toggle is off — we clear the entry and bail.
+  const debugOn = useTweaks().pageConfig.showScanDebug;
+  const report = useScanReporter();
+  const group = useScanScope();
+  const queryId = useId();
+  const meta = debugOn ? readScanMeta(result, scanLimitGb) : null;
+  const hasMeta = meta != null;
+  const scannedBytes = meta?.scannedBytes ?? 0;
+  const executionMs = meta?.executionMs ?? 0;
+  const limitHit = meta?.limitHit ?? false;
+  // Identity for dedup = the ACTUALLY-executed query (post sampling/scan-limit/
+  // filter injection), not the raw builder text. Two tiles running the same
+  // execution share react-query's cache (one real scan) and collapse to one
+  // entry; two executions that differ only by an injected sampling ratio stay
+  // distinct. Mirrors react-query's own key, so the scan total can't double- or
+  // under-count.
+  const executedQuery =
+    typeof queryInput === "string" ? queryInput : (queryInput?.query ?? query);
+  useEffect(() => {
+    if (!debugOn || !hasMeta) {
+      report(queryId, null);
+      return;
+    }
+    report(queryId, { group, query: executedQuery, scannedBytes, executionMs, limitHit });
+    return () => report(queryId, null);
+  }, [debugOn, hasMeta, group, executedQuery, scannedBytes, executionMs, limitHit, queryId, report]);
+
+  return result;
 }

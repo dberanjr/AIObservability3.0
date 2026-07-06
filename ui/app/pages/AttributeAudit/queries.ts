@@ -17,7 +17,7 @@
  * and global filters — exactly like the rest of the app.
  */
 
-import { dqlTimeArg } from "../../scope/queries";
+import { dqlEscape, dqlTimeArg } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 import type { AuditSection } from "./catalog";
 
@@ -27,17 +27,27 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
  * Build the coverage query for one section. The summarize block names the
  * attribute counters a0..aN in catalog order so the hook can zip them back to
  * `section.attributes`.
+ *
+ * When `bucket` is set (the user picked a detected AI bucket), a
+ * `| filter dt.system.bucket == "<bucket>"` pipe is inserted right after the
+ * fetch so the whole page's coverage is scoped to that one bucket. This is
+ * page-local scoping, independent of the app-wide bucket-filter tweak.
  */
 export const buildSectionQuery = (
   section: AuditSection,
   timeframe: Timeframe,
+  bucket?: string,
 ): string => {
   const counters = section.attributes
     .map((attr, i) => `    a${i} = countIf(${attr.expr})`)
     .join(",\n");
 
+  const bucketFilter = bucket
+    ? `\n| filter dt.system.bucket == "${dqlEscape(bucket)}"`
+    : "";
+
   return `
-fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}, scanLimitGBytes: 500${bucketFilter}
 | filter ${section.population}
 | summarize {
     section_spans = count(),

@@ -66,6 +66,28 @@ export const fmtCount = (n: unknown): string => {
 };
 
 /**
+ * Scanned-bytes in the same decimal (1000-based) units Grail's
+ * `scanLimitGBytes` uses, so a "5 TB" limit reads as "5.0 TB" here. One
+ * decimal place; sub-MB scans round up to "0.1 MB" so a real query never reads
+ * as "0 MB".
+ */
+export const fmtScanBytes = (n: unknown): string => {
+  const num = finite(n);
+  if (num == null) return "—";
+  if (num >= 1e12) return `${(num / 1e12).toFixed(1)} TB`;
+  if (num >= 1e9) return `${(num / 1e9).toFixed(1)} GB`;
+  const mb = num / 1e6;
+  return `${(mb < 0.1 && num > 0 ? 0.1 : mb).toFixed(1)} MB`;
+};
+
+/** Seconds with a single decimal (e.g. "1.4s") — for query response times. */
+export const fmtSecs1 = (ms: unknown): string => {
+  const num = finite(ms);
+  if (num == null) return "—";
+  return `${(num / 1000).toFixed(1)}s`;
+};
+
+/**
  * Short-form count (e.g. 77.01M, 2.68M, 1.5k) for tight spaces like donut
  * centers and tile values where the full comma-separated number would
  * overflow.

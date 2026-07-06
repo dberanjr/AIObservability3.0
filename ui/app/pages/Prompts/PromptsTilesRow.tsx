@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtTokens } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { usePromptSummary } from "./usePromptSummary";
 import type { PromptsFilter } from "./usePrompts";
 
@@ -216,6 +217,10 @@ const PromptsTilesBody = ({ filter, onFilterChange }: PromptsTilesRowProps) => {
 
 export const PromptsTilesRow = (props: PromptsTilesRowProps) => (
   <CollapsibleCard title="Prompt overview" defaultOpen>
-    <PromptsTilesBody {...props} />
+    {/* One shared scope: usePromptSummary runs once in the body and feeds all
+        seven KPI tiles, so the scan is attributed at the row level. */}
+    <ScanScopedTile name="Prompt overview">
+      <PromptsTilesBody {...props} />
+    </ScanScopedTile>
   </CollapsibleCard>
 );

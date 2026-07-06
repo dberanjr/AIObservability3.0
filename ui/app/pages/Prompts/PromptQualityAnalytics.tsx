@@ -5,6 +5,7 @@ import { Button } from "@dynatrace/strato-components/buttons";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useCapability } from "../../scope/CapabilityContext";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
 import { usePromptQuality, type QualityMetricSnapshot } from "./usePromptQuality";
@@ -151,7 +152,11 @@ export const PromptQualityAnalytics = () => {
       subtitle="Aggregate evaluation scores across LLM spans in the current scope"
       defaultOpen={cap.has("evalScore")}
     >
-      <PromptQualityBody />
+      {/* One shared scope: usePromptQuality runs once in the body and feeds all
+          four metric tiles, so the scan is attributed at the card level. */}
+      <ScanScopedTile name="Prompt quality">
+        <PromptQualityBody />
+      </ScanScopedTile>
     </CollapsibleCard>
   );
 };

@@ -17,6 +17,7 @@ import { ExplorerSidebar } from "./ExplorerSidebar";
 import { ExplorerTiles } from "./ExplorerTiles";
 import { RagPanel } from "./RagPanel";
 import { CapabilityGate } from "../../components/CapabilityGate";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { ServiceModelHeatmap } from "./ServiceModelHeatmap";
 import {
   type ExplorerFilter,
@@ -139,10 +140,14 @@ export const ExplorerPage = () => {
             onSelect={setSelectedFinding}
           />
           <div id={SECTION_IDS.heatmap} style={{ scrollMarginTop: 12 }}>
-            <ServiceModelHeatmap />
+            <ScanScopedTile name="Service × model usage">
+              <ServiceModelHeatmap />
+            </ScanScopedTile>
           </div>
           <CapabilityGate id="vectorDb">
-            <RagPanel />
+            <ScanScopedTile name="Retrieval (RAG)">
+              <RagPanel />
+            </ScanScopedTile>
           </CapabilityGate>
           <div id={SECTION_IDS.servicesTable} style={{ scrollMarginTop: 12 }}>
           <AIServicesTable

@@ -8,9 +8,7 @@ import {
   type ChartLabels,
   type ChartStyle,
   type ColorBlindFilter,
-  type Density,
   type Theme,
-  type TileStyle,
   type ToolsMode,
 } from "./TweaksContext";
 
@@ -238,16 +236,6 @@ const THEME_OPTIONS: SegmentOption<Theme>[] = [
   { value: "light", label: "light" },
   { value: "dark", label: "dark" },
 ];
-const DENSITY_OPTIONS: SegmentOption<Density>[] = [
-  { value: "comfortable", label: "comfortable" },
-  { value: "compact", label: "compact" },
-  { value: "minimal", label: "minimal" },
-];
-const TILE_OPTIONS: SegmentOption<TileStyle>[] = [
-  { value: "card", label: "card" },
-  { value: "bordered", label: "bordered" },
-  { value: "ghost", label: "ghost" },
-];
 /**
  * Accents grouped by color family so the swatch row reads naturally:
  * blues / purples / greens / warms / greys, with `custom` always at the
@@ -259,11 +247,6 @@ const ACCENT_GROUPS: Array<{ label: string; accents: Exclude<Accent, "custom">[]
   { label: "Greens",  accents: ["green", "lime"] },
   { label: "Warm",    accents: ["amber", "red"] },
   { label: "Grays",   accents: ["gray25", "gray50", "gray75", "black"] },
-];
-const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
-  ...ACCENT_GROUPS.flatMap((g) =>
-    g.accents.map((a) => ({ value: a, label: a })),
-  ),
 ];
 const COLORBLIND_OPTIONS: SegmentOption<ColorBlindFilter>[] = [
   { value: "none", label: "off" },
@@ -409,26 +392,6 @@ export const TweaksPanel = () => {
               />
             </Flex>
 
-            <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Density</FieldLabel>
-              <Segmented
-                ariaLabel="Density"
-                options={DENSITY_OPTIONS}
-                value={t.density}
-                onChange={t.setDensity}
-              />
-            </Flex>
-
-            <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Tile style</FieldLabel>
-              <Segmented
-                ariaLabel="Tile style"
-                options={TILE_OPTIONS}
-                value={t.tileStyle}
-                onChange={t.setTileStyle}
-              />
-            </Flex>
-
           </Flex>
 
           <Flex flexDirection="column" gap={12}>
@@ -545,6 +508,56 @@ export const TweaksPanel = () => {
                 On shows the RAW model string (e.g.{" "}
                 <code>us.anthropic.claude-…-v1:0</code>); off shows the
                 normalized label (version suffixes folded).
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Scanned-data debug</FieldLabel>
+              <Segmented
+                ariaLabel="Scanned-data debug"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.showScanDebug ? "on" : "off"}
+                onChange={(v) => t.setShowScanDebug(v === "on")}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Annotate each data element with the bytes Grail scanned and the
+                query response time, and total the scan across the page in the
+                footer. A diagnostic aid — off by default.
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Span-bucket filter</FieldLabel>
+              <Segmented
+                ariaLabel="Span-bucket filter"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.bucketFilterEnabled ? "on" : "off"}
+                onChange={(v) => t.setBucketFilterEnabled(v === "on")}
+              />
+              {t.pageConfig.bucketFilterEnabled && (
+                <input
+                  type="text"
+                  aria-label="Span buckets (comma-separated)"
+                  placeholder="bos_spans, genai_spans"
+                  value={t.pageConfig.bucketFilterText}
+                  onChange={(e) => t.setBucketFilterText(e.target.value)}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    fontFamily: "var(--mono, monospace)",
+                    fontSize: 12,
+                    padding: "6px 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--text-1)",
+                  }}
+                />
+              )}
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Restricts every span query to these Grail buckets (OR) so the
+                default span bucket isn&apos;t scanned — a large scan-cost saving.
+                Comma-separated; your buckets are remembered even when this is
+                off. Use <strong>Attributes → Detect AI buckets</strong> to find
+                which buckets hold AI spans.
               </Text>
             </Flex>
           </Flex>
