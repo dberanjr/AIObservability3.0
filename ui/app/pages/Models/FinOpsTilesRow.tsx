@@ -4,6 +4,8 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent, fmtUSD, fmtUSDCompact } from "../../data/format";
 import type { FinOpsData } from "./useFinOps";
+import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
+import { useEditLayout } from "../../layout/EditLayoutContext";
 
 const Tile = ({
   label,
@@ -65,6 +67,10 @@ export interface FinOpsTilesRowProps {
 }
 
 export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
+  // Layout customization is opt-in and driven by the global header "Customize"
+  // toggle, so the KPI row can be reordered / resized from any page.
+  const { editLayout } = useEditLayout();
+
   if (data.isLoading && data.spend7d === 0) {
     return (
       <div
@@ -86,49 +92,88 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
     );
   }
 
-  return (
-    <Flex flexDirection="column" gap={8}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: 10,
-        }}
-      >
+  // Each KPI keeps its content unchanged; the customizable grid owns placement
+  // only. Six equal tiles → defaultColSpan 2 of 12 preserves the 6-across row.
+  const tiles: GridTile[] = [
+    {
+      id: "spend24h",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Spend · 24h"
           value={fmtUSDCompact(data.spend24h)}
           sub="1:100 sampled · extrapolated"
         />
+      ),
+    },
+    {
+      id: "spend7d",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Spend · 7d"
           value={fmtUSDCompact(data.spend7d)}
           sub="1:100 sampled · extrapolated"
         />
+      ),
+    },
+    {
+      id: "projected30d",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Projected 30d"
           value={fmtUSDCompact(data.projected30d)}
           sub="linear from 7d run-rate"
           emphasis="amber"
         />
+      ),
+    },
+    {
+      id: "concentration",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Concentration"
           value={fmtPercent(data.concentrationPct, 0)}
           sub={data.services[0]?.service ?? undefined}
           emphasis={data.concentrationPct > 50 ? "amber" : "default"}
         />
+      ),
+    },
+    {
+      id: "costPerMTok",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="$/1M tokens"
           value={fmtUSD(data.costPerMTok)}
           sub="blended · current timeframe"
         />
+      ),
+    },
+    {
+      id: "savings",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Possible savings"
           value={fmtUSDCompact(data.possibleSavings)}
           sub="within-type $/MTok outliers"
           emphasis="green"
         />
-      </div>
+      ),
+    },
+  ];
+
+  return (
+    <Flex flexDirection="column" gap={8}>
+      <CustomizableGrid
+        storageKey="finops-kpis"
+        columns={12}
+        tiles={tiles}
+        editable={editLayout}
+      />
       <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
         24h / 7d / 30d spend is scanned at a 1:100 sampling floor and
         extrapolated; concentration and $/1M use the current timeframe at the

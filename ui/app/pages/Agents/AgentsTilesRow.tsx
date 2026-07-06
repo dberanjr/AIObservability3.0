@@ -6,6 +6,8 @@ import { InfoTooltip } from "../../components/InfoTooltip";
 import { ChartModal } from "../../components/charts/ChartExpander";
 import { MissingDataHint } from "../../components/displayHints";
 import { fmtCount, fmtMs, fmtPercent, fmtUSDCompact } from "../../data/format";
+import { useEditLayout } from "../../layout/EditLayoutContext";
+import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import { SLOW_P90_MS } from "./constants";
 import { useAgentLoops } from "./useAgentLoops";
 import { summarizeAgentTtft } from "./ttft";
@@ -130,6 +132,9 @@ export interface AgentsTilesRowProps {
 export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
   const [open, setOpen] = useState<TileId | null>(null);
   const loops = useAgentLoops();
+  // Layout customization is opt-in and driven by the global header "Customize"
+  // toggle, so the KPI row can be reordered / resized from any page (SUM-4).
+  const { editLayout } = useEditLayout();
 
   if (isLoading && agents.length === 0) {
     return (
@@ -177,9 +182,17 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
     }
   };
 
-  return (
-    <>
-      <div style={GRID}>
+  // Each KPI is a GridTile so the shared CustomizableGrid owns placement
+  // (drag-to-reorder, drag-a-corner to resize) when the global "Customize"
+  // toggle is on. 7 tiles don't partition a 12-col grid evenly, so every tile
+  // gets an equal defaultColSpan of 2 (≈1/6 width, closest match to the prior
+  // ~1/7 auto-fit width) — this keeps them equal-width and lets the last one
+  // wrap, matching the row's existing wrap-friendly design intent.
+  const tiles: GridTile[] = [
+    {
+      id: "total",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Total agents"
           value={fmtCount(substantive.length)}
@@ -191,12 +204,24 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           info="Distinct agents (gen_ai.agent.name) active in the current scope, excluding framework orchestration/runtime nodes. Click for the full agent roster."
           onClick={() => setOpen("total")}
         />
+      ),
+    },
+    {
+      id: "invocations",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Invocations"
           value={fmtCount(invocations)}
           info="Total agent invocations (distinct traces / runs) in the current scope. Click for the time series with forecast and brush-to-zoom."
           onClick={() => setOpen("invocations")}
         />
+      ),
+    },
+    {
+      id: "slow",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Slow agents"
           value={fmtCount(slow)}
@@ -205,6 +230,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           info={`Agents whose P90 latency exceeds ${SLOW_P90_MS / 1000}s. Click for the ranked list.`}
           onClick={() => setOpen("slow")}
         />
+      ),
+    },
+    {
+      id: "error",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Error rate"
           value={fmtPercent(errorRate)}
@@ -212,6 +243,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           info="Share of agent invocations that failed, including logical failures (refusals / content-filter) where emitted. Click for the per-agent breakdown."
           onClick={() => setOpen("error")}
         />
+      ),
+    },
+    {
+      id: "cost",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Est. cost"
           value={fmtUSDCompact(cost)}
@@ -219,6 +256,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           info="Attributed LLM cost for these agents (where token usage shares the agent's trace). Often partial because LLM calls run on the central proxy. Exact fleet cost lives on the Models / FinOps tab. Click for the breakdown."
           onClick={() => setOpen("cost")}
         />
+      ),
+    },
+    {
+      id: "looping",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="Looping agents"
           value={loops.isLoading ? "…" : fmtCount(loops.loopingCount)}
@@ -227,6 +270,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           info="Agents with at least one run flagged as looping by the revisit-ratio / step-depth heuristic. Click for the full loop table and LangGraph activity trend."
           onClick={() => setOpen("looping")}
         />
+      ),
+    },
+    {
+      id: "ttft",
+      defaultColSpan: 2,
+      node: (
         <Tile
           label="TTFT"
           value={ttft ? fmtMs(ttft.medianMs) : "—"}
@@ -245,7 +294,18 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           }
           onClick={() => setOpen("ttft")}
         />
-      </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <CustomizableGrid
+        storageKey="agents-kpis"
+        columns={12}
+        tiles={tiles}
+        editable={editLayout}
+      />
 
       <ChartModal
         open={open !== null}

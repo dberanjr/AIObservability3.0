@@ -4,6 +4,8 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtTokens, fmtUSD } from "../../data/format";
 import type { ModelRow } from "./useModels";
+import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
+import { useEditLayout } from "../../layout/EditLayoutContext";
 
 const Tile = ({
   label,
@@ -64,6 +66,10 @@ export interface ModelsTilesRowProps {
 }
 
 export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
+  // Layout customization is opt-in and driven by the global header "Customize"
+  // toggle, so the KPI row can be reordered / resized from any page.
+  const { editLayout } = useEditLayout();
+
   if (isLoading && models.length === 0) {
     return (
       <div
@@ -101,30 +107,61 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
     null,
   );
 
+  // Each KPI keeps its content unchanged; the customizable grid owns placement
+  // only. Six equal tiles → defaultColSpan 2 of 12 preserves the 6-across row.
+  const tiles: GridTile[] = [
+    {
+      id: "models",
+      defaultColSpan: 2,
+      node: <Tile label="Models" value={fmtCount(models.length)} />,
+    },
+    {
+      id: "providers",
+      defaultColSpan: 2,
+      node: <Tile label="Providers" value={fmtCount(providerCount)} />,
+    },
+    {
+      id: "requests",
+      defaultColSpan: 2,
+      node: <Tile label="Requests" value={fmtCount(requests)} />,
+    },
+    {
+      id: "tokens",
+      defaultColSpan: 2,
+      node: <Tile label="Tokens" value={fmtTokens(tokens)} />,
+    },
+    {
+      id: "cheapest",
+      defaultColSpan: 2,
+      node: (
+        <Tile
+          label="Cheapest / 1M"
+          value={cheapest ? fmtUSD(cheapest.costPerMTok) : "—"}
+          sub={cheapest?.model}
+          emphasis={cheapest ? "green" : "default"}
+        />
+      ),
+    },
+    {
+      id: "expensive",
+      defaultColSpan: 2,
+      node: (
+        <Tile
+          label="Most expensive / 1M"
+          value={mostExpensive ? fmtUSD(mostExpensive.costPerMTok) : "—"}
+          sub={mostExpensive?.model}
+          emphasis={mostExpensive ? "red" : "default"}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-        gap: 10,
-      }}
-    >
-      <Tile label="Models" value={fmtCount(models.length)} />
-      <Tile label="Providers" value={fmtCount(providerCount)} />
-      <Tile label="Requests" value={fmtCount(requests)} />
-      <Tile label="Tokens" value={fmtTokens(tokens)} />
-      <Tile
-        label="Cheapest / 1M"
-        value={cheapest ? fmtUSD(cheapest.costPerMTok) : "—"}
-        sub={cheapest?.model}
-        emphasis={cheapest ? "green" : "default"}
-      />
-      <Tile
-        label="Most expensive / 1M"
-        value={mostExpensive ? fmtUSD(mostExpensive.costPerMTok) : "—"}
-        sub={mostExpensive?.model}
-        emphasis={mostExpensive ? "red" : "default"}
-      />
-    </div>
+    <CustomizableGrid
+      storageKey="models-kpis"
+      columns={12}
+      tiles={tiles}
+      editable={editLayout}
+    />
   );
 };

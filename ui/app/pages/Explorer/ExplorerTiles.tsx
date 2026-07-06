@@ -10,6 +10,8 @@ import {
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+import { useEditLayout } from "../../layout/EditLayoutContext";
+import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import type { ExplorerSummary } from "./useExplorerSummary";
 import { tileAction, type TileAction } from "./tileActions";
 
@@ -130,6 +132,9 @@ const ExplorerTilesBody = ({
   onRevealSection,
 }: ExplorerTilesProps) => {
   const { upsertCondition } = useGlobalFilters();
+  // Layout customization is opt-in and driven by the global header "Customize"
+  // toggle, so the KPI row can be reordered / resized from every page.
+  const { editLayout } = useEditLayout();
   const reveal = onRevealSection ?? scrollToSection;
 
   /** Convert a tile action into Tile activation props (or none). */
@@ -180,59 +185,107 @@ const ExplorerTilesBody = ({
     );
   }
 
+  // The seven KPIs become a user-customizable grid (reorder + resize) revealed
+  // by the global "Customize" toggle. A 7-column grid with each tile spanning 1
+  // column reproduces the previous `repeat(7, 1fr)` layout exactly when not
+  // editing; each Tile keeps its identical content/props.
+  const tiles: GridTile[] = [
+    {
+      id: "aiServices",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="AI services"
+          value={fmtCount(summary.aiServiceCount)}
+          {...activation(tileAction("aiServices", summary))}
+        />
+      ),
+    },
+    {
+      id: "llmRequests",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="LLM requests"
+          value={fmtCount(summary.llmRequests)}
+          {...activation(tileAction("llmRequests", summary))}
+        />
+      ),
+    },
+    {
+      id: "tokens",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Tokens"
+          value={fmtTokens(summary.tokens)}
+          {...activation(tileAction("tokens", summary))}
+        />
+      ),
+    },
+    {
+      id: "activeModels",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Active models"
+          value={fmtCount(summary.activeModels)}
+          info="Distinct models (canonicalized) seen across all AI services in scope."
+          {...activation(tileAction("activeModels", summary))}
+        />
+      ),
+    },
+    {
+      id: "concentration",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Concentration"
+          value={fmtPercent(summary.concentrationPct, 0)}
+          sub={summary.topServiceShare?.service}
+          emphasis={summary.concentrationPct > 50 ? "amber" : "default"}
+          info="Share of fleet tokens consumed by the single largest service — high values mean spend is concentrated in one service."
+          {...activation(tileAction("concentration", summary))}
+        />
+      ),
+    },
+    {
+      id: "errors",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Errors"
+          value={fmtPercent(errorRatePct)}
+          sub={`${fmtCount(summary.errors)} ${summary.errors === 1 ? "error" : "errors"}`}
+          emphasis={errorEmphasis}
+          info="Share of LLM spans in scope with an error status. Neutral <1%, amber 1–5%, red >5% — matching the per-service status dots."
+          {...activation(tileAction("errors", summary))}
+        />
+      ),
+    },
+    {
+      id: "logicalErrors",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Logical errors"
+          value={fmtCount(summary.logicalErrors)}
+          sub="HTTP 200, payload-level"
+          emphasis={summary.logicalErrors > 0 ? "amber" : "default"}
+          info="HTTP 200 responses that still failed at the payload level — truncated output (max_tokens), content filter, or refusal."
+          {...activation(tileAction("logicalErrors", summary))}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-        gap: 10,
-        padding: 12,
-      }}
-    >
-      <Tile
-        label="AI services"
-        value={fmtCount(summary.aiServiceCount)}
-        {...activation(tileAction("aiServices", summary))}
-      />
-      <Tile
-        label="LLM requests"
-        value={fmtCount(summary.llmRequests)}
-        {...activation(tileAction("llmRequests", summary))}
-      />
-      <Tile
-        label="Tokens"
-        value={fmtTokens(summary.tokens)}
-        {...activation(tileAction("tokens", summary))}
-      />
-      <Tile
-        label="Active models"
-        value={fmtCount(summary.activeModels)}
-        info="Distinct models (canonicalized) seen across all AI services in scope."
-        {...activation(tileAction("activeModels", summary))}
-      />
-      <Tile
-        label="Concentration"
-        value={fmtPercent(summary.concentrationPct, 0)}
-        sub={summary.topServiceShare?.service}
-        emphasis={summary.concentrationPct > 50 ? "amber" : "default"}
-        info="Share of fleet tokens consumed by the single largest service — high values mean spend is concentrated in one service."
-        {...activation(tileAction("concentration", summary))}
-      />
-      <Tile
-        label="Errors"
-        value={fmtPercent(errorRatePct)}
-        sub={`${fmtCount(summary.errors)} ${summary.errors === 1 ? "error" : "errors"}`}
-        emphasis={errorEmphasis}
-        info="Share of LLM spans in scope with an error status. Neutral <1%, amber 1–5%, red >5% — matching the per-service status dots."
-        {...activation(tileAction("errors", summary))}
-      />
-      <Tile
-        label="Logical errors"
-        value={fmtCount(summary.logicalErrors)}
-        sub="HTTP 200, payload-level"
-        emphasis={summary.logicalErrors > 0 ? "amber" : "default"}
-        info="HTTP 200 responses that still failed at the payload level — truncated output (max_tokens), content filter, or refusal."
-        {...activation(tileAction("logicalErrors", summary))}
+    <div style={{ padding: 12 }}>
+      <CustomizableGrid
+        storageKey="explorer-kpis"
+        columns={7}
+        tiles={tiles}
+        editable={editLayout}
       />
     </div>
   );

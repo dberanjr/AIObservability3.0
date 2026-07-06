@@ -160,18 +160,18 @@ ${toBlock(darkSurfaces)}
   box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.66),
     0 4px 12px -2px rgba(0, 0, 0, 0.5) !important;
 }
-.aiobs-summary-page .aiobs-tile-item {
+.aiobs-tile-item {
   transition: transform 160ms ease;
 }
-.aiobs-summary-page .aiobs-tile-item:hover {
+.aiobs-tile-item:hover {
   transform: translateY(-3px);
   z-index: 2;
 }
-.aiobs-summary-page .aiobs-tile-item:hover .surface-background {
+.aiobs-tile-item:hover .surface-background {
   box-shadow: 0 20px 40px -8px rgba(16, 18, 27, 0.32),
     0 6px 14px -3px rgba(16, 18, 27, 0.18) !important;
 }
-:root[data-theme="dark"] .aiobs-summary-page .aiobs-tile-item:hover .surface-background {
+:root[data-theme="dark"] .aiobs-tile-item:hover .surface-background {
   box-shadow: 0 22px 44px -8px rgba(0, 0, 0, 0.75),
     0 6px 16px -3px rgba(0, 0, 0, 0.55) !important;
 }

@@ -5,6 +5,8 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtTokens } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
+import { useEditLayout } from "../../layout/EditLayoutContext";
+import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import { usePromptSummary } from "./usePromptSummary";
 import { isScopeFiltered } from "./filterScope";
 import type { PromptsFilter } from "./usePrompts";
@@ -104,6 +106,11 @@ const ScopeCaption = () => (
 const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProps) => {
   const summary = usePromptSummary(filter, focus);
   const filtered = isScopeFiltered(filter, focus);
+  // The KPI row is user-customizable (drag to reorder, drag a corner to resize)
+  // via the shared CustomizableGrid, revealed by the global header "Customize"
+  // toggle. Seven equal tiles → columns=7, defaultColSpan=1 each, so the calm
+  // (non-editing) view keeps the exact one-row, equal-width layout.
+  const { editLayout } = useEditLayout();
   if (summary.isLoading && summary.total === 0) {
     return (
       <div
@@ -126,104 +133,149 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
     );
   }
 
+  // Each KPI keeps its exact content/props — only placement moves to the grid.
+  const tiles: GridTile[] = [
+    {
+      id: "prompts",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Prompts"
+          value={fmtCount(summary.total)}
+          sub={`${fmtCount(summary.sampleSize)} shown`}
+        />
+      ),
+    },
+    {
+      id: "avg-duration",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Avg duration"
+          value={fmtMs(summary.avgDurationMs)}
+          onClick={
+            onFilterChange && filter && summary.avgDurationMs > 0
+              ? () =>
+                  onFilterChange(
+                    filter.latency?.op === "gt"
+                      ? { ...filter, latency: undefined }
+                      : {
+                          ...filter,
+                          latency: {
+                            op: "gt",
+                            min: Math.round(summary.avgDurationMs),
+                          },
+                        },
+                  )
+              : undefined
+          }
+          active={filter?.latency?.op === "gt"}
+          sub="click: slower than avg"
+        />
+      ),
+    },
+    {
+      id: "avg-tokens",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Avg in/out tokens"
+          value={`${fmtTokens(summary.avgInputTokens)} / ${fmtTokens(summary.avgOutputTokens)}`}
+        />
+      ),
+    },
+    {
+      id: "pii",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="PII detected"
+          value={fmtCount(summary.piiDetected)}
+          emphasis={summary.piiDetected > 0 ? "amber" : "default"}
+          sub="gen_ai.privacy.pii_detected"
+          onClick={
+            onFilterChange && filter
+              ? () => onFilterChange({ ...filter, onlyPii: filter.onlyPii ? undefined : true })
+              : undefined
+          }
+          active={!!filter?.onlyPii}
+        />
+      ),
+    },
+    {
+      id: "warnings",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Warnings"
+          value={fmtCount(summary.warnings)}
+          emphasis={summary.warnings > 0 ? "amber" : "default"}
+          onClick={
+            onFilterChange && filter
+              ? () =>
+                  onFilterChange({
+                    ...filter,
+                    onlyWarnings: filter.onlyWarnings ? undefined : true,
+                  })
+              : undefined
+          }
+          active={!!filter?.onlyWarnings}
+        />
+      ),
+    },
+    {
+      id: "errors",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Errors"
+          value={fmtCount(summary.errors)}
+          emphasis={summary.errors > 5 ? "red" : summary.errors > 0 ? "amber" : "default"}
+          onClick={
+            onFilterChange && filter
+              ? () =>
+                  onFilterChange({
+                    ...filter,
+                    onlyErrors: filter.onlyErrors ? undefined : true,
+                  })
+              : undefined
+          }
+          active={!!filter?.onlyErrors}
+        />
+      ),
+    },
+    {
+      id: "truncated",
+      defaultColSpan: 1,
+      node: (
+        <Tile
+          label="Truncated"
+          value={fmtCount(summary.truncated)}
+          emphasis={summary.truncated > 0 ? "amber" : "default"}
+          sub="finish_reasons: max_tokens"
+          onClick={
+            onFilterChange && filter
+              ? () =>
+                  onFilterChange({
+                    ...filter,
+                    onlyTruncated: filter.onlyTruncated ? undefined : true,
+                  })
+              : undefined
+          }
+          active={!!filter?.onlyTruncated}
+        />
+      ),
+    },
+  ];
+
   return (
     <>
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-        gap: 10,
-        padding: 16,
-      }}
-    >
-      <Tile
-        label="Prompts"
-        value={fmtCount(summary.total)}
-        sub={`${fmtCount(summary.sampleSize)} shown`}
-      />
-      <Tile
-        label="Avg duration"
-        value={fmtMs(summary.avgDurationMs)}
-        onClick={
-          onFilterChange && filter && summary.avgDurationMs > 0
-            ? () =>
-                onFilterChange(
-                  filter.latency?.op === "gt"
-                    ? { ...filter, latency: undefined }
-                    : {
-                        ...filter,
-                        latency: {
-                          op: "gt",
-                          min: Math.round(summary.avgDurationMs),
-                        },
-                      },
-                )
-            : undefined
-        }
-        active={filter?.latency?.op === "gt"}
-        sub="click: slower than avg"
-      />
-      <Tile
-        label="Avg in/out tokens"
-        value={`${fmtTokens(summary.avgInputTokens)} / ${fmtTokens(summary.avgOutputTokens)}`}
-      />
-      <Tile
-        label="PII detected"
-        value={fmtCount(summary.piiDetected)}
-        emphasis={summary.piiDetected > 0 ? "amber" : "default"}
-        sub="gen_ai.privacy.pii_detected"
-        onClick={
-          onFilterChange && filter
-            ? () => onFilterChange({ ...filter, onlyPii: filter.onlyPii ? undefined : true })
-            : undefined
-        }
-        active={!!filter?.onlyPii}
-      />
-      <Tile
-        label="Warnings"
-        value={fmtCount(summary.warnings)}
-        emphasis={summary.warnings > 0 ? "amber" : "default"}
-        onClick={
-          onFilterChange && filter
-            ? () =>
-                onFilterChange({
-                  ...filter,
-                  onlyWarnings: filter.onlyWarnings ? undefined : true,
-                })
-            : undefined
-        }
-        active={!!filter?.onlyWarnings}
-      />
-      <Tile
-        label="Errors"
-        value={fmtCount(summary.errors)}
-        emphasis={summary.errors > 5 ? "red" : summary.errors > 0 ? "amber" : "default"}
-        onClick={
-          onFilterChange && filter
-            ? () =>
-                onFilterChange({
-                  ...filter,
-                  onlyErrors: filter.onlyErrors ? undefined : true,
-                })
-            : undefined
-        }
-        active={!!filter?.onlyErrors}
-      />
-      <Tile
-        label="Truncated"
-        value={fmtCount(summary.truncated)}
-        emphasis={summary.truncated > 0 ? "amber" : "default"}
-        sub="finish_reasons: max_tokens"
-        onClick={
-          onFilterChange && filter
-            ? () =>
-                onFilterChange({
-                  ...filter,
-                  onlyTruncated: filter.onlyTruncated ? undefined : true,
-                })
-            : undefined
-        }
-        active={!!filter?.onlyTruncated}
+    <div style={{ padding: 16 }}>
+      <CustomizableGrid
+        storageKey="prompts-kpis"
+        columns={7}
+        tiles={tiles}
+        editable={editLayout}
       />
     </div>
     {filtered && <ScopeCaption />}
