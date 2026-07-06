@@ -170,14 +170,19 @@ export const ScanScope = ({
 );
 
 /**
- * Extract scan telemetry from a useScopedDql/useDql result. `scanLimitGb<=0`
- * means unlimited; otherwise a query that scanned ~all of its budget is treated
- * as truncated (mirrors CapabilityContext's coverage heuristic), and any
- * scan-limit notification Grail attaches is honoured too.
+ * Extract scan telemetry from a useScopedDql/useDql result. The scan limit is
+ * injected PER FETCH, so a query with `fetchCount` budgeted fetches has an
+ * aggregate budget of `fetchCount * scanLimitGb`. Grail reports one aggregate
+ * `scannedBytes` across all fetches, so comparing it against a SINGLE-fetch
+ * budget would falsely flag a multi-fetch query (e.g. a join) as truncated when
+ * no individual fetch actually hit its cap. `scanLimitGb<=0` means unlimited; a
+ * query that scanned ~all of its aggregate budget — or that Grail explicitly
+ * flagged with a scan-limit notification — is treated as truncated.
  */
 export const readScanMeta = (
   result: Pick<UseDqlResult<unknown>, "data">,
   scanLimitGb: number,
+  fetchCount = 1,
 ): { scannedBytes: number; executionMs: number; limitHit: boolean } | null => {
   const grail = (
     result.data as
@@ -195,11 +200,20 @@ export const readScanMeta = (
   if (!grail) return null;
   const scannedBytes = Number(grail.scannedBytes ?? 0);
   const executionMs = Number(grail.executionTimeMilliseconds ?? 0);
-  const limitBytes = scanLimitGb > 0 ? scanLimitGb * 1_000_000_000 : Infinity;
-  const notifiedLimit = (grail.notifications ?? []).some((n) =>
-    /LIMIT|SCAN/i.test(n.notificationType ?? ""),
+  const perFetchLimitBytes =
+    scanLimitGb > 0 ? scanLimitGb * 1_000_000_000 : Infinity;
+  const aggregateLimitBytes = Number.isFinite(perFetchLimitBytes)
+    ? perFetchLimitBytes * Math.max(1, fetchCount)
+    : Infinity;
+  // Only a genuine scan-limit notification is authoritative — match 'scan'
+  // specifically so an unrelated limit notification (e.g. maxResultRecords)
+  // can't masquerade as a truncated scan.
+  const notifiedScanLimit = (grail.notifications ?? []).some((n) =>
+    /scan/i.test(n.notificationType ?? ""),
   );
   const limitHit =
-    notifiedLimit || (Number.isFinite(limitBytes) && scannedBytes >= limitBytes * 0.98);
+    notifiedScanLimit ||
+    (Number.isFinite(aggregateLimitBytes) &&
+      scannedBytes >= aggregateLimitBytes * 0.98);
   return { scannedBytes, executionMs, limitHit };
 };

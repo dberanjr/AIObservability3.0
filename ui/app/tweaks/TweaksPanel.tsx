@@ -441,13 +441,18 @@ export const TweaksPanel = () => {
           <Flex flexDirection="column" gap={12}>
             <SectionLabel>Accessibility</SectionLabel>
             <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Color-blindness filter</FieldLabel>
+              <FieldLabel>Simulate color-vision deficiency</FieldLabel>
               <Segmented
-                ariaLabel="Colorblind filter"
+                ariaLabel="Simulate color-vision deficiency"
                 options={COLORBLIND_OPTIONS}
                 value={t.colorBlindFilter}
                 onChange={t.setColorBlindFilter}
               />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Previews the whole app as someone with this deficiency sees it —
+                a design check for our own color choices, not a correction. Leave
+                this off if you have a color-vision deficiency.
+              </Text>
             </Flex>
           </Flex>
 

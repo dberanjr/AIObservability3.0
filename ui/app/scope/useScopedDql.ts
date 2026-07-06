@@ -184,14 +184,25 @@ export function useScopedDql<T = ResultRecord>(
   // `ignoreGlobalFilter` is an extra key useDql ignores; forward options as-is.
   const result = useDql<T>(queryInput, { ...options, enabled });
 
-  // Scanned-data debug (Tweaks-gated): report this query's Grail scan
-  // telemetry to the ScanReport aggregator, tagged with the nearest ScanScope
-  // group. Zero cost when the toggle is off — we clear the entry and bail.
-  const debugOn = useTweaks().pageConfig.showScanDebug;
+  // Scan telemetry: report every query's Grail scan stats (scanned bytes, exec
+  // time, and whether it reached the scan-limit budget) to the ScanReport
+  // aggregator, tagged with the nearest ScanScope group. Collected ALWAYS — it's
+  // cheap (the metadata rides along on the response we already have) — so the
+  // footer can warn about truncated / partial results app-wide, not only when
+  // the scan-debug toggle is on. The verbose per-tile badges and the neon page
+  // pill still gate their DISPLAY on showScanDebug (see TileScanFooter /
+  // PageScanTotal); this only ungates the underlying signal.
   const report = useScanReporter();
   const group = useScanScope();
   const queryId = useId();
-  const meta = debugOn ? readScanMeta(result, scanLimitGb) : null;
+  // The scan limit is injected onto EVERY fetch, so count the budgeted fetches
+  // and compare the query's aggregate scannedBytes against the aggregate
+  // (fetchCount x per-fetch) budget — otherwise a multi-fetch query (e.g. a
+  // join) trips a false "scan limit hit" purely from its summed bytes.
+  const injectedQuery =
+    typeof queryInput === "string" ? queryInput : (queryInput?.query ?? "");
+  const fetchCount = (injectedQuery.match(/scanLimitGBytes:/g) ?? []).length || 1;
+  const meta = readScanMeta(result, scanLimitGb, fetchCount);
   const hasMeta = meta != null;
   const scannedBytes = meta?.scannedBytes ?? 0;
   const executionMs = meta?.executionMs ?? 0;
@@ -205,13 +216,13 @@ export function useScopedDql<T = ResultRecord>(
   const executedQuery =
     typeof queryInput === "string" ? queryInput : (queryInput?.query ?? query);
   useEffect(() => {
-    if (!debugOn || !hasMeta) {
+    if (!hasMeta) {
       report(queryId, null);
       return;
     }
     report(queryId, { group, query: executedQuery, scannedBytes, executionMs, limitHit });
     return () => report(queryId, null);
-  }, [debugOn, hasMeta, group, executedQuery, scannedBytes, executionMs, limitHit, queryId, report]);
+  }, [hasMeta, group, executedQuery, scannedBytes, executionMs, limitHit, queryId, report]);
 
   return result;
 }

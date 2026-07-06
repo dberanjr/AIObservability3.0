@@ -113,7 +113,9 @@ export const InfoTooltip = ({ text, size = 14 }: InfoTooltipProps) => {
           cursor: "help",
           lineHeight: 1,
           background: "var(--surface)",
-          outline: "none",
+          // No inline `outline: none` here: the icon is tabIndex=0, so the global
+          // [tabindex]:focus-visible ring (theme/tokens.ts) must show on keyboard
+          // focus. The inline borderRadius:50% keeps the ring hugging the circle.
         }}
       >
         i

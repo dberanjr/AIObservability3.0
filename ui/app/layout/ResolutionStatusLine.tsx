@@ -5,6 +5,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { useSegments } from "@dynatrace/strato-components/filters";
 import { useResolvedCounts } from "../scope/useResolvedCounts";
 import { PageScanTotal } from "../components/ScanDebug";
+import { useScanTotal } from "../scope/ScanReportContext";
 import { useTweaks } from "../tweaks/TweaksContext";
 import { parseBuckets } from "../scope/queries";
 
@@ -24,6 +25,10 @@ export const ResolutionStatusLine = () => {
   const counts = useResolvedCounts();
   const { pageConfig } = useTweaks();
   const { segments } = useSegments();
+  // Truncation is surfaced app-wide (not only under the scan-debug toggle): if
+  // any query on the page hit its scan-limit budget, the results are partial and
+  // the user must know before trusting the numbers.
+  const scan = useScanTotal();
   // Buckets (DQL text) and segments (filterSegments request param) live on
   // different layers, so both apply (intersection) — surface a chip so the user
   // knows their bucket tweak isn't being overridden by the active segment.
@@ -91,6 +96,27 @@ export const ResolutionStatusLine = () => {
           }}
         >
           Buckets + segment both active
+        </span>
+      )}
+      {scan?.limitHit && (
+        <span
+          role="status"
+          title="At least one query on this page reached its scan-limit budget, so some results are truncated and may undercount. Raise the scan limit in Tweaks, narrow the timeframe, or add a segment to see complete data."
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 10.5,
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: 999,
+            border: "1px solid var(--amber)",
+            color: "var(--amber)",
+            background: "color-mix(in oklab, var(--amber) 12%, transparent)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span aria-hidden>⚠</span> Partial data — scan limit hit
         </span>
       )}
       <PageScanTotal />
