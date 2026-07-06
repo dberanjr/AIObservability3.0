@@ -280,8 +280,10 @@ export const useAnomalies = (): UseAnomaliesResult => {
           worstGrowth >= 2 * WITHIN_TRACE_GROWTH_RATIO ? "critical" : "warning",
         category: ANOMALY_LABELS["within-trace-growth"],
         entity: worstGrowthAgent ?? "Fleet",
-        metric: `${growthTraces} trace${growthTraces === 1 ? "" : "s"}`,
-        context: `Billable tokens climbing up to ${worstGrowth.toFixed(1)}× within a trace`,
+        // "prompts" (not "traces") reads clearer to AI app teams — each affected
+        // item is one end-to-end request/interaction (per user terminology).
+        metric: `${growthTraces} prompt${growthTraces === 1 ? "" : "s"}`,
+        context: `Billable tokens climbing up to ${worstGrowth.toFixed(1)}× within a prompt`,
         detail:
           "Sequential LLM calls in a trace re-send an accumulating scratchpad/history, so billable tokens (cache reads excluded) climb iteration over iteration — the classic agent token runaway. Trim history, summarize, or cache the stable prefix.",
         intents: DEFAULT_FINDING_INTENTS,

@@ -278,15 +278,19 @@ ${accentForegroundCss}
   padding-left: 12px;
   border-left: 1px solid var(--border);
 }
+/* Section eyebrows (OVERVIEW / ANALYZE / AUDIT) — deliberately muted and
+   lighter than the tab pills (var(--text-2)) so they read as non-interactive
+   group headers, not clickable tabs. */
 .aiobs-tabnav-label {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-4);
   white-space: nowrap;
   padding-right: 2px;
   user-select: none;
+  cursor: default;
 }
 .aiobs-tabnav-pill {
   display: inline-flex;
