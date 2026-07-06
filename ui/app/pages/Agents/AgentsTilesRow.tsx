@@ -3,12 +3,24 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { InfoTooltip } from "../../components/InfoTooltip";
+import { StatTile } from "../../components/StatTile";
 import { ChartModal } from "../../components/charts/ChartExpander";
 import { MissingDataHint } from "../../components/displayHints";
 import { fmtCount, fmtMs, fmtPercent, fmtUSDCompact } from "../../data/format";
+import {
+  STATUS_CUE,
+  statusColor,
+  type SemanticStatus,
+} from "../../theme/statusColor";
 import { useEditLayout } from "../../layout/EditLayoutContext";
 import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import { SLOW_P90_MS } from "./constants";
+import {
+  slowTileStatus,
+  errorTileStatus,
+  loopingTileStatus,
+  statusToEmphasis,
+} from "./tileStatus";
 import { useAgentLoops } from "./useAgentLoops";
 import { summarizeAgentTtft } from "./ttft";
 import {
@@ -50,6 +62,10 @@ interface TileProps {
   onClick: () => void;
 }
 
+// The six plain KPI tiles now use the shared StatTile primitive; this local
+// Tile survives only for the TTFT card, whose bespoke "not instrumented"
+// treatment (dashed + dimmed) and ReactNode sub (<MissingDataHint>) aren't
+// expressible via StatTile's string-only sub / emphasis-only styling.
 const Tile = ({ label, value, sub, info, emphasis = "default", muted = false, onClick }: TileProps) => (
   <Surface elevation="raised" padding={0}>
     <button
@@ -114,6 +130,26 @@ const GRID: React.CSSProperties = {
   gap: 10,
 };
 
+// Redundant, non-color severity cue (glyph + word) rendered under a tile's
+// value so warning/critical tiles aren't distinguished by color alone. Renders
+// nothing for good/neutral/info so a healthy tile stays quiet.
+const StatusCue = ({ status }: { status: SemanticStatus }) => {
+  if (status !== "warning" && status !== "critical") return null;
+  const cue = STATUS_CUE[status];
+  return (
+    <Flex alignItems="center" gap={4} style={{ color: statusColor(status) }}>
+      <span aria-hidden style={{ fontSize: 9, lineHeight: 1 }}>
+        {cue.glyph}
+      </span>
+      <Text
+        style={{ fontSize: 10.5, fontWeight: 600, color: statusColor(status) }}
+      >
+        {cue.label}
+      </Text>
+    </Flex>
+  );
+};
+
 const MODAL_META: Record<TileId, { title: string; subtitle: string }> = {
   total: { title: "Total agents", subtitle: "Every agent active in the current scope, with its service, volume and cost" },
   invocations: { title: "Invocations", subtitle: "Agent invocation volume over time, with forecast and brush-to-zoom" },
@@ -161,6 +197,14 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
   // agents; summarize their per-agent averages into a single fleet figure.
   const ttft = summarizeAgentTtft(agents);
 
+  // Severity for the color-bearing tiles, classified once so the tile color
+  // (emphasis) and the non-color cue (glyph + word) always agree.
+  const slowStatus = slowTileStatus(slow);
+  const errStatus = errorTileStatus(errorRate);
+  const loopStatus: SemanticStatus = loops.isLoading
+    ? "neutral"
+    : loopingTileStatus(loops.loopingCount);
+
   const renderBody = () => {
     switch (open) {
       case "total":
@@ -193,7 +237,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       id: "total",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Total agents"
           value={fmtCount(substantive.length)}
           sub={
@@ -202,7 +246,8 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
               : undefined
           }
           info="Distinct agents (gen_ai.agent.name) active in the current scope, excluding framework orchestration/runtime nodes. Click for the full agent roster."
-          onClick={() => setOpen("total")}
+          onActivate={() => setOpen("total")}
+          actionLabel="Open Total agents details"
         />
       ),
     },
@@ -210,11 +255,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       id: "invocations",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Invocations"
           value={fmtCount(invocations)}
           info="Total agent invocations (distinct traces / runs) in the current scope. Click for the time series with forecast and brush-to-zoom."
-          onClick={() => setOpen("invocations")}
+          onActivate={() => setOpen("invocations")}
+          actionLabel="Open Invocations details"
         />
       ),
     },
@@ -222,39 +268,46 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       id: "slow",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Slow agents"
           value={fmtCount(slow)}
           sub={`P90 > ${SLOW_P90_MS / 1000}s`}
-          emphasis={slow > 0 ? "amber" : "default"}
+          emphasis={statusToEmphasis(slowStatus)}
           info={`Agents whose P90 latency exceeds ${SLOW_P90_MS / 1000}s. Click for the ranked list.`}
-          onClick={() => setOpen("slow")}
-        />
+          onActivate={() => setOpen("slow")}
+          actionLabel="Open Slow agents details"
+        >
+          <StatusCue status={slowStatus} />
+        </StatTile>
       ),
     },
     {
       id: "error",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Error rate"
           value={fmtPercent(errorRate)}
-          emphasis={errorRate > 5 ? "red" : errorRate > 1 ? "amber" : "default"}
+          emphasis={statusToEmphasis(errStatus)}
           info="Share of agent invocations that failed, including logical failures (refusals / content-filter) where emitted. Click for the per-agent breakdown."
-          onClick={() => setOpen("error")}
-        />
+          onActivate={() => setOpen("error")}
+          actionLabel="Open Error rate details"
+        >
+          <StatusCue status={errStatus} />
+        </StatTile>
       ),
     },
     {
       id: "cost",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Est. cost"
           value={fmtUSDCompact(cost)}
           sub="this scope"
           info="Attributed LLM cost for these agents (where token usage shares the agent's trace). Often partial because LLM calls run on the central proxy. Exact fleet cost lives on the Models / FinOps tab. Click for the breakdown."
-          onClick={() => setOpen("cost")}
+          onActivate={() => setOpen("cost")}
+          actionLabel="Open Estimated cost details"
         />
       ),
     },
@@ -262,14 +315,17 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       id: "looping",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Looping agents"
           value={loops.isLoading ? "…" : fmtCount(loops.loopingCount)}
           sub="with detected loops"
-          emphasis={!loops.isLoading && loops.loopingCount > 0 ? "amber" : "default"}
+          emphasis={statusToEmphasis(loopStatus)}
           info="Agents with at least one run flagged as looping by the revisit-ratio / step-depth heuristic. Click for the full loop table and LangGraph activity trend."
-          onClick={() => setOpen("looping")}
-        />
+          onActivate={() => setOpen("looping")}
+          actionLabel="Open Looping agents details"
+        >
+          <StatusCue status={loopStatus} />
+        </StatTile>
       ),
     },
     {

@@ -3,32 +3,47 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtTokens } from "../../data/format";
+import {
+  statusColor,
+  STATUS_CUE,
+  type SemanticStatus,
+} from "../../theme/statusColor";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useEditLayout } from "../../layout/EditLayoutContext";
 import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import { usePromptSummary } from "./usePromptSummary";
 import { isScopeFiltered } from "./filterScope";
+import { countSeverity } from "./promptCells";
 import type { PromptsFilter } from "./usePrompts";
 
 interface TileProps {
   label: string;
   value: string;
   sub?: string;
-  emphasis?: "default" | "amber" | "red";
+  /**
+   * Severity of the tile's value, routed through the shared statusColor +
+   * STATUS_CUE vocabulary so it is never encoded by color alone: a non-"neutral"
+   * status prints a small glyph cue (▲ warning / ⬤ critical) next to the value.
+   */
+  status?: SemanticStatus;
   /** When set, the tile becomes a toggle button that filters the list. */
   onClick?: () => void;
   active?: boolean;
 }
 
-const COLOR: Record<NonNullable<TileProps["emphasis"]>, string> = {
-  default: "var(--text)",
-  amber: "var(--amber)",
-  red: "var(--red)",
-};
-
-const Tile = ({ label, value, sub, emphasis = "default", onClick, active }: TileProps) => {
+const Tile = ({
+  label,
+  value,
+  sub,
+  status = "neutral",
+  onClick,
+  active,
+}: TileProps) => {
   const interactive = !!onClick;
+  // Neutral keeps the full-strength text color; a real status tints the value
+  // AND is announced via the glyph's aria-label (non-color cue).
+  const valueColor = status === "neutral" ? "var(--text)" : statusColor(status);
   return (
     <Surface elevation="raised" padding={0}>
       <button
@@ -37,6 +52,10 @@ const Tile = ({ label, value, sub, emphasis = "default", onClick, active }: Tile
         disabled={!interactive}
         aria-pressed={interactive ? !!active : undefined}
         title={interactive ? "Click to filter the list" : undefined}
+        // Shared clickable-tile class restores a keyboard :focus-visible ring
+        // (the `all: unset` reset strips the default outline) and the app-wide
+        // hover lift, matching every other clickable KPI tile.
+        className={interactive ? "aiobs-clickable-tile" : undefined}
         style={{
           all: "unset",
           display: "block",
@@ -67,17 +86,33 @@ const Tile = ({ label, value, sub, emphasis = "default", onClick, active }: Tile
           >
             {label}
           </Text>
-          <Text
-            style={{
-              fontSize: 22,
-              fontWeight: 600,
-              color: COLOR[emphasis],
-              fontVariantNumeric: "tabular-nums",
-              lineHeight: 1,
-            }}
-          >
-            {value}
-          </Text>
+          <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
+            {status !== "neutral" && (
+              <span
+                role="img"
+                aria-label={STATUS_CUE[status].label}
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1,
+                  color: valueColor,
+                  flex: "0 0 auto",
+                }}
+              >
+                {STATUS_CUE[status].glyph}
+              </span>
+            )}
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                color: valueColor,
+                fontVariantNumeric: "tabular-nums",
+                lineHeight: 1,
+              }}
+            >
+              {value}
+            </Text>
+          </Flex>
           {sub && <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>}
         </Flex>
       </button>
@@ -191,7 +226,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
         <Tile
           label="PII detected"
           value={fmtCount(summary.piiDetected)}
-          emphasis={summary.piiDetected > 0 ? "amber" : "default"}
+          status={countSeverity(summary.piiDetected)}
           sub="gen_ai.privacy.pii_detected"
           onClick={
             onFilterChange && filter
@@ -209,7 +244,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
         <Tile
           label="Warnings"
           value={fmtCount(summary.warnings)}
-          emphasis={summary.warnings > 0 ? "amber" : "default"}
+          status={countSeverity(summary.warnings)}
           onClick={
             onFilterChange && filter
               ? () =>
@@ -230,7 +265,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
         <Tile
           label="Errors"
           value={fmtCount(summary.errors)}
-          emphasis={summary.errors > 5 ? "red" : summary.errors > 0 ? "amber" : "default"}
+          status={countSeverity(summary.errors, 5)}
           onClick={
             onFilterChange && filter
               ? () =>
@@ -251,7 +286,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
         <Tile
           label="Truncated"
           value={fmtCount(summary.truncated)}
-          emphasis={summary.truncated > 0 ? "amber" : "default"}
+          status={countSeverity(summary.truncated)}
           sub="finish_reasons: max_tokens"
           onClick={
             onFilterChange && filter

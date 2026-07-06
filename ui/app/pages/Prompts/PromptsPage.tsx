@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
 import {
   CloseSidebarIcon,
   OpenSidebarIcon,
@@ -349,6 +349,17 @@ export const PromptsPage = () => {
       </div>
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
+        {/* Page identity + one-line purpose (IA): an in-page "you are here"
+            beyond the active nav pill, stating what this page answers. */}
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={1} style={{ fontSize: 18, fontWeight: 600 }}>
+            Prompts
+          </Heading>
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+            Every LLM call in scope — inspect prompts, tokens, cost and quality
+            scores, and drill into the full trace behind any response.
+          </Text>
+        </Flex>
         {firstError && <ErrorBanner error={firstError} />}
         {focusChip && (
           <Flex alignItems="center" gap={8}>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
@@ -47,6 +48,17 @@ export const ModelsPage = () => {
         gap={16}
         style={{ padding: "18px 20px 80px" }}
       >
+        {/* Page title + one-line purpose (IA): a consistent anchor at the top
+            of the page so it reads the same as the other tabs. */}
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={1} style={{ fontSize: 18, fontWeight: 700 }}>
+            Models
+          </Heading>
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.4 }}>
+            Every model in scope — compare cost, tokens, latency and reliability,
+            and drill into spend, efficiency and A/B trade-offs across the fleet.
+          </Text>
+        </Flex>
         {error && <ErrorBanner error={error} />}
         <ModelTypeSegmented
           value={typeFilter}

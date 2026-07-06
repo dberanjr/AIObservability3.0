@@ -1,6 +1,5 @@
 import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   fmtCount,
@@ -8,107 +7,13 @@ import {
   fmtTokens,
 } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
-import { InfoTooltip } from "../../components/InfoTooltip";
+import { StatTile, type StatTileEmphasis } from "../../components/StatTile";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useEditLayout } from "../../layout/EditLayoutContext";
 import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import type { ExplorerSummary } from "./useExplorerSummary";
 import { tileAction, type TileAction } from "./tileActions";
-
-interface TileProps {
-  label: string;
-  value: string;
-  sub?: string;
-  emphasis?: "default" | "amber" | "red";
-  /** Optional one-line definition shown via an info icon next to the label. */
-  info?: string;
-  /** When provided, the tile becomes clickable (filter or scroll). */
-  onActivate?: () => void;
-  /** Accessible description of the click action (required when onActivate set). */
-  actionLabel?: string;
-}
-
-const COLOR: Record<NonNullable<TileProps["emphasis"]>, string> = {
-  default: "var(--text)",
-  amber: "var(--amber)",
-  red: "var(--red)",
-};
-
-const Tile = ({
-  label,
-  value,
-  sub,
-  emphasis = "default",
-  info,
-  onActivate,
-  actionLabel,
-}: TileProps) => {
-  const interactive = !!onActivate;
-  return (
-  <Surface
-    elevation="raised"
-    padding={12}
-    {...(interactive
-      ? {
-          role: "button",
-          tabIndex: 0,
-          "aria-label": actionLabel,
-          className: "aiobs-clickable-tile",
-          onClick: onActivate,
-          onKeyDown: (e: React.KeyboardEvent) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onActivate?.();
-            }
-          },
-        }
-      : {})}
-  >
-    <Flex flexDirection="column" gap={4}>
-      <Flex alignItems="center" gap={4} style={{ minHeight: 28 }}>
-        <Text
-          style={{
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-            color: "var(--text-3)",
-            whiteSpace: "normal",
-            lineHeight: 1.2,
-          }}
-        >
-          {label}
-        </Text>
-        {info && (
-          // Stop clicks/keys on the tooltip from also triggering the tile's
-          // scroll/filter action.
-          <span
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            style={{ display: "inline-flex", flex: "0 0 auto" }}
-          >
-            <InfoTooltip text={info} size={12} />
-          </span>
-        )}
-      </Flex>
-      <Text
-        style={{
-          fontSize: 22,
-          fontWeight: 600,
-          color: COLOR[emphasis],
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </Text>
-      {sub && (
-        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>
-      )}
-    </Flex>
-  </Surface>
-  );
-};
+import { errorRateStatus } from "./serviceStatus";
 
 export interface ExplorerTilesProps {
   summary: ExplorerSummary;
@@ -158,10 +63,17 @@ const ExplorerTilesBody = ({
 
   // Fleet error rate drives both the value and the severity emphasis, so a large
   // absolute count with a tiny rate no longer reads as alarming (Explorer-6).
+  // The same errorRateStatus helper backs the per-service row status dot, so the
+  // fleet tile and the rows can never disagree on what "amber vs red" means.
   const errorRatePct =
     summary.llmRequests > 0 ? (summary.errors / summary.llmRequests) * 100 : 0;
-  const errorEmphasis: TileProps["emphasis"] =
-    errorRatePct > 5 ? "red" : errorRatePct > 1 ? "amber" : "default";
+  const errorStatus = errorRateStatus(errorRatePct);
+  const errorEmphasis: StatTileEmphasis =
+    errorStatus === "critical"
+      ? "red"
+      : errorStatus === "warning"
+        ? "amber"
+        : "default";
 
   if (isLoading && summary.tokens === 0) {
     return (
@@ -194,7 +106,7 @@ const ExplorerTilesBody = ({
       id: "aiServices",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="AI services"
           value={fmtCount(summary.aiServiceCount)}
           {...activation(tileAction("aiServices", summary))}
@@ -205,7 +117,7 @@ const ExplorerTilesBody = ({
       id: "llmRequests",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="LLM requests"
           value={fmtCount(summary.llmRequests)}
           {...activation(tileAction("llmRequests", summary))}
@@ -216,7 +128,7 @@ const ExplorerTilesBody = ({
       id: "tokens",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="Tokens"
           value={fmtTokens(summary.tokens)}
           {...activation(tileAction("tokens", summary))}
@@ -227,7 +139,7 @@ const ExplorerTilesBody = ({
       id: "activeModels",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="Active models"
           value={fmtCount(summary.activeModels)}
           info="Distinct models (canonicalized) seen across all AI services in scope."
@@ -239,7 +151,7 @@ const ExplorerTilesBody = ({
       id: "concentration",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="Concentration"
           value={fmtPercent(summary.concentrationPct, 0)}
           sub={summary.topServiceShare?.service}
@@ -253,7 +165,7 @@ const ExplorerTilesBody = ({
       id: "errors",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="Errors"
           value={fmtPercent(errorRatePct)}
           sub={`${fmtCount(summary.errors)} ${summary.errors === 1 ? "error" : "errors"}`}
@@ -267,7 +179,7 @@ const ExplorerTilesBody = ({
       id: "logicalErrors",
       defaultColSpan: 1,
       node: (
-        <Tile
+        <StatTile
           label="Logical errors"
           value={fmtCount(summary.logicalErrors)}
           sub="HTTP 200, payload-level"

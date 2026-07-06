@@ -6,6 +6,8 @@
  * useAttributeAudit (verdict) and by the page / SectionCard (colors).
  */
 
+import { statusColor, type SemanticStatus } from "../../theme/statusColor";
+
 /** Three-way presence verdict for a single audited attribute. */
 export type Verdict = "present" | "sparse" | "missing";
 
@@ -28,11 +30,23 @@ export const classifyVerdict = (present: boolean, share: number): Verdict => {
   return "present";
 };
 
-/** Verdict → semantic (theme-safe) color token. */
+/**
+ * Verdict → shared semantic status. Routing verdict severity through the
+ * app-wide status ramp (present=good, sparse=warning, missing=critical) keeps
+ * this page's green/amber/red consistent with every other page's severity cue
+ * instead of hardcoding the tokens locally.
+ */
+export const VERDICT_STATUS: Record<Verdict, SemanticStatus> = {
+  present: "good",
+  sparse: "warning",
+  missing: "critical",
+};
+
+/** Verdict → theme-safe color token, resolved via the shared statusColor. */
 export const VERDICT_COLOR: Record<Verdict, string> = {
-  present: "var(--green-2)",
-  sparse: "var(--amber)",
-  missing: "var(--red)",
+  present: statusColor(VERDICT_STATUS.present),
+  sparse: statusColor(VERDICT_STATUS.sparse),
+  missing: statusColor(VERDICT_STATUS.missing),
 };
 
 /**

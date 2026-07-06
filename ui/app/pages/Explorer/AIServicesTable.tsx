@@ -15,6 +15,8 @@ import {
 } from "../../detection/attributes";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { estimateServiceRowCost, type ServiceRowCost } from "./serviceModelCost";
+import { errorRateStatus } from "./serviceStatus";
+import { statusColor, STATUS_CUE } from "../../theme/statusColor";
 import type { AIService } from "./useAIServices";
 
 /** Client-side sort keys. `null` (no active sort) preserves the query order
@@ -277,6 +279,31 @@ const CostCell = ({ cost }: { cost: ServiceRowCost }) => (
   </Cell>
 );
 
+/** Leading-column row health cue. A status-shaped glyph (● good / ▲ warning /
+ *  ⬤ critical) coloured via the shared statusColor, plus an accessible label —
+ *  so row severity reads without relying on colour alone. Thresholds come from
+ *  the shared errorRateStatus, so the dot agrees with the Errors KPI tile. */
+const RowStatus = ({ errorRatePct }: { errorRatePct: number }) => {
+  const status = errorRateStatus(errorRatePct);
+  const cue = STATUS_CUE[status];
+  const label = `${cue.label} — ${fmtPercent(errorRatePct)} error rate`;
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{
+        display: "inline-block",
+        color: statusColor(status),
+        fontSize: 11,
+        lineHeight: 1,
+      }}
+    >
+      {cue.glyph}
+    </span>
+  );
+};
+
 export interface AIServicesTableProps {
   rows: AIService[];
   isLoading: boolean;
@@ -381,21 +408,7 @@ const AIServicesTableBody = ({
               }}
             >
               <Cell width={24}>
-                <span
-                  aria-hidden
-                  style={{
-                    display: "inline-block",
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background:
-                      r.errorRatePct > 5
-                        ? "var(--red)"
-                        : r.errorRatePct > 1
-                          ? "var(--amber)"
-                          : "var(--green-2)",
-                  }}
-                />
+                <RowStatus errorRatePct={r.errorRatePct} />
               </Cell>
               <Cell
                 style={{

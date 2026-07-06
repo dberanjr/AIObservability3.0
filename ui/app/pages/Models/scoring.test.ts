@@ -4,6 +4,7 @@ import {
   USE_CASE_PROFILES,
   compareModels,
   findProfile,
+  formatSavings,
   scoreCostPerRequest,
   scoreLatency,
   scoreQuality,
@@ -284,5 +285,13 @@ describe("compareModels", () => {
   it("is not quality-driven when the win comes from cost", () => {
     const result = compareModels(profile, cheap, expensive, 100_000);
     expect(result.qualityDriven).toBe(false);
+  });
+});
+
+describe("formatSavings", () => {
+  it("uses the shared compact USD formatter for the savings figure", () => {
+    expect(formatSavings(1_500_000)).toBe("$1.5M");
+    expect(formatSavings(12_400)).toBe("$12.4k");
+    expect(formatSavings(250)).toBe("$250");
   });
 });

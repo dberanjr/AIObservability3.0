@@ -19,6 +19,7 @@ import {
 } from "@dynatrace/strato-icons";
 import { fmtTokens, fmtMs } from "../../data/format";
 import { costOf } from "../../data/pricing";
+import { fmtCentsCost } from "./promptCells";
 import {
   spanCategory,
   CAT_COLOR,
@@ -315,8 +316,6 @@ const edgePath = (x1: number, y1: number, x2: number, y2: number): string => {
   return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
 };
 
-const fmtCost = (cents: number): string => `$${(cents / 100).toFixed(5)}`;
-
 /**
  * Pick a distinct icon per node type: agent, LLM, tool, MCP server (detected by
  * an "mcp" hint in the label/service), and generic service spans.
@@ -336,7 +335,7 @@ const sublabel = (n: TopoNode, by: SizeBy): string => {
   if (by === "inTok") return `${fmtTokens(n.inTok)} in`;
   if (by === "outTok") return `${fmtTokens(n.outTok)} out`;
   if (by === "duration") return fmtMs(n.durationMs);
-  if (by === "cost") return fmtCost(n.cost);
+  if (by === "cost") return fmtCentsCost(n.cost);
   return n.count > 1 ? `${n.category} · ${n.count}` : n.category;
 };
 
@@ -413,7 +412,7 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
     if (layout.rootKeys.has(n.key)) {
       const t = layout.totals;
       p.push(
-        `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" font-weight="600" fill="${textc}">${escapeXml(`${fmtMs(t.durationMs)} · ${fmtCost(t.cost)}`)}</text>`,
+        `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" font-weight="600" fill="${textc}">${escapeXml(`${fmtMs(t.durationMs)} · ${fmtCentsCost(t.cost)}`)}</text>`,
       );
       p.push(
         `<text x="${n.x}" y="${n.y + n.r + 40}" text-anchor="middle" font-size="10" fill="${text3}">${escapeXml(`${fmtTokens(t.inTok)} in · ${fmtTokens(t.outTok)} out`)}</text>`,
@@ -609,7 +608,7 @@ const TopologyGraph = ({
                 return (
                   <div
                     key={n.key}
-                    title={`${n.label}${n.isError ? " · errored" : ""} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCost(n.cost)}`}
+                    title={`${n.label}${n.isError ? " · errored" : ""} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCentsCost(n.cost)}`}
                     aria-label={n.isError ? `${n.label} (errored)` : n.label}
                     style={{ position: "absolute", left: n.x - n.r, top: n.y - n.r, width: d, height: d }}
                   >
@@ -661,7 +660,7 @@ const TopologyGraph = ({
                           <Text
                             style={{ display: "block", fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}
                           >
-                            {`${fmtMs(layout.totals.durationMs)} · ${fmtCost(layout.totals.cost)}`}
+                            {`${fmtMs(layout.totals.durationMs)} · ${fmtCentsCost(layout.totals.cost)}`}
                           </Text>
                           <Text style={{ display: "block", fontSize: 10, color: "var(--text-3)" }}>
                             {`${fmtTokens(layout.totals.inTok)} in · ${fmtTokens(layout.totals.outTok)} out`}
@@ -692,7 +691,7 @@ const TopologyGraph = ({
 };
 
 const fmtMetric = (v: number, by: SizeBy): string =>
-  by === "duration" ? fmtMs(v) : by === "cost" ? fmtCost(v) : fmtTokens(v);
+  by === "duration" ? fmtMs(v) : by === "cost" ? fmtCentsCost(v) : fmtTokens(v);
 
 /**
  * Quantitative key for the graph (Prompts-13): what the blue entry ring/edges

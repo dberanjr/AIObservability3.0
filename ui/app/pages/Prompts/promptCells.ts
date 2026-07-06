@@ -2,6 +2,8 @@
 // Kept out of the .tsx components so the colour / formatting logic is unit
 // testable without pulling in Strato UI.
 
+import type { SemanticStatus } from "../../theme/statusColor";
+
 /**
  * Quality-score colour ramp (percent scale). Shared by the aggregate quality
  * panel and the per-row Evaluations table so both read the same thresholds.
@@ -90,4 +92,20 @@ export const coverageLabel = (coverage: number, total: number): CoverageLabel =>
     text: `${coverage.toLocaleString()} of ${total.toLocaleString()} LLM spans scored (${pctText})`,
     low: pct < 1,
   };
+};
+
+/**
+ * Map a non-negative KPI count to a semantic status so a tile's severity is
+ * routed through the shared statusColor / STATUS_CUE vocabulary instead of a
+ * local amber/red ternary — and can therefore carry a non-color glyph cue too
+ * (cross-cutting CONSISTENCY / A11Y). Zero (or invalid) is "neutral"; any
+ * positive count is "warning"; a count strictly greater than `severeAt` (when
+ * given) escalates to "critical". This preserves the existing thresholds:
+ * errors use severeAt=5 (>5 red, 1–5 amber); PII / warnings / truncated warn on
+ * any positive count.
+ */
+export const countSeverity = (n: number, severeAt?: number): SemanticStatus => {
+  if (!Number.isFinite(n) || n <= 0) return "neutral";
+  if (severeAt != null && n > severeAt) return "critical";
+  return "warning";
 };

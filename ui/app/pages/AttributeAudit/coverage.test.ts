@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { statusColor } from "../../theme/statusColor";
 import {
   classifyVerdict,
   coverageRampColor,
   SPARSE_SHARE_THRESHOLD,
   VERDICT_COLOR,
+  VERDICT_STATUS,
 } from "./coverage";
 
 describe("classifyVerdict", () => {
@@ -29,6 +31,17 @@ describe("classifyVerdict", () => {
     expect(VERDICT_COLOR.present).not.toBe(VERDICT_COLOR.sparse);
     expect(VERDICT_COLOR.sparse).not.toBe(VERDICT_COLOR.missing);
     expect(VERDICT_COLOR.present).not.toBe(VERDICT_COLOR.missing);
+  });
+
+  it("routes verdict severity through the shared statusColor ramp", () => {
+    // present=good, sparse=warning, missing=critical — one severity ramp for
+    // the whole app rather than a hardcoded green/amber/red on this page.
+    expect(VERDICT_STATUS.present).toBe("good");
+    expect(VERDICT_STATUS.sparse).toBe("warning");
+    expect(VERDICT_STATUS.missing).toBe("critical");
+    expect(VERDICT_COLOR.present).toBe(statusColor("good"));
+    expect(VERDICT_COLOR.sparse).toBe(statusColor("warning"));
+    expect(VERDICT_COLOR.missing).toBe(statusColor("critical"));
   });
 });
 

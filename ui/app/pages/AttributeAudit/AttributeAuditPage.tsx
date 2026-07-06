@@ -8,6 +8,7 @@ import { ErrorBanner } from "../../components/ErrorState";
 import { EmptyState } from "../../components/EmptyState";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
+import { statusColor } from "../../theme/statusColor";
 import { tenantLabel } from "../../lib/tenant";
 import { useScope } from "../../scope/ScopeContext";
 import { GROUPS, SECTIONS, COMMUNITY_ATTRS, type AuditSection } from "./catalog";
@@ -29,8 +30,11 @@ const timeframeLabel = (from: string, to?: string): string => {
   return `${from} to ${to ?? "now()"}`;
 };
 
+/** Overall coverage % → shared statusColor ramp (good ≥80, warning ≥40,
+ *  critical below) so the ring severity matches the app-wide status palette
+ *  rather than a hardcoded green/amber/red local to this page. */
 const coverageTone = (pct: number): string =>
-  pct >= 80 ? "var(--green-2)" : pct >= 40 ? "var(--amber)" : "var(--red)";
+  statusColor(pct >= 80 ? "good" : pct >= 40 ? "warning" : "critical");
 
 /** Overall coverage ring (inline SVG donut). Defaults to labelling the value
  *  "mandatory" — it measures Tier-A (Mandatory) coverage, the actionable number

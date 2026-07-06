@@ -1,64 +1,11 @@
 import React from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtTokens, fmtUSD } from "../../data/format";
+import { StatTile } from "../../components/StatTile";
 import type { ModelRow } from "./useModels";
 import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import { useEditLayout } from "../../layout/EditLayoutContext";
-
-const Tile = ({
-  label,
-  value,
-  sub,
-  emphasis,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  emphasis?: "default" | "green" | "red";
-}) => {
-  const color =
-    emphasis === "green"
-      ? "var(--green-2)"
-      : emphasis === "red"
-        ? "var(--red)"
-        : "var(--text)";
-  return (
-    <Surface elevation="raised" padding={12}>
-      <Flex flexDirection="column" gap={4}>
-        <Text
-          style={{
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-            color: "var(--text-3)",
-            minHeight: 28,
-            whiteSpace: "normal",
-            lineHeight: 1.2,
-          }}
-        >
-          {label}
-        </Text>
-        <Text
-          style={{
-            fontSize: 22,
-            fontWeight: 600,
-            color,
-            fontVariantNumeric: "tabular-nums",
-            lineHeight: 1,
-          }}
-        >
-          {value}
-        </Text>
-        {sub && (
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>
-        )}
-      </Flex>
-    </Surface>
-  );
-};
 
 export interface ModelsTilesRowProps {
   models: ModelRow[];
@@ -113,28 +60,28 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
     {
       id: "models",
       defaultColSpan: 2,
-      node: <Tile label="Models" value={fmtCount(models.length)} />,
+      node: <StatTile label="Models" value={fmtCount(models.length)} />,
     },
     {
       id: "providers",
       defaultColSpan: 2,
-      node: <Tile label="Providers" value={fmtCount(providerCount)} />,
+      node: <StatTile label="Providers" value={fmtCount(providerCount)} />,
     },
     {
       id: "requests",
       defaultColSpan: 2,
-      node: <Tile label="Requests" value={fmtCount(requests)} />,
+      node: <StatTile label="Requests" value={fmtCount(requests)} />,
     },
     {
       id: "tokens",
       defaultColSpan: 2,
-      node: <Tile label="Tokens" value={fmtTokens(tokens)} />,
+      node: <StatTile label="Tokens" value={fmtTokens(tokens)} />,
     },
     {
       id: "cheapest",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Cheapest / 1M"
           value={cheapest ? fmtUSD(cheapest.costPerMTok) : "—"}
           sub={cheapest?.model}
@@ -146,7 +93,7 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
       id: "expensive",
       defaultColSpan: 2,
       node: (
-        <Tile
+        <StatTile
           label="Most expensive / 1M"
           value={mostExpensive ? fmtUSD(mostExpensive.costPerMTok) : "—"}
           sub={mostExpensive?.model}

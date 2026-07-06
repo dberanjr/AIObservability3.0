@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { XmarkIcon } from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
 import { AgentsCaveatNote } from "./AgentsCaveatNote";
@@ -155,6 +156,18 @@ const AgentsPageBody = () => {
         gap={16}
         style={{ padding: "18px 20px 80px" }}
       >
+        {/* Page title + one-line purpose (IA): a consistent anchor at the top
+            of the page so it reads the same as the other tabs. */}
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={1} style={{ fontSize: 18, fontWeight: 700 }}>
+            Agents
+          </Heading>
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.4 }}>
+            Per-agent invocations, latency, cost, and reliability across the AI
+            fleet — surface the slow, looping, and failing agents.
+          </Text>
+        </Flex>
+
         {firstError && <ErrorBanner error={firstError} />}
         {focusPreset && (
           <Flex alignItems="center" gap={8}>

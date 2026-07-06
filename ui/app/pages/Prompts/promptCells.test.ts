@@ -5,6 +5,7 @@ import {
   anomalyLevel,
   fmtCentsCost,
   coverageLabel,
+  countSeverity,
 } from "./promptCells";
 
 describe("qualityColor", () => {
@@ -59,6 +60,24 @@ describe("fmtCentsCost", () => {
   it("renders zero / invalid as a dash", () => {
     expect(fmtCentsCost(0)).toBe("—");
     expect(fmtCentsCost(NaN)).toBe("—");
+  });
+});
+
+describe("countSeverity", () => {
+  it("is neutral for zero / negative / non-finite counts", () => {
+    expect(countSeverity(0)).toBe("neutral");
+    expect(countSeverity(-3)).toBe("neutral");
+    expect(countSeverity(NaN)).toBe("neutral");
+  });
+  it("warns on any positive count without a severe threshold", () => {
+    expect(countSeverity(1)).toBe("warning");
+    expect(countSeverity(999)).toBe("warning");
+  });
+  it("escalates only strictly past the severe threshold", () => {
+    // Mirrors the Errors tile: >5 red, 1–5 amber.
+    expect(countSeverity(1, 5)).toBe("warning");
+    expect(countSeverity(5, 5)).toBe("warning");
+    expect(countSeverity(6, 5)).toBe("critical");
   });
 });
 

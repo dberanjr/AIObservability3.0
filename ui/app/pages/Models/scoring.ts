@@ -6,6 +6,7 @@
  */
 
 import type { ModelPricing } from "../../data/pricing";
+import { fmtUSDCompact } from "../../data/format";
 
 export type ScoreDimension =
   | "latency"
@@ -244,12 +245,6 @@ export interface ComparisonResult {
   qualityDriven: boolean;
 }
 
-const fmtCurrencyShort = (v: number): string => {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
-  return `$${Math.round(v).toLocaleString()}`;
-};
-
 /**
  * Phrase the recommendation reasoning. The copy avoids the word "Davis" per
  * Session 12 handoff item 6 — always uses "Dynatrace Intelligence".
@@ -353,4 +348,6 @@ export const compareModels = (
   };
 };
 
-export const formatSavings = fmtCurrencyShort;
+/** Compact USD for the "Savings/mo" figure — routes through the shared
+ *  currency formatter so the app has a single source of currency formatting. */
+export const formatSavings = (v: number): string => fmtUSDCompact(v);
