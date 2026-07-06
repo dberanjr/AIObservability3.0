@@ -3,20 +3,14 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
+import { toNum } from "../../data/format";
 import { buildProviderMixQuery } from "./dataQueries";
+import { extrapolatedSum, type ProviderRecord } from "./providerMix";
 import {
   PROVIDER_COLOR,
   PROVIDER_DISPLAY,
   type ProviderId,
 } from "../../detection/attributes";
-
-interface ProviderRecord {
-  provider?: string;
-  requests?: number;
-  tokens?: number;
-  via_bedrock_count?: number;
-  raw_providers?: Array<string | null>;
-}
 
 export interface ProviderShare {
   provider: string;
@@ -40,7 +34,7 @@ export interface UseProviderMixResult {
 }
 
 const isKnownProvider = (p: string): p is ProviderId =>
-  Object.prototype.hasOwnProperty.call(PROVIDER_COLOR, p);
+  Boolean(Object.prototype.hasOwnProperty.call(PROVIDER_COLOR, p));
 
 /**
  * Distinct fallback palette for non-canonical providers (custom proxies,
@@ -91,8 +85,7 @@ export const useProviderMix = (): UseProviderMixResult => {
     // (sharePct) are ratios and unaffected, but the displayed center value
     // and the legend's per-provider request counts both need to reflect the
     // unsampled population.
-    const totalRequests =
-      records.reduce((acc, r) => acc + (r.requests ?? 0), 0) * samplingRatio;
+    const totalRequests = extrapolatedSum(records, (r) => r.requests, samplingRatio);
 
     let bedrockProxyVolume = 0;
     let fallbackIdx = 0;
@@ -102,8 +95,8 @@ export const useProviderMix = (): UseProviderMixResult => {
       )
       .map((r) => {
         const provider = r.provider.trim().toLowerCase();
-        const requests = (r.requests ?? 0) * samplingRatio;
-        const viaBedrock = (r.via_bedrock_count ?? 0) * samplingRatio;
+        const requests = toNum(r.requests) * samplingRatio;
+        const viaBedrock = toNum(r.via_bedrock_count) * samplingRatio;
         bedrockProxyVolume += viaBedrock;
 
         const known = isKnownProvider(provider);
@@ -121,7 +114,7 @@ export const useProviderMix = (): UseProviderMixResult => {
             (p): p is string => typeof p === "string" && p.length > 0,
           ),
           requests,
-          tokens: (r.tokens ?? 0) * samplingRatio,
+          tokens: toNum(r.tokens) * samplingRatio,
           sharePct:
             totalRequests > 0 ? (requests / totalRequests) * 100 : 0,
           color,
