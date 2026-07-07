@@ -310,9 +310,13 @@ ${globalFilterClauses(filters)}
  */
 export const buildUpstreamSmartscapeQuery = (aiServiceIds: string[]): string => {
   if (aiServiceIds.length === 0) return "";
+  // NB: smartscapeEdges target_id is a *smartscape-id* type, not a string —
+  // `in(target_id, array("SERVICE-…"))` silently never matches (0 rows), which
+  // left the upstream-caller list empty. Coerce with toString() so the id-vs-
+  // string comparison holds.
   return `
 smartscapeEdges type:"calls"
-| filter in(target_id, array(${dqlIdArray(aiServiceIds)}))
+| filter in(toString(target_id), array(${dqlIdArray(aiServiceIds)}))
 | join [ smartscapeNodes type:"SERVICE" | fields source_id = id, upstream = name ], kind: inner, on: { source_id }, prefix: "s."
 | join [ smartscapeNodes type:"SERVICE" | fields target_id = id, target_name = name ], kind: inner, on: { target_id }, prefix: "t."
 | summarize

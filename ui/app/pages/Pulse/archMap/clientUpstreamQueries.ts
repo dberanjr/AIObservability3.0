@@ -16,9 +16,12 @@ const to = (tf: Timeframe): string => tf.to ?? "now()";
 /** Upstream caller services (id + name) for the given AI service entity IDs. */
 export const buildClientUpstreamQuery = (aiServiceIds: string[]): string => {
   if (aiServiceIds.length === 0) return "";
+  // NB: smartscapeEdges target_id is a *smartscape-id* type, not a string, so
+  // in(target_id, array("SERVICE-…")) silently never matches (0 rows). Coerce
+  // with toString() — otherwise the Client tier has no upstream callers.
   return `
 smartscapeEdges type:"calls"
-| filter in(target_id, array(${dqlIdArray(aiServiceIds)}))
+| filter in(toString(target_id), array(${dqlIdArray(aiServiceIds)}))
 | join [ smartscapeNodes type:"SERVICE" | fields source_id = id, upstream = name ], kind: inner, on: { source_id }, prefix: "s."
 | summarize aiServices = countDistinct(target_id), by: { upstreamId = source_id, upstream = \`s.upstream\` }
 | sort aiServices desc
