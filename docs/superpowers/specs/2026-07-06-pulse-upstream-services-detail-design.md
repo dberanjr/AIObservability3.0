@@ -75,8 +75,10 @@ Columns:
 
 ## Section 3 — Layered service-flow map (centerpiece)
 
-Three tier-columns, left → right, reusing arch-map node/edge styling (`MapNode`,
-`FrameworkChips`, tier tokens, `statusColor`):
+A **fresh, standalone** three-column layered layout inside the modal (`UpstreamFlowMap`, its
+own component). It **reuses arch-map styling/tokens** (`MapNode`, `FrameworkChips`, tier tokens,
+`statusColor`) but does **not** embed into, depend on, or modify the fleet-wide arch map — the
+existing map is untouched. Columns, left → right:
 
 ```
 CALLERS               AI SERVICES              COMPONENTS (grouped per AI service)
