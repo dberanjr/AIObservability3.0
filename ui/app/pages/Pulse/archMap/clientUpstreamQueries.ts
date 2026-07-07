@@ -43,6 +43,7 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
     requests = count(),
     errors = sum(is_err),
     p90ns = percentile(duration, 90),
+    p95ns = percentile(duration, 95),
     by: { svcId = dt.entity.service, svc = entityName(dt.entity.service) }
 | sort requests desc
 | limit 25
