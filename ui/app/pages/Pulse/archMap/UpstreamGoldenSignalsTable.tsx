@@ -259,6 +259,7 @@ export const UpstreamGoldenSignalsTable = ({
                     aria-selected={selected}
                     onClick={() => onSelect(selected ? null : c.id)}
                     onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         onSelect(selected ? null : c.id);
