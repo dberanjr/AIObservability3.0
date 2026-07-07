@@ -49,7 +49,7 @@ const CoverageRing = ({ pct, label = "mandatory" }: { pct: number; label?: strin
   return (
     <div
       role="img"
-      aria-label={`Mandatory attribute coverage ${Math.round(pct)} percent`}
+      aria-label={`${label} attribute coverage ${Math.round(pct)} percent`}
       style={{ position: "relative", width: size, height: size, flex: "0 0 auto" }}
     >
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden>
@@ -138,29 +138,30 @@ const HeroStat = ({
  *
  *  Bars measure Mandatory + Important (A+B) coverage — the actionable tiers that
  *  can legitimately reach 100% — rather than all-tier coverage (which can never
- *  go green while rare C/D attributes sit missing). When a search is active the
- *  bars instead mirror the filtered counts so the TOC agrees with the section
- *  headers the user scrolls to. */
+ *  go green while rare C/D attributes sit missing). When a search or a tier
+ *  filter is active the bars instead mirror the filtered counts so the TOC
+ *  agrees with the section headers the user scrolls to. */
 const SectionOverview = ({
   sections,
-  filteredById,
+  filteredCounts,
   mirrorFilter,
   onJump,
 }: {
   sections: SectionResult[];
-  filteredById: Map<string, SectionResult>;
+  filteredCounts: Map<string, { present: number; total: number }>;
   mirrorFilter: boolean;
   onJump: (id: string) => void;
 }) => (
   <Flex flexDirection="column" gap={4} style={{ flex: 1, minWidth: 240 }}>
     {sections.map((s) => {
-      const f = filteredById.get(s.section.id);
-      // Mirror the filtered counts during search; otherwise show A+B coverage.
+      const f = filteredCounts.get(s.section.id);
+      // Mirror the filtered counts when a search / tier filter is active;
+      // otherwise show the A+B baseline coverage.
       const present = mirrorFilter
-        ? (f?.presentCount ?? 0)
+        ? (f?.present ?? 0)
         : s.tierStats.A.present + s.tierStats.B.present;
       const total = mirrorFilter
-        ? (f?.totalCount ?? 0)
+        ? (f?.total ?? 0)
         : s.tierStats.A.total + s.tierStats.B.total;
       const hidden = mirrorFilter && !f;
       const pct = total > 0 ? (present / total) * 100 : 0;
@@ -230,6 +231,34 @@ const SectionOverview = ({
     })}
   </Flex>
 );
+
+/** The tiers shown by default — Mandatory + Important. Kept as a constant so the
+ *  hero can tell an *active* tier filter (user narrowed or broadened) apart from
+ *  this baseline, where the ring keeps its Mandatory framing. */
+const DEFAULT_TIERS = ["A", "B"] as const;
+
+/** Apply the search + tier filter (but NOT the gaps-only list view) to a
+ *  section's attributes. Shared by the body list and the hero so both filter
+ *  identically. A non-empty search overrides the tier toggles — a matching attr
+ *  surfaces regardless of whether its tier is toggled on. */
+const applyAttrFilter = (
+  attrs: AttrResult[],
+  query: string,
+  activeTiers: Set<string>,
+): AttrResult[] => {
+  const q = query.trim().toLowerCase();
+  if (q) {
+    return attrs.filter(
+      (a) =>
+        a.spec.name.toLowerCase().includes(q) ||
+        a.spec.what.toLowerCase().includes(q),
+    );
+  }
+  if (activeTiers.size < 4) {
+    return attrs.filter((a) => activeTiers.has(a.spec.tier));
+  }
+  return attrs;
+};
 
 export const AttributeAuditPage = () => {
   const { scope } = useScope();
@@ -304,25 +333,9 @@ export const AttributeAuditPage = () => {
   // Search overrides tier filter: any attr matching the query is shown regardless
   // of whether its tier is toggled off.
   const filteredSections = useMemo<SectionResult[]>(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const hasQuery = !!q;
-    const allTiersActive = activeTiers.size === 4;
-
     return audit.sections
       .map((section) => {
-        let attrs = section.attributes;
-
-        if (hasQuery) {
-          // Search bypasses tier filter — surface hidden attrs too.
-          attrs = attrs.filter(
-            (a) =>
-              a.spec.name.toLowerCase().includes(q) ||
-              a.spec.what.toLowerCase().includes(q),
-          );
-        } else if (!allTiersActive) {
-          // No search: apply tier filter.
-          attrs = attrs.filter((a) => activeTiers.has(a.spec.tier));
-        }
+        let attrs = applyAttrFilter(section.attributes, searchQuery, activeTiers);
 
         // Gaps-first: keep only the missing attributes.
         if (gapsOnly) attrs = attrs.filter((a) => !a.present);
@@ -343,11 +356,60 @@ export const AttributeAuditPage = () => {
       .filter((s): s is SectionResult => s !== null);
   }, [audit.sections, searchQuery, activeTiers, gapsOnly]);
 
-  // Lookup for the hero TOC so it can mirror the filtered counts on search.
+  // Lookup of the filtered body sections (search + tier + gaps) — used by
+  // jumpToSection to decide whether a jump target is currently hidden.
   const filteredById = useMemo(
     () => new Map(filteredSections.map((s) => [s.section.id, s])),
     [filteredSections],
   );
+
+  // Hero coverage population (ring + TOC bars): reflects the active search / tier
+  // filter so the top of the page can't disagree with the section headers below.
+  // Deliberately ignores the gaps-only list view (which zeroes every "present"
+  // count) so the hero keeps measuring real coverage of the shown tiers. Tier D
+  // is held out of the coverage-eligible numerator — present D is a *negative*
+  // signal, so a filter must never let an anti-pattern lift the ring.
+  const heroFiltered = useMemo(() => {
+    const byId = new Map<string, { present: number; total: number }>();
+    let present = 0;
+    let total = 0;
+    let eligiblePresent = 0;
+    let eligibleTotal = 0;
+    for (const s of audit.sections) {
+      const attrs = applyAttrFilter(s.attributes, searchQuery, activeTiers);
+      if (attrs.length === 0) continue;
+      const p = attrs.filter((a) => a.present).length;
+      byId.set(s.section.id, { present: p, total: attrs.length });
+      present += p;
+      total += attrs.length;
+      for (const a of attrs) {
+        if ((a.spec.tier ?? "D") !== "D") {
+          eligibleTotal += 1;
+          if (a.present) eligiblePresent += 1;
+        }
+      }
+    }
+    return {
+      byId,
+      present,
+      total,
+      eligibleTotal,
+      eligiblePct: eligibleTotal > 0 ? (eligiblePresent / eligibleTotal) * 100 : 0,
+    };
+  }, [audit.sections, searchQuery, activeTiers]);
+
+  const isDefaultTierSet =
+    activeTiers.size === DEFAULT_TIERS.length &&
+    DEFAULT_TIERS.every((t) => activeTiers.has(t));
+  // A user-applied search, or a tier set other than the A+B default. The default
+  // is the baseline (ring stays on Mandatory), not a user filter.
+  const heroFilterActive = !!searchQuery.trim() || !isDefaultTierSet;
+  // Ring: swap the Mandatory headline for filtered A–C coverage only when a
+  // filter is active AND the shown set has coverage-eligible (non-D) attributes;
+  // otherwise it keeps the Mandatory framing.
+  const ringUsesFilter = heroFilterActive && heroFiltered.eligibleTotal > 0;
+  const ringPct = ringUsesFilter ? heroFiltered.eligiblePct : overview.mandatoryCoveragePct;
+  const ringLabel = ringUsesFilter ? "filtered" : "mandatory";
 
   // Missing Tier-A (Mandatory) attributes across the whole audit — the single
   // most actionable "what am I missing?" list, surfaced as a top-of-page callout.
@@ -723,11 +785,15 @@ export const AttributeAuditPage = () => {
                   {audit.isLoading ? (
                     <Skeleton style={{ height: 116, width: 116, borderRadius: "50%" }} />
                   ) : (
-                    <CoverageRing pct={overview.mandatoryCoveragePct} />
+                    <CoverageRing pct={ringPct} label={ringLabel} />
                   )}
                   {audit.isLoading ? (
                     <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
                       {`${sectionsLoaded} of ${sectionCount} categories loaded…`}
+                    </Text>
+                  ) : ringUsesFilter ? (
+                    <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                      {`${heroFiltered.present}/${heroFiltered.total} shown attributes present`}
                     </Text>
                   ) : (
                     <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
@@ -818,19 +884,25 @@ export const AttributeAuditPage = () => {
                         </Text>
                       )}
 
-                      {forceOpen && (
+                      {heroFilterActive ? (
                         <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
-                          Ring and tier counts reflect the full audit — the list below is filtered.
+                          The ring and section bars reflect your current search / tier
+                          filter — the four tier counts above always show the full audit.
                         </Text>
-                      )}
+                      ) : gapsOnly ? (
+                        <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
+                          Ring and tier counts reflect the full audit — the list below
+                          shows only the gaps.
+                        </Text>
+                      ) : null}
                     </Flex>
                   );
                 })()}
 
                 <SectionOverview
                   sections={audit.sections}
-                  filteredById={filteredById}
-                  mirrorFilter={!!searchQuery.trim()}
+                  filteredCounts={heroFiltered.byId}
+                  mirrorFilter={heroFilterActive}
                   onJump={jumpToSection}
                 />
               </Flex>

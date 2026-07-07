@@ -8,10 +8,17 @@ import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useCapability } from "../../scope/CapabilityContext";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
+import { Sparkline } from "../../components/charts/Sparkline";
 import { usePromptQuality, type QualityMetricSnapshot } from "./usePromptQuality";
 import { qualityColor, coverageLabel } from "./promptCells";
 import { isScopeFiltered } from "./filterScope";
-import { worstModelsForMetric, type EvalMetric } from "./evalTable";
+import {
+  worstModelsForMetric,
+  evalTrendSeries,
+  evalFailFilter,
+  evalFilterLabel,
+  type EvalMetric,
+} from "./evalTable";
 import type { PromptRow, PromptsFilter } from "./usePrompts";
 
 interface MetricTileProps {
@@ -19,12 +26,57 @@ interface MetricTileProps {
   snapshot: QualityMetricSnapshot;
   /** Total LLM-span population, for the coverage denominator (Prompts-6). */
   total: number;
-  /** Eval field driving the per-model breakdown (Prompts-4). */
+  /** Eval field driving the per-model breakdown + trend (Prompts-4). */
   metric: EvalMetric;
-  /** Loaded rows the breakdown is computed from. */
+  /** Loaded rows the breakdown + trend are computed from. */
   rows: PromptRow[];
   inverted?: boolean;
+  /** True when this metric's fail-filter is the active table filter (Prompts-4). */
+  active?: boolean;
+  /** Toggle this metric's fail-filter on the table (Prompts-4). Absent ⇒ inert. */
+  onToggle?: () => void;
 }
+
+/**
+ * Trend of the metric over the loaded scored spans (Prompts-4). Same "scored
+ * spans in view" population as the worst-models breakdown, so it adds the
+ * missing time dimension without a second scan. Hidden when too few points.
+ */
+const MetricTrend = ({
+  rows,
+  metric,
+  color,
+}: {
+  rows: PromptRow[];
+  metric: EvalMetric;
+  color: string;
+}) => {
+  const trend = React.useMemo(() => evalTrendSeries(rows, metric), [rows, metric]);
+  if (trend.values.length < 3) return null;
+  return (
+    <Flex flexDirection="column" gap={2} style={{ marginTop: 2 }}>
+      <Text
+        style={{
+          fontSize: 9.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "var(--text-4)",
+        }}
+      >
+        Trend · scored spans in view
+      </Text>
+      <Sparkline
+        values={trend.values}
+        labels={trend.labels}
+        color={color}
+        height={24}
+        valueFormatter={(n) => `${Math.round(n)}%`}
+        ariaLabel={`${metric} over scored spans in view`}
+      />
+    </Flex>
+  );
+};
 
 /**
  * Worst-models breakdown under a metric (Prompts-4). Computed from the loaded
@@ -116,74 +168,123 @@ const MetricTile = ({
   metric,
   rows,
   inverted,
+  active,
+  onToggle,
 }: MetricTileProps) => {
   const color = qualityColor(snapshot.pct, inverted);
   const isEmpty = snapshot.pct == null;
   const coverage = coverageLabel(snapshot.coverage, total);
-  return (
-    <Surface elevation="raised" padding={12}>
-      <Flex flexDirection="column" gap={8}>
-        <Text
-          style={{
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-            color: "var(--text-3)",
-          }}
+  // A populated tile becomes a toggle that drills the table into the spans
+  // failing this metric (Prompts-4). Empty tiles keep their Setup-guide CTA and
+  // stay static (can't nest that anchor-button inside a tile button).
+  const interactive = !isEmpty && !!onToggle;
+  const failLabel = evalFilterLabel(evalFailFilter(metric));
+
+  const inner = (
+    <Flex flexDirection="column" gap={8}>
+      <Text
+        style={{
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "var(--text-3)",
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: 600,
+          color: isEmpty ? "var(--text-3)" : color,
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1,
+        }}
+      >
+        {isEmpty ? "—" : fmtPercent(snapshot.pct, inverted ? 1 : 0)}
+      </Text>
+      <Text
+        style={{
+          fontSize: 10.5,
+          color: "var(--text-3)",
+          fontFamily: "var(--mono, monospace)",
+        }}
+      >
+        {snapshot.attribute}
+      </Text>
+      {isEmpty ? (
+        <Button
+          as="a"
+          href={QUALITY_EVAL_SETUP_GUIDE}
+          target="_blank"
+          rel="noopener noreferrer"
+          variant="default"
         >
-          {label}
-        </Text>
-        <Text
-          style={{
-            fontSize: 24,
-            fontWeight: 600,
-            color: isEmpty ? "var(--text-3)" : color,
-            fontVariantNumeric: "tabular-nums",
-            lineHeight: 1,
-          }}
-        >
-          {isEmpty ? "—" : fmtPercent(snapshot.pct, inverted ? 1 : 0)}
-        </Text>
-        <Text
-          style={{
-            fontSize: 10.5,
-            color: "var(--text-3)",
-            fontFamily: "var(--mono, monospace)",
-          }}
-        >
-          {snapshot.attribute}
-        </Text>
-        {isEmpty ? (
-          <Button
-            as="a"
-            href={QUALITY_EVAL_SETUP_GUIDE}
-            target="_blank"
-            rel="noopener noreferrer"
-            variant="default"
+          Setup guide
+        </Button>
+      ) : (
+        <>
+          <Text
+            style={{
+              fontSize: 11,
+              color: coverage.low ? "var(--amber)" : "var(--text-3)",
+            }}
+            title={
+              coverage.low
+                ? "Low coverage — this average is built on a small share of the population; interpret with caution."
+                : undefined
+            }
           >
-            Setup guide
-          </Button>
-        ) : (
-          <>
-            <Text
-              style={{
-                fontSize: 11,
-                color: coverage.low ? "var(--amber)" : "var(--text-3)",
-              }}
-              title={
-                coverage.low
-                  ? "Low coverage — this average is built on a small share of the population; interpret with caution."
-                  : undefined
-              }
-            >
-              {coverage.low ? "⚠ " : ""}
-              {coverage.text}
+            {coverage.low ? "⚠ " : ""}
+            {coverage.text}
+          </Text>
+          <MetricTrend rows={rows} metric={metric} color={color} />
+          <ModelBreakdown rows={rows} metric={metric} inverted={inverted} />
+          {interactive && (
+            <Text style={{ fontSize: 10.5, color: active ? "var(--blue)" : "var(--text-4)" }}>
+              {active ? `● Filtering table: ${failLabel}` : `Click to filter: ${failLabel}`}
             </Text>
-            <ModelBreakdown rows={rows} metric={metric} inverted={inverted} />
-          </>
-        )}
-      </Flex>
+          )}
+        </>
+      )}
+    </Flex>
+  );
+
+  if (!interactive) {
+    return (
+      <Surface elevation="raised" padding={12}>
+        {inner}
+      </Surface>
+    );
+  }
+  return (
+    <Surface elevation="raised" padding={0}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={!!active}
+        title={`Click to filter the table to spans failing this metric (${failLabel})`}
+        // Shared clickable-tile class restores the keyboard focus ring the
+        // `all: unset` reset strips, and adds the app-wide hover lift.
+        className="aiobs-clickable-tile"
+        style={{
+          all: "unset",
+          display: "block",
+          width: "100%",
+          boxSizing: "border-box",
+          padding: 12,
+          cursor: "pointer",
+          borderRadius: 8,
+          outline: active ? "2px solid var(--blue)" : "none",
+          outlineOffset: -2,
+          background: active
+            ? "color-mix(in oklab, var(--blue) 8%, transparent)"
+            : "transparent",
+        }}
+      >
+        {inner}
+      </button>
     </Surface>
   );
 };
@@ -193,8 +294,10 @@ export interface PromptQualityAnalyticsProps {
   filter?: PromptsFilter;
   /** Active problem-pattern focus. */
   focus?: string | null;
-  /** Loaded rows for the per-model worst-offenders breakdown (Prompts-4). */
+  /** Loaded rows for the per-model worst-offenders breakdown + trend (Prompts-4). */
   rows?: PromptRow[];
+  /** Toggle a metric's fail-filter on the table from a tile click (Prompts-4). */
+  onFilterChange?: (next: PromptsFilter) => void;
 }
 
 // Body is a separate component so the query (usePromptQuality) only runs while
@@ -204,9 +307,26 @@ const PromptQualityBody = ({
   filter,
   focus,
   rows = [],
+  onFilterChange,
 }: PromptQualityAnalyticsProps) => {
   const quality = usePromptQuality(filter, focus);
   const scoped = isScopeFiltered(filter, focus);
+  // Clicking a metric tile toggles that metric's fail-filter on the table
+  // (Prompts-4) — the SAME PromptsFilter mechanism the sidebar/tiles use.
+  const activeMetric = filter?.eval?.metric ?? null;
+  const toggleEval = onFilterChange
+    ? (metric: EvalMetric) => {
+        const cur = filter ?? {};
+        // Clicking the active metric clears the drill-down; clicking another
+        // swaps to it. `eval: undefined` reads as "no eval filter" everywhere.
+        onFilterChange({
+          ...cur,
+          eval: cur.eval?.metric === metric ? undefined : evalFailFilter(metric),
+        });
+      }
+    : undefined;
+  const tileToggle = (metric: EvalMetric): (() => void) | undefined =>
+    toggleEval ? () => toggleEval(metric) : undefined;
   return (
     <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
       {scoped && (
@@ -241,6 +361,8 @@ const PromptQualityBody = ({
             metric="evalHallucination"
             rows={rows}
             inverted
+            active={activeMetric === "evalHallucination"}
+            onToggle={tileToggle("evalHallucination")}
           />
           <MetricTile
             label="Correctness score"
@@ -248,6 +370,8 @@ const PromptQualityBody = ({
             total={quality.totalLlmSpans}
             metric="evalCorrectness"
             rows={rows}
+            active={activeMetric === "evalCorrectness"}
+            onToggle={tileToggle("evalCorrectness")}
           />
           <MetricTile
             label="Faithfulness"
@@ -255,6 +379,8 @@ const PromptQualityBody = ({
             total={quality.totalLlmSpans}
             metric="evalFaithfulness"
             rows={rows}
+            active={activeMetric === "evalFaithfulness"}
+            onToggle={tileToggle("evalFaithfulness")}
           />
           <MetricTile
             label="Relevance"
@@ -262,6 +388,8 @@ const PromptQualityBody = ({
             total={quality.totalLlmSpans}
             metric="evalRelevance"
             rows={rows}
+            active={activeMetric === "evalRelevance"}
+            onToggle={tileToggle("evalRelevance")}
           />
         </div>
       )}

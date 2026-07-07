@@ -3,7 +3,11 @@ import type { PromptRow } from "./usePrompts";
 import {
   anyRowHasEval,
   evalBadness,
+  evalFailFilter,
+  evalFilterLabel,
   evalTableRows,
+  evalTrendSeries,
+  matchEvalFilter,
   rowHasEval,
   worstModelsForMetric,
 } from "./evalTable";
@@ -101,5 +105,61 @@ describe("worstModelsForMetric", () => {
       row({ model: "b", evalCorrectness: 0.2 }),
     ];
     expect(worstModelsForMetric(rows, "evalCorrectness")[0].model).toBe("b");
+  });
+});
+
+describe("evalFailFilter / matchEvalFilter (Prompts-4)", () => {
+  it("fails hallucination ABOVE 10% and normal metrics BELOW 60%", () => {
+    expect(evalFailFilter("evalHallucination")).toEqual({
+      metric: "evalHallucination",
+      op: "gt",
+      threshold: 0.1,
+    });
+    expect(evalFailFilter("evalCorrectness")).toEqual({
+      metric: "evalCorrectness",
+      op: "lt",
+      threshold: 0.6,
+    });
+  });
+
+  it("keeps only spans failing the metric; unscored spans are excluded", () => {
+    const hf = evalFailFilter("evalHallucination");
+    expect(matchEvalFilter(row({ evalHallucination: 0.5 }), hf)).toBe(true);
+    expect(matchEvalFilter(row({ evalHallucination: 0.05 }), hf)).toBe(false);
+    expect(matchEvalFilter(row({ evalHallucination: null }), hf)).toBe(false);
+
+    const cf = evalFailFilter("evalCorrectness");
+    expect(matchEvalFilter(row({ evalCorrectness: 0.4 }), cf)).toBe(true);
+    expect(matchEvalFilter(row({ evalCorrectness: 0.9 }), cf)).toBe(false);
+    expect(matchEvalFilter(row({ evalCorrectness: null }), cf)).toBe(false);
+  });
+
+  it("labels the fail filter as a percent threshold", () => {
+    expect(evalFilterLabel(evalFailFilter("evalHallucination"))).toBe(
+      "Hallucination > 10%",
+    );
+    expect(evalFilterLabel(evalFailFilter("evalRelevance"))).toBe("Relevance < 60%");
+  });
+});
+
+describe("evalTrendSeries (Prompts-4)", () => {
+  it("returns scored rows oldest→newest as percents", () => {
+    const rows = [
+      row({ evalCorrectness: 0.9, timestampMs: 3 }),
+      row({ evalCorrectness: null, timestampMs: 2 }),
+      row({ evalCorrectness: 0.5, timestampMs: 1 }),
+      row({ evalCorrectness: 0.7, timestampMs: 2 }),
+    ];
+    const t = evalTrendSeries(rows, "evalCorrectness");
+    expect(t.values).toEqual([50, 70, 90]);
+    expect(t.labels).toHaveLength(3);
+  });
+
+  it("is empty below 3 scored points (too few to trend)", () => {
+    const rows = [
+      row({ evalRelevance: 0.5, timestampMs: 1 }),
+      row({ evalRelevance: 0.6, timestampMs: 2 }),
+    ];
+    expect(evalTrendSeries(rows, "evalRelevance").values).toEqual([]);
   });
 });

@@ -12,7 +12,7 @@ import {
   patternStatus,
 } from "../../../data/ai-layer-patterns";
 import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDCompact } from "../../../data/format";
-import { statusColor } from "./tokens";
+import { ARCH_COLORS, statusColor } from "./tokens";
 import { Spark } from "./Spark";
 import { FilterTrigger } from "../../../components/FilterTrigger";
 import type { ArchNodeMeta, NodeView } from "./model";
@@ -115,30 +115,32 @@ const ClientUpstreamSection = ({ data }: { data: ClientUpstream }) => {
   );
 };
 
-const DrawerChart = ({
-  title,
-  data,
-  color,
-  labels,
-  format,
-}: {
+/** One metric's small-multiple: label + colour swatch keyed to the line, hover
+ *  reveals the per-bucket value (readout preserved from the old full-width
+ *  chart). Absent / <2-point / all-zero series are filtered out by the caller. */
+interface TrendSpec {
+  key: string;
   title: string;
-  data?: number[];
+  data: number[];
   color: string;
-  labels: string[];
   format: (n: number) => string;
-}) => {
-  if (!data || data.length < 2) return null;
-  // Skip an all-zero series (e.g. a tier with no errors) so the drawer doesn't
-  // stack a flat, low-signal line for every metric a tier happens not to emit.
-  if (!data.some((v) => v > 0)) return null;
-  return (
-    <div className="am-dsection">
-      <div className="am-dsection-h">{title}</div>
-      <div style={{ width: "100%" }}>
-        <Spark data={data} color={color} width={360} height={52} fluid format={format} labels={labels} />
-      </div>
-    </div>
+}
+
+/** Build the visible trend small-multiples: same suppression rules as before —
+ *  drop a series that is missing, has <2 points, or is entirely zero (e.g. a
+ *  tier with no errors) so the drawer never stacks a flat low-signal line. */
+const buildTrends = (series: TierSeries): TrendSpec[] => {
+  const specs: Array<Omit<TrendSpec, "data"> & { data?: number[] }> = [
+    // ARCH_COLORS.core is a literal accent (not the .am-root-scoped --am-core
+    // var) so it resolves in the drawer, which is a DOM sibling of .am-root.
+    { key: "throughput", title: "Throughput", data: series.throughput, color: ARCH_COLORS.core, format: fmtCount },
+    { key: "latency", title: "Latency p90", data: series.latencyMs, color: "var(--blue)", format: fmtMs },
+    { key: "errors", title: "Errors", data: series.errors, color: "var(--red)", format: fmtCount },
+    { key: "tokens", title: "Tokens", data: series.tokens, color: "var(--purple)", format: fmtTokens },
+    { key: "spend", title: "Spend", data: series.spendUsd, color: "var(--green-2)", format: fmtUSDCompact },
+  ];
+  return specs.filter(
+    (s): s is TrendSpec => !!s.data && s.data.length >= 2 && s.data.some((v) => v > 0),
   );
 };
 
@@ -189,45 +191,48 @@ export const NodeDrawer = ({ meta, view, tierSeries, clientUpstream, onClose, on
                 <ClientUpstreamSection data={clientUpstream} />
               )}
 
-              {tierSeries && (
-                <>
-                  <DrawerChart
-                    title={`Throughput${tierSeries.intervalLabel ? ` · ${tierSeries.intervalLabel}` : ""}`}
-                    data={tierSeries.throughput}
-                    color={color}
-                    labels={tierSeries.labels}
-                    format={fmtCount}
-                  />
-                  <DrawerChart
-                    title={`Latency (p90)${tierSeries.intervalLabel ? ` · ${tierSeries.intervalLabel}` : ""}`}
-                    data={tierSeries.latencyMs}
-                    color="var(--blue)"
-                    labels={tierSeries.labels}
-                    format={fmtMs}
-                  />
-                  <DrawerChart
-                    title={`Errors${tierSeries.intervalLabel ? ` · ${tierSeries.intervalLabel}` : ""}`}
-                    data={tierSeries.errors}
-                    color="var(--red)"
-                    labels={tierSeries.labels}
-                    format={fmtCount}
-                  />
-                  <DrawerChart
-                    title={`Tokens${tierSeries.intervalLabel ? ` · ${tierSeries.intervalLabel}` : ""}`}
-                    data={tierSeries.tokens}
-                    color="var(--purple)"
-                    labels={tierSeries.labels}
-                    format={fmtTokens}
-                  />
-                  <DrawerChart
-                    title={`Spend ($)${tierSeries.intervalLabel ? ` · ${tierSeries.intervalLabel}` : ""}`}
-                    data={tierSeries.spendUsd}
-                    color="var(--green-2)"
-                    labels={tierSeries.labels}
-                    format={fmtUSDCompact}
-                  />
-                </>
-              )}
+              {tierSeries &&
+                (() => {
+                  // Collapse the old five full-width stacked charts into one
+                  // small-multiples block: a 2-up grid with a shared interval in
+                  // the header and a shared time axis (first→last bucket) below,
+                  // so the trends read as one coherent unit. Each cell keeps its
+                  // own hover readout (per-bucket value + time).
+                  const trends = buildTrends(tierSeries);
+                  if (trends.length === 0) return null;
+                  const labels = tierSeries.labels;
+                  return (
+                    <div className="am-dsection">
+                      <div className="am-dsection-h">
+                        Trends{tierSeries.intervalLabel ? ` · ${tierSeries.intervalLabel}` : ""}
+                      </div>
+                      <div className="am-trend-grid">
+                        {trends.map((s) => (
+                          <div className="am-trend-cell" key={s.key}>
+                            <span className="am-trend-title">
+                              <span className="am-trend-swatch" style={{ background: s.color }} />
+                              {s.title}
+                            </span>
+                            <Spark
+                              data={s.data}
+                              color={s.color}
+                              height={46}
+                              fluid
+                              format={s.format}
+                              labels={labels}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {labels.length >= 2 && (
+                        <div className="am-trend-axis">
+                          <span>{labels[0]}</span>
+                          <span>{labels[labels.length - 1]}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
               <div className="am-dsection">
                 <div className="am-dsection-h">Token behaviour</div>

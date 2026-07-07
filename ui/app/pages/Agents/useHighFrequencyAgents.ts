@@ -21,13 +21,32 @@ interface Rec {
   maxToolCalls?: number;
 }
 
-export const useHighFrequencyAgents = (): Set<string> => {
+export interface HighFrequencyAgent {
+  agent: string;
+  /** Busiest single-tool call count for this agent, scaled by the sampling
+   *  ratio (already above the high-frequency threshold). */
+  maxToolCalls: number;
+}
+
+export interface HighFrequencyAgentsResult {
+  /** Flagged agents, busiest-tool-first. */
+  rows: HighFrequencyAgent[];
+  isLoading: boolean;
+}
+
+/**
+ * Per-agent detail behind the "high tool frequency" (N+1) signal: every agent
+ * whose busiest single tool exceeds the threshold, with that call count,
+ * ranked. One fleet query — react-query caches it, so the KPI tile, its modal
+ * and the Set-returning hook below all share a single fetch.
+ */
+export const useHighFrequencyAgentRows = (): HighFrequencyAgentsResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
 
-  const { data } = useScopedDql<Rec>(
+  const { data, isLoading } = useScopedDql<Rec>(
     canQuery
       ? buildHighFrequencyToolsQuery(resolution.serviceIds, scope.timeframe)
       : "",
@@ -35,11 +54,24 @@ export const useHighFrequencyAgents = (): Set<string> => {
   );
 
   return useMemo(() => {
-    const set = new Set<string>();
+    const rows: HighFrequencyAgent[] = [];
     for (const r of data?.records ?? []) {
       const calls = toNum(r.maxToolCalls) * samplingRatio;
-      if (r.agent && isHighFrequency(calls)) set.add(r.agent);
+      if (r.agent && isHighFrequency(calls)) {
+        rows.push({ agent: r.agent, maxToolCalls: calls });
+      }
     }
-    return set;
-  }, [data, samplingRatio]);
+    rows.sort((a, b) => b.maxToolCalls - a.maxToolCalls);
+    return { rows, isLoading: canQuery ? isLoading : false };
+  }, [data, isLoading, canQuery, samplingRatio]);
+};
+
+/**
+ * Set of agent names above the high-frequency threshold — the shape the table
+ * badge and the Pulse focus presets consume. Derived from the rows hook so both
+ * stay in lock-step.
+ */
+export const useHighFrequencyAgents = (): Set<string> => {
+  const { rows } = useHighFrequencyAgentRows();
+  return useMemo(() => new Set(rows.map((r) => r.agent)), [rows]);
 };

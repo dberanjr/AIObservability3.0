@@ -2,10 +2,8 @@ import React, { useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { InfoTooltip } from "../../components/InfoTooltip";
 import { StatTile } from "../../components/StatTile";
 import { ChartModal } from "../../components/charts/ChartExpander";
-import { MissingDataHint } from "../../components/displayHints";
 import { fmtCount, fmtMs, fmtPercent, fmtUSDCompact } from "../../data/format";
 import {
   STATUS_CUE,
@@ -14,18 +12,21 @@ import {
 } from "../../theme/statusColor";
 import { useEditLayout } from "../../layout/EditLayoutContext";
 import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
-import { SLOW_P90_MS } from "./constants";
+import { SLOW_P90_MS, HIGH_FREQUENCY_TOOL_THRESHOLD } from "./constants";
 import {
   slowTileStatus,
   errorTileStatus,
   loopingTileStatus,
+  highFreqTileStatus,
   statusToEmphasis,
 } from "./tileStatus";
 import { useAgentLoops } from "./useAgentLoops";
+import { useHighFrequencyAgentRows } from "./useHighFrequencyAgents";
 import { summarizeAgentTtft } from "./ttft";
 import {
   CostBody,
   ErrorRateBody,
+  HighFrequencyBody,
   InvocationsBody,
   LoopingAgentsBody,
   SlowAgentsBody,
@@ -41,86 +42,8 @@ type TileId =
   | "error"
   | "cost"
   | "looping"
+  | "highfreq"
   | "ttft";
-
-type Emphasis = "default" | "amber" | "red";
-
-const COLOR: Record<Emphasis, string> = {
-  default: "var(--text)",
-  amber: "var(--amber)",
-  red: "var(--red)",
-};
-
-interface TileProps {
-  label: string;
-  value: string;
-  sub?: React.ReactNode;
-  info: string;
-  emphasis?: Emphasis;
-  /** Demote a tile whose metric isn't instrumented (dashed, dimmed). */
-  muted?: boolean;
-  onClick: () => void;
-}
-
-// The six plain KPI tiles now use the shared StatTile primitive; this local
-// Tile survives only for the TTFT card, whose bespoke "not instrumented"
-// treatment (dashed + dimmed) and ReactNode sub (<MissingDataHint>) aren't
-// expressible via StatTile's string-only sub / emphasis-only styling.
-const Tile = ({ label, value, sub, info, emphasis = "default", muted = false, onClick }: TileProps) => (
-  <Surface elevation="raised" padding={0}>
-    <button
-      type="button"
-      onClick={onClick}
-      title="Open details"
-      style={{
-        all: "unset",
-        cursor: "pointer",
-        display: "block",
-        width: "100%",
-        boxSizing: "border-box",
-        padding: 12,
-        borderRadius: "inherit",
-        opacity: muted ? 0.72 : undefined,
-        border: muted ? "1px dashed var(--border)" : undefined,
-      }}
-    >
-      <Flex flexDirection="column" gap={4}>
-        <Flex alignItems="center" gap={4} style={{ minHeight: 28 }}>
-          <Text
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              color: "var(--text-3)",
-              whiteSpace: "normal",
-              lineHeight: 1.2,
-            }}
-          >
-            {label}
-          </Text>
-          <InfoTooltip text={info} />
-        </Flex>
-        <Text
-          style={{
-            fontSize: 22,
-            fontWeight: 600,
-            color: COLOR[emphasis],
-            fontVariantNumeric: "tabular-nums",
-            lineHeight: 1,
-          }}
-        >
-          {value}
-        </Text>
-        {typeof sub === "string" ? (
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>
-        ) : (
-          sub ?? null
-        )}
-      </Flex>
-    </button>
-  </Surface>
-);
 
 // Wrap responsively instead of forcing 7 equal columns, so labels don't wrap to
 // two lines and values stay legible on narrower viewports.
@@ -157,6 +80,7 @@ const MODAL_META: Record<TileId, { title: string; subtitle: string }> = {
   error: { title: "Error rate", subtitle: "Fleet error rate and the agents contributing the most failures" },
   cost: { title: "Estimated cost", subtitle: "Attributed LLM cost by agent and model in the current scope" },
   looping: { title: "Looping agents", subtitle: "Heuristic agent-loop detection with LangGraph node-execution trend" },
+  highfreq: { title: "N+1 tool loops", subtitle: `Agents that called a single tool more than ${HIGH_FREQUENCY_TOOL_THRESHOLD}× within a run (possible N+1 / tool loop)` },
   ttft: { title: "Time to first token", subtitle: "Streamed-response responsiveness (gen_ai.response.ttft)" },
 };
 
@@ -168,6 +92,7 @@ export interface AgentsTilesRowProps {
 export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
   const [open, setOpen] = useState<TileId | null>(null);
   const loops = useAgentLoops();
+  const highFreq = useHighFrequencyAgentRows();
   // Layout customization is opt-in and driven by the global header "Customize"
   // toggle, so the KPI row can be reordered / resized from any page (SUM-4).
   const { editLayout } = useEditLayout();
@@ -204,6 +129,10 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
   const loopStatus: SemanticStatus = loops.isLoading
     ? "neutral"
     : loopingTileStatus(loops.loopingCount);
+  const highFreqCount = highFreq.rows.length;
+  const highFreqStatus: SemanticStatus = highFreq.isLoading
+    ? "neutral"
+    : highFreqTileStatus(highFreqCount);
 
   const renderBody = () => {
     switch (open) {
@@ -219,6 +148,8 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         return <CostBody agents={agents} />;
       case "looping":
         return <LoopingAgentsBody />;
+      case "highfreq":
+        return <HighFrequencyBody />;
       case "ttft":
         return <TtftBody agents={agents} onApplied={() => setOpen(null)} />;
       default:
@@ -228,10 +159,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
 
   // Each KPI is a GridTile so the shared CustomizableGrid owns placement
   // (drag-to-reorder, drag-a-corner to resize) when the global "Customize"
-  // toggle is on. 7 tiles don't partition a 12-col grid evenly, so every tile
-  // gets an equal defaultColSpan of 2 (≈1/6 width, closest match to the prior
-  // ~1/7 auto-fit width) — this keeps them equal-width and lets the last one
-  // wrap, matching the row's existing wrap-friendly design intent.
+  // toggle is on. Tiles don't partition a 12-col grid evenly, so every tile
+  // gets an equal defaultColSpan of 2 (≈1/6 width) — this keeps them
+  // equal-width and lets the row wrap, matching its wrap-friendly design
+  // intent. TTFT only earns a full tile when it's actually emitted (below);
+  // otherwise it collapses to a small "not instrumented" chip and its slot is
+  // spent on the N+1 tool-loop signal instead.
   const tiles: GridTile[] = [
     {
       id: "total",
@@ -329,30 +262,44 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       ),
     },
     {
-      id: "ttft",
+      id: "highfreq",
       defaultColSpan: 2,
       node: (
-        <Tile
-          label="TTFT"
-          value={ttft ? fmtMs(ttft.medianMs) : "—"}
-          muted={!ttft}
-          sub={
-            ttft ? (
-              `median · ${ttft.agentsWithTtft} agent${ttft.agentsWithTtft === 1 ? "" : "s"}`
-            ) : (
-              <MissingDataHint note="not emitted" attribute="gen_ai.response.ttft" />
-            )
-          }
-          info={
-            ttft
-              ? "Median time-to-first-token across agents that emit it (gen_ai.response.ttft on streamed responses). Click for the P50/P90 breakdown and per-agent distribution."
-              : "Time to first token — responsiveness of streamed responses. Not emitted by any agent in this scope. Click for instrumentation guidance (and an example view via Tweaks → Show example data)."
-          }
-          onClick={() => setOpen("ttft")}
-        />
+        <StatTile
+          label="N+1 tool loops"
+          value={highFreq.isLoading ? "…" : fmtCount(highFreqCount)}
+          sub="agents · repeated tool"
+          emphasis={statusToEmphasis(highFreqStatus)}
+          info={`Agents that called a single tool more than ${HIGH_FREQUENCY_TOOL_THRESHOLD}× within a run — the agent analogue of an N+1 query (retry storm / un-terminated tool loop). Click for the flagged agents and their busiest-tool counts.`}
+          onActivate={() => setOpen("highfreq")}
+          actionLabel="Open N+1 tool loops details"
+        >
+          <StatusCue status={highFreqStatus} />
+        </StatTile>
       ),
     },
   ];
+
+  // TTFT earns a full tile only when it's actually emitted; when it's blank
+  // everywhere (the common case on these tenants) it demotes to the small chip
+  // rendered under the grid, so prime KPI real estate isn't spent on a
+  // permanent "—".
+  if (ttft) {
+    tiles.push({
+      id: "ttft",
+      defaultColSpan: 2,
+      node: (
+        <StatTile
+          label="TTFT"
+          value={fmtMs(ttft.medianMs)}
+          sub={`median · ${ttft.agentsWithTtft} agent${ttft.agentsWithTtft === 1 ? "" : "s"}`}
+          info="Median time-to-first-token across agents that emit it (gen_ai.response.ttft on streamed responses). Click for the P50/P90 breakdown and per-agent distribution."
+          onActivate={() => setOpen("ttft")}
+          actionLabel="Open Time to first token details"
+        />
+      ),
+    });
+  }
 
   return (
     <>
@@ -362,6 +309,44 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         tiles={tiles}
         editable={editLayout}
       />
+
+      {/* TTFT demoted to a small chip when nothing emits it — dashed + dimmed,
+          still one click to the full instrumentation guidance / example view. */}
+      {!ttft && (
+        <Flex style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setOpen("ttft")}
+            title="Time to first token — not emitted by any agent in this scope (gen_ai.response.ttft). Click for instrumentation guidance and an example view."
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "4px 10px",
+              borderRadius: 999,
+              border: "1px dashed var(--border)",
+              background: "var(--surface-2)",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                color: "var(--text-3)",
+              }}
+            >
+              TTFT
+            </Text>
+            <Text style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+              not instrumented · gen_ai.response.ttft
+            </Text>
+          </button>
+        </Flex>
+      )}
 
       <ChartModal
         open={open !== null}

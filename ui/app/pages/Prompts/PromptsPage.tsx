@@ -21,6 +21,7 @@ import { PromptsTilesRow } from "./PromptsTilesRow";
 import { GuardrailsStrip } from "../../guardrails/GuardrailsStrip";
 import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
+import { type PromptSort } from "./promptsSort";
 import { decodePromptsFilter } from "./findingFilter";
 import { describeFilter } from "./filterScope";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
@@ -206,6 +207,9 @@ export const PromptsPage = () => {
     [registerResetHandler, resetAll],
   );
   const [view, setView] = useState<PromptView>("stream");
+  // Table sort lives here (not in the table) so a heavy numeric sort can be
+  // pushed into the list query server-side before the 200-row cap (Prompts-9).
+  const [sort, setSort] = useState<PromptSort>({ key: "timestampMs", dir: "desc" });
   // Sticky sidebar height must equal the space from its (pinned) top to the
   // viewport bottom — a fixed calc() guesses the page-header height wrong and
   // pushes the bottom (Privacy) off-screen, unreachable by the inner scroll.
@@ -251,7 +255,7 @@ export const PromptsPage = () => {
     refetch,
     hasContent,
     hasEval,
-  } = usePrompts(filter, focus);
+  } = usePrompts(filter, focus, sort);
 
   const firstError = promptsError ?? null;
 
@@ -425,7 +429,12 @@ export const PromptsPage = () => {
           hasContent={hasContent}
           hasEval={hasEval}
         />
-        <PromptQualityAnalytics filter={filter} focus={focus} rows={filtered} />
+        <PromptQualityAnalytics
+          filter={filter}
+          focus={focus}
+          rows={filtered}
+          onFilterChange={setFilter}
+        />
 
         <PromptsTable
           view={view}
@@ -436,6 +445,8 @@ export const PromptsPage = () => {
           onRefresh={refetch}
           onResetFilters={resetAll}
           filterSummary={describeFilter(filter, focusChip?.label ?? null)}
+          sort={sort}
+          onSortChange={setSort}
         />
       </Flex>
     </div>

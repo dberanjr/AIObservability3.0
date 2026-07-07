@@ -56,6 +56,49 @@ describe("buildPromptsListQuery — content filter relaxation", () => {
   });
 });
 
+describe("buildPromptsListQuery — server-side sort lift (Prompts-9)", () => {
+  it("defaults to newest-first when no sort/focus is given", () => {
+    const q = buildPromptsListQuery(null, TF, undefined, {});
+    expect(q).toContain("| sort timestamp desc");
+  });
+
+  it("applies a heavy-numeric server sort before the 200-row cap", () => {
+    const q = buildPromptsListQuery(null, TF, undefined, {}, undefined, "in_tok desc");
+    expect(q).toContain("| sort in_tok desc");
+    expect(q).not.toContain("| sort timestamp desc");
+    // The ORDER BY must precede the limit so the fetched sample is the true top-N.
+    expect(q.indexOf("| sort in_tok desc")).toBeLessThan(q.indexOf("| limit 200"));
+  });
+
+  it("lets an explicit user server sort win over the focus preset orderBy", () => {
+    // llm-ttft-degradation carries orderBy `gen_ai.response.ttft desc`.
+    const q = buildPromptsListQuery(
+      null,
+      TF,
+      undefined,
+      undefined,
+      "llm-ttft-degradation",
+      "duration_ms desc",
+    );
+    expect(q).toContain("| sort duration_ms desc");
+    expect(q).not.toContain("| sort gen_ai.response.ttft desc");
+    // The focus PREDICATE still applies — only the ordering is overridden.
+    expect(q).toContain("/* focus: llm-ttft-degradation */");
+  });
+
+  it("falls back to the focus orderBy when no user server sort is set", () => {
+    const q = buildPromptsListQuery(
+      null,
+      TF,
+      undefined,
+      undefined,
+      "llm-ttft-degradation",
+      null,
+    );
+    expect(q).toContain("| sort gen_ai.response.ttft desc");
+  });
+});
+
 describe("summary + quality aggregates honor the sidebar/focus scope (Prompts-2)", () => {
   it("summary applies status toggles and same-span focus predicates", () => {
     const q = buildPromptsSummaryQuery(

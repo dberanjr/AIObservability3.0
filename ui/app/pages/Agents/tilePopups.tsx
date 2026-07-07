@@ -5,6 +5,7 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { FilterIcon } from "@dynatrace/strato-icons";
 import { AreaChart } from "../../components/charts/AreaChart";
+import { BarList } from "../../components/charts/BarList";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
 import { DataGapNote } from "../../components/DataGapNote";
 import { FilterTrigger } from "../../components/FilterTrigger";
@@ -33,7 +34,18 @@ import { summarizeAgentTtft, TTFT_ATTRIBUTES } from "./ttft";
 import { useInvocationsChart } from "./useInvocationsChart";
 import { useAgentLoops, LOOP_REPEAT_RATIO, LOOP_MAX_STEP } from "./useAgentLoops";
 import { useAgentLoopSeries } from "./useAgentLoopSeries";
-import { SLOW_P90_MS } from "./constants";
+import { useHighFrequencyAgentRows } from "./useHighFrequencyAgents";
+import { latencySeverity, winsorizedMax, type LatencySeverity } from "./latency";
+import { SLOW_P90_MS, HIGH_FREQUENCY_TOOL_THRESHOLD } from "./constants";
+
+// Blue → amber → red severity ramp for the P90-by-agent bars, shared with the
+// table row highlight via latencySeverity (folded in from the former Agents
+// hero so the "slow agents" story lives in one place — the Slow tile's expand).
+const SEVERITY_BAR_COLOR: Record<LatencySeverity, string> = {
+  ok: "var(--blue)",
+  slow: "var(--amber)",
+  runaway: "var(--red)",
+};
 
 /* ----------------------------- shared bits ----------------------------- */
 
@@ -343,6 +355,10 @@ export const SlowAgentsBody = ({ agents }: { agents: AgentRow[] }) => {
     .filter((a) => !a.isOrchestration && a.p90Ms > SLOW_P90_MS)
     .sort((a, b) => b.p90Ms - a.p90Ms);
   const slowest = slow[0];
+  // Clamp the bar scale to the P95 of P90s so one runaway/looping agent (which
+  // can be 100× the fleet) saturates its own bar instead of crushing every
+  // other agent into an invisible sliver. True values stay in displayValue.
+  const scaleMax = winsorizedMax(slow.map((a) => a.p90Ms), 95);
 
   return (
     <Flex flexDirection="column" gap={16}>
@@ -353,6 +369,36 @@ export const SlowAgentsBody = ({ agents }: { agents: AgentRow[] }) => {
           { label: "Slowest", value: slowest ? fmtMs(slowest.p90Ms) : "—", sub: slowest?.agent },
         ]}
       />
+      {slow.length > 0 && (
+        <Flex flexDirection="column" gap={6}>
+          <Text style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)" }}>
+            P90 by agent · slowest first
+          </Text>
+          <Text style={{ fontSize: 11, color: "var(--text-4)" }}>
+            Amber bars exceed the {SLOW_P90_MS / 1000}s slow threshold; red bars
+            cross the 10-minute runaway threshold. Click a bar to filter the page
+            to that agent.
+          </Text>
+          <div style={{ maxHeight: 240, overflowY: "auto", paddingRight: 4 }}>
+            <BarList
+              max={scaleMax}
+              color={(item) => SEVERITY_BAR_COLOR[latencySeverity(item.value)]}
+              items={slow.slice(0, 15).map((a) => ({
+                key: a.agent,
+                label: a.agent,
+                value: a.p90Ms,
+                displayValue: fmtMs(a.p90Ms),
+                secondary: `${a.service} · ${fmtCount(a.invocations)} inv`,
+                filter: {
+                  attribute: "gen_ai.agent.name",
+                  values: [a.agent],
+                  label: "agent",
+                },
+              }))}
+            />
+          </div>
+        </Flex>
+      )}
       <PopupTable
         rows={slow}
         empty="No agents above the slow threshold in the current scope."
@@ -747,6 +793,75 @@ export const LoopingAgentsBody = () => {
         message="Loop detection is heuristic (revisit ratio + step depth). The 'unattributed' row is LangGraph activity on spans with no agent name."
         attributes={["gen_ai.agent.iteration", "gen_ai.agent.max_iterations", "traceloop.association.properties.thread_id"]}
         bestPractice="Emit agent iteration / max-iteration counters and a stable thread_id, and propagate agent identity to LangGraph spans, for exact non-termination detection instead of a revisit heuristic. See INSTRUMENTATION-REQUIREMENTS.md P2.4 / P0.1."
+        href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
+        hrefLabel="OTel GenAI spans"
+      />
+    </Flex>
+  );
+};
+
+/* --------------------- N+1 tool loops (high frequency) ------------------ */
+
+export const HighFrequencyBody = () => {
+  const { rows, isLoading } = useHighFrequencyAgentRows();
+  const worst = rows[0];
+
+  return (
+    <Flex flexDirection="column" gap={16}>
+      <Text style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>
+        These agents called a single tool more than {HIGH_FREQUENCY_TOOL_THRESHOLD}
+        × within one run — the agent analogue of an N+1 query, often a retry storm
+        or an un-terminated tool loop. Open an agent&apos;s row in the table →
+        Tools sub-view to see which tool is being hammered.
+      </Text>
+      <StatStrip
+        stats={[
+          {
+            label: "Agents flagged",
+            value: fmtCount(rows.length),
+            color: rows.length > 0 ? "var(--amber)" : undefined,
+          },
+          { label: "Threshold", value: `> ${HIGH_FREQUENCY_TOOL_THRESHOLD} calls / tool` },
+          {
+            label: "Busiest tool",
+            value: worst ? `${fmtCount(Math.round(worst.maxToolCalls))}×` : "—",
+            sub: worst?.agent,
+          },
+        ]}
+      />
+      {isLoading && rows.length === 0 ? (
+        <Flex flexDirection="column" gap={8}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} style={{ height: 28 }} />
+          ))}
+        </Flex>
+      ) : (
+        <PopupTable
+          rows={rows}
+          maxHeight={320}
+          empty="No agent exceeded the high-frequency tool threshold in this scope."
+          columns={[
+            { key: "agent", header: "Agent", render: (r) => <AgentCell agent={r.agent} /> },
+            {
+              key: "calls",
+              header: "Busiest tool",
+              width: 140,
+              align: "right",
+              // Every row here is above the N+1 threshold → warning severity,
+              // paired with a glyph + sr-only word so it isn't amber-colour alone.
+              render: (r) => (
+                <CueValue status="warning">
+                  {fmtCount(Math.round(r.maxToolCalls))}× calls
+                </CueValue>
+              ),
+            },
+          ]}
+        />
+      )}
+      <DataGapNote
+        message="High tool frequency is a heuristic N+1 signal: the busiest single tool per agent, above a call-count threshold. It counts internal/client function spans by name, so it works even when gen_ai.tool.name isn't emitted."
+        attributes={["gen_ai.tool.name", "gen_ai.operation.name"]}
+        bestPractice="Emit gen_ai.tool.name on tool-call spans so N+1 tool loops can be attributed to a named tool rather than inferred from span names. See INSTRUMENTATION-REQUIREMENTS.md P2.4."
         href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
         hrefLabel="OTel GenAI spans"
       />

@@ -17,6 +17,8 @@ import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import { injectTraceScope } from "../../scope/queries";
 import { useFocusTraceScope } from "./useFocusTraceScope";
+import { matchEvalFilter, type EvalFilter } from "./evalTable";
+import { serverSortClause, type PromptSort } from "./promptsSort";
 
 /** True when `val` satisfies a numeric range filter (>, <, between). */
 const matchRange = (val: number, r?: LatencyFilter): boolean => {
@@ -44,7 +46,7 @@ const str = (v: unknown): string => {
   try {
     return JSON.stringify(v, null, 2);
   } catch {
-    return String(v);
+    return "[unserializable value]";
   }
 };
 
@@ -139,6 +141,12 @@ export interface PromptsFilter {
   /** Cost range filters, in dollars (applied client-side over loaded rows). */
   inCost?: LatencyFilter;
   outCost?: LatencyFilter;
+  /**
+   * Eval-score range filter (Prompts-4). Set by clicking a quality-panel metric
+   * tile to drill into the spans failing that metric. Applied client-side over
+   * the loaded rows (the eval scores are already on every PromptRow).
+   */
+  eval?: EvalFilter;
 }
 
 export interface FacetValue {
@@ -189,6 +197,13 @@ export const usePrompts = (
   filter: PromptsFilter = {},
   /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-3). */
   focus?: string | null,
+  /**
+   * Active table sort. A heavy numeric column (tokens / duration) is lifted
+   * server-side so the fetched 200-row sample is the TRUE top-N (Prompts-9);
+   * cost / temperature / timestamp sorts leave the query unchanged and are
+   * reordered over the sample client-side.
+   */
+  sort?: PromptSort,
 ): UsePromptsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
@@ -228,6 +243,10 @@ export const usePrompts = (
     latency: filter.latency,
     temperature: filter.temperature,
   };
+  // A heavy-numeric user sort is lifted into the DQL ORDER BY (before the cap);
+  // sample-only sorts resolve to null and leave the query byte-identical, so
+  // toggling them triggers no refetch.
+  const serverSort = serverSortClause(sort);
   const query = useMemo(
     () => {
       if (!canQuery) return "";
@@ -237,6 +256,7 @@ export const usePrompts = (
         filters,
         sidebar,
         focus,
+        serverSort,
       );
       // For a cross-span focus, scope the list to the resolved trace.ids. An
       // empty array injects the no-match sentinel so the list renders empty
@@ -253,6 +273,7 @@ export const usePrompts = (
       scope.timeframe,
       refreshKey,
       focus,
+      serverSort,
       focusScope.active,
       focusScope.traceIds,
       filter.services?.join(","),
@@ -432,6 +453,9 @@ export const usePrompts = (
       // Cost filters are in dollars; PromptRow stores cents.
       if (!matchRange(p.inCost / 100, filter.inCost)) return false;
       if (!matchRange(p.outCost / 100, filter.outCost)) return false;
+      // Eval-score drill-down from a quality tile (Prompts-4): keep only spans
+      // failing the clicked metric; unscored spans drop out.
+      if (filter.eval && !matchEvalFilter(p, filter.eval)) return false;
       if (search) {
         const hay =
           `${p.promptText} ${p.responseText} ${p.service} ${p.model ?? ""} ${p.agent ?? ""}`.toLowerCase();
@@ -482,6 +506,9 @@ export const usePrompts = (
     filter?.outCost?.op,
     filter?.outCost?.min,
     filter?.outCost?.max,
+    filter?.eval?.metric,
+    filter?.eval?.op,
+    filter?.eval?.threshold,
     refetch,
   ]);
 };

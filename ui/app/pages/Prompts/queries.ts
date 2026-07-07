@@ -113,6 +113,13 @@ export const buildPromptsListQuery = (
   sidebar?: PromptsSidebarFilter,
   /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-2/PP-3). */
   focus?: string | null,
+  /**
+   * Explicit user server-sort fragment ("<field> <dir>") for a heavy numeric
+   * column (Prompts-9). When set it is applied as `| sort` BEFORE the 200-row
+   * cap, so the fetched sample is the true top-N across the timeframe — and it
+   * wins over the focus preset's default worst-offenders ordering.
+   */
+  serverSort?: string | null,
 ): string => {
   const svcClause = sidebar?.services?.length
     ? `| filter in(${SVC_EXPR}, array(${dqlIdArray(sidebar.services)}))`
@@ -161,9 +168,12 @@ export const buildPromptsListQuery = (
   const focusClause = focusPreset
     ? `| filter (${focusPreset.predicate}) /* focus: ${focus} */`
     : "";
-  const sortClause = focusPreset?.orderBy
-    ? `| sort ${focusPreset.orderBy}`
-    : `| sort timestamp desc`;
+  // Sort precedence: an explicit user server-sort (heavy numeric column) wins,
+  // then the focus preset's worst-offenders orderBy, else newest-first. The
+  // fields it references (in_tok / out_tok / duration_ms, or the focus preset's
+  // raw attributes) all exist by this point in the pipeline.
+  const sortExpr = serverSort ?? focusPreset?.orderBy ?? "timestamp desc";
+  const sortClause = `| sort ${sortExpr}`;
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}

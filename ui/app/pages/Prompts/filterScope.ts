@@ -1,5 +1,6 @@
 import type { PromptsFilter } from "./usePrompts";
 import type { PromptsSidebarFilter } from "./queries";
+import { evalFilterLabel } from "./evalTable";
 
 /**
  * Project a page-level PromptsFilter onto the server-side sidebar shape the
@@ -54,7 +55,11 @@ export const isScopeFiltered = (
       filter.onlyTruncated,
   );
   const anyRange = Boolean(
-    filter.latency || filter.temperature || filter.inCost || filter.outCost,
+    filter.latency ||
+      filter.temperature ||
+      filter.inCost ||
+      filter.outCost ||
+      filter.eval,
   );
   const anySearch = Boolean(filter.search && filter.search.trim());
   return anyArray || anyToggle || anyRange || anySearch;
@@ -92,6 +97,7 @@ export const describeFilter = (
   if (filter.latency) out.push("duration range");
   if (filter.temperature) out.push("temperature range");
   if (filter.inCost || filter.outCost) out.push("cost range");
+  if (filter.eval) out.push(evalFilterLabel(filter.eval));
   if (filter.search && filter.search.trim()) out.push(`search: "${filter.search.trim()}"`);
   return out;
 };

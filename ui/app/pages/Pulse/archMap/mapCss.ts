@@ -264,6 +264,14 @@ export const ARCH_MAP_CSS = `
 .am-metric { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
 .am-metric-k { font-size: 10.5px; color: var(--text-3); }
 .am-metric-v { font-size: 16px; font-weight: 700; color: var(--text); margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* drawer trend small-multiples (Pulse-9) — 2-up grid, colour-swatched labels,
+   one shared time axis; a lone trailing chart spans the full width. */
+.am-trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.am-trend-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.am-trend-cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.am-trend-title { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-2); }
+.am-trend-swatch { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.am-trend-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; padding-top: 2px; }
 .am-contrib { display: flex; flex-direction: column; gap: 8px; }
 .am-contrib-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
 .am-contrib-name { font-size: 12px; color: var(--text); font-weight: 600; }

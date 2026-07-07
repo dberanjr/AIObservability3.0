@@ -13,7 +13,7 @@ import {
   SLAProvider,
   useSLA,
 } from "../../components/SLAConfig";
-import { AgentsHero } from "./AgentsHero";
+import { InvocationsChart } from "./InvocationsChart";
 import { AgentsTable } from "./AgentsTable";
 import { AgentsTilesRow } from "./AgentsTilesRow";
 import {
@@ -238,11 +238,11 @@ const AgentsPageBody = () => {
           emptyMessage="No agents above the slow threshold in the current scope."
         />
 
-        <ScanScopedTile name="Invocations & P90 latency">
-          <AgentsHero
-            agents={agentsResult.all}
-            isLoading={agentsResult.isLoading}
-          />
+        {/* The per-agent P90 story now lives in one place (the table's sortable
+            P90 column + Slow view + the Slow tile's expand), so the hero is just
+            the invocations time series. */}
+        <ScanScopedTile name="Invocations">
+          <InvocationsChart />
         </ScanScopedTile>
 
         {/* Agents table — full width, directly above the execution-tier

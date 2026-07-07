@@ -3,6 +3,7 @@ import {
   slowTileStatus,
   errorTileStatus,
   loopingTileStatus,
+  highFreqTileStatus,
   statusToEmphasis,
 } from "./tileStatus";
 
@@ -29,6 +30,13 @@ describe("loopingTileStatus", () => {
   it("is warning when any loop detected, neutral otherwise", () => {
     expect(loopingTileStatus(3)).toBe("warning");
     expect(loopingTileStatus(0)).toBe("neutral");
+  });
+});
+
+describe("highFreqTileStatus", () => {
+  it("is warning when any agent is flagged, neutral otherwise", () => {
+    expect(highFreqTileStatus(1)).toBe("warning");
+    expect(highFreqTileStatus(0)).toBe("neutral");
   });
 });
 

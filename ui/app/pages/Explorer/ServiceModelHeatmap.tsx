@@ -24,6 +24,11 @@ const CELL_W = 64;
 const CELL_H = 28;
 const SVC_COL_W = 220;
 const ROW_CAP = 30;
+// Columns (models) are ranked by tokens in the hook and capped the same way
+// rows are, so a many-model tenant gets a bounded grid instead of an unbounded
+// horizontal scroll. 24 columns keeps the grid width bounded (SVC_COL_W + 24 ×
+// CELL_W) while still showing the whole long tail on realistic tenants.
+const COL_CAP = 24;
 
 /** Single sequential magnitude hue for every cell, so intensity is comparable
  *  across the whole grid (provider identity stays in the column-header dot).
@@ -108,7 +113,14 @@ const ServiceModelHeatmapBody = () => {
   const total = result.rows.length;
   const visibleRows = result.rows.slice(0, ROW_CAP);
   const hiddenRows = total - visibleRows.length;
-  const cols = result.columns;
+  // `result.columns` is already sorted by tokens desc in the hook, so slicing
+  // keeps the top-K models. Every consumer below (tokensAt, firstNavigable,
+  // onCellKeyDown, the header/body maps, aria indices) reads `cols`, so capping
+  // here bounds the grid and keeps the roving-tabindex keyboard grid inside the
+  // visible columns without further changes.
+  const totalCols = result.columns.length;
+  const cols = result.columns.slice(0, COL_CAP);
+  const hiddenCols = totalCols - cols.length;
 
   const tokensAt = React.useCallback(
     (r: number, c: number): number => {
@@ -250,7 +262,10 @@ const ServiceModelHeatmapBody = () => {
           {total > ROW_CAP
             ? `Top ${ROW_CAP} of ${total} services`
             : `${total} ${total === 1 ? "service" : "services"}`}{" "}
-          · {result.columns.length} models
+          ·{" "}
+          {totalCols > COL_CAP
+            ? `Top ${COL_CAP} of ${totalCols} models`
+            : `${totalCols} ${totalCols === 1 ? "model" : "models"}`}
         </Text>
       </Flex>
 
@@ -276,7 +291,7 @@ const ServiceModelHeatmapBody = () => {
             aria-readonly
             aria-label="Service by model token usage. Use the arrow keys to move between cells; press Enter to open a cell's detail."
             aria-rowcount={total + 1}
-            aria-colcount={cols.length + 1}
+            aria-colcount={totalCols + 1}
             style={{
               display: "grid",
               gridTemplateColumns: `${SVC_COL_W}px repeat(${cols.length}, ${CELL_W}px)`,
@@ -492,6 +507,23 @@ const ServiceModelHeatmapBody = () => {
               {hiddenRows} more{" "}
               {hiddenRows === 1 ? "service" : "services"} not shown (ranked by
               tokens) — narrow the scope to see them.
+            </div>
+          )}
+          {hiddenCols > 0 && (
+            <div
+              style={{
+                position: "sticky",
+                left: 0,
+                padding: "6px 8px",
+                borderTop:
+                  hiddenRows > 0 ? undefined : "1px solid var(--border)",
+                fontSize: 11,
+                color: "var(--text-3)",
+              }}
+            >
+              {hiddenCols} more{" "}
+              {hiddenCols === 1 ? "model" : "models"} not shown (ranked by
+              tokens) — narrow the scope or filter to a model to see them.
             </div>
           )}
         </div>

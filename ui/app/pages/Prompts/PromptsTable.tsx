@@ -33,6 +33,12 @@ import {
   EVAL_INVERTED,
   type EvalMetric,
 } from "./evalTable";
+import {
+  isServerSorted,
+  type PromptSort,
+  type SortKey,
+  type SortDir,
+} from "./promptsSort";
 import { handleRadioGroupKeyDown, radioTabIndex } from "./radioNav";
 
 export type PromptView = "stream" | "metadata" | "evaluations";
@@ -51,16 +57,6 @@ type VisibleColumn =
   | "output"
   | "trace_id"
   | "system_prompt";
-type SortKey =
-  | "timestampMs"
-  | "inTokens"
-  | "outTokens"
-  | "durationMs"
-  | "temperature"
-  | "inCost"
-  | "outCost";
-type SortDir = "asc" | "desc";
-
 const VIEW_OPTIONS: { value: PromptView; label: string }[] = [
   { value: "stream", label: "Stream" },
   { value: "metadata", label: "Metadata" },
@@ -1148,6 +1144,12 @@ export interface PromptsTableProps {
   onResetFilters?: () => void;
   /** Human-readable active constraints, echoed in the empty state (Prompts-7). */
   filterSummary?: string[];
+  /**
+   * Active sort, lifted to the page so heavy numeric sorts (tokens / duration)
+   * can be pushed server-side before the 200-row cap (Prompts-9).
+   */
+  sort: PromptSort;
+  onSortChange: (s: PromptSort) => void;
 }
 
 const PromptsTableBody = ({
@@ -1158,11 +1160,9 @@ const PromptsTableBody = ({
   onRefresh,
   onResetFilters,
   filterSummary,
+  sort,
+  onSortChange,
 }: PromptsTableProps) => {
-  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
-    key: "timestampMs",
-    dir: "desc",
-  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState("");
   // v3 key: every column except Time is now individually toggleable, so the
@@ -1177,9 +1177,9 @@ const PromptsTableBody = ({
   const visibleCols = new Set(validVisibleColsArray);
 
   const toggleSort = (key: SortKey) =>
-    setSort((current) =>
-      current.key === key
-        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+    onSortChange(
+      sort.key === key
+        ? { key, dir: sort.dir === "asc" ? "desc" : "asc" }
         : { key, dir: "desc" },
     );
 
@@ -1232,6 +1232,10 @@ const PromptsTableBody = ({
 
   const isEval = view === "evaluations";
   const rows = isEval ? evalRows : sorted;
+  // When the active sort is a heavy numeric column it's fetched server-ordered
+  // before the cap, so the sample IS the true top-N — the badge must say so
+  // rather than implying the order is only sample-relative (Prompts-9).
+  const serverSorted = !isEval && isServerSorted(sort.key);
   const constraints = filterSummary ?? [];
   const toggleSelect = (id: string) =>
     setSelectedId(selectedId === id ? null : id);
@@ -1284,24 +1288,29 @@ const PromptsTableBody = ({
               <Text style={{ fontSize: 11.5, color: "var(--text-3)", flex: "0 0 auto" }}>
                 {isEval ? `${rows.length} scored · worst first` : `${rows.length} shown`}
               </Text>
-              {/* Sort + anomaly cues operate on the loaded sample, not the full
-                  timeframe — say so explicitly (Prompts-9). */}
+              {/* Honest about WHICH columns are server-sorted (true top-N) vs
+                  sample-only. Anomaly (▲) cues are always sample-relative
+                  (Prompts-9). */}
               <span
-                title={`The list is capped at ${SAMPLE_SIZE} rows. Sort order and anomaly (▲) cues are computed over this loaded sample, not the entire timeframe.`}
+                title={
+                  serverSorted
+                    ? `Sorted by this numeric column server-side BEFORE the ${SAMPLE_SIZE}-row cap, so these are the true top ${SAMPLE_SIZE} across the whole timeframe. Cost / temperature / time sorts, and anomaly (▲) cues, remain relative to this loaded sample.`
+                    : `The list is capped at ${SAMPLE_SIZE} rows. This sort and the anomaly (▲) cues are computed over the loaded sample only. Sort by tokens or duration to fetch the true top ${SAMPLE_SIZE} across the timeframe.`
+                }
                 style={{
                   flex: "0 0 auto",
                   fontSize: 10,
                   fontWeight: 600,
                   letterSpacing: "0.03em",
                   textTransform: "uppercase",
-                  color: "var(--text-3)",
-                  border: "1px solid var(--border)",
+                  color: serverSorted ? "var(--blue)" : "var(--text-3)",
+                  border: `1px solid ${serverSorted ? "color-mix(in oklab, var(--blue) 45%, transparent)" : "var(--border)"}`,
                   borderRadius: 999,
                   padding: "2px 8px",
                   cursor: "help",
                 }}
               >
-                ≤{SAMPLE_SIZE}-row sample
+                {serverSorted ? `top ${SAMPLE_SIZE} · server-sorted` : `≤${SAMPLE_SIZE}-row sample`}
               </span>
               <input
                 type="text"

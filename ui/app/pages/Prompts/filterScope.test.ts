@@ -33,6 +33,11 @@ describe("isScopeFiltered", () => {
     expect(isScopeFiltered({ search: "hi" })).toBe(true);
     expect(isScopeFiltered({ search: "  " })).toBe(false);
   });
+  it("is true when an eval-score drill-down is active (Prompts-4)", () => {
+    expect(
+      isScopeFiltered({ eval: { metric: "evalCorrectness", op: "lt", threshold: 0.6 } }),
+    ).toBe(true);
+  });
 });
 
 describe("describeFilter", () => {
@@ -48,6 +53,12 @@ describe("describeFilter", () => {
   });
   it("is empty when nothing is active", () => {
     expect(describeFilter({}, null)).toEqual([]);
+  });
+  it("echoes an active eval-score drill-down (Prompts-4)", () => {
+    const out = describeFilter({
+      eval: { metric: "evalHallucination", op: "gt", threshold: 0.1 },
+    });
+    expect(out).toContain("Hallucination > 10%");
   });
   it("truncates long value lists", () => {
     const out = describeFilter({ models: ["a", "b", "c", "d"] });

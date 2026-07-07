@@ -27,6 +27,11 @@ export const errorTileStatus = (errorRatePct: number): SemanticStatus =>
 export const loopingTileStatus = (loopingCount: number): SemanticStatus =>
   loopingCount > 0 ? "warning" : "neutral";
 
+/** "N+1 tool loops" (high tool frequency) count tile: any flagged agent is a
+ *  warning. Same count-based shape as the looping tile. */
+export const highFreqTileStatus = (flaggedCount: number): SemanticStatus =>
+  flaggedCount > 0 ? "warning" : "neutral";
+
 /** Map a semantic status to the shared StatTile emphasis (color) enum. */
 export const statusToEmphasis = (s: SemanticStatus): StatTileEmphasis =>
   s === "critical"
