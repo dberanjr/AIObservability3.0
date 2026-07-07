@@ -12,6 +12,35 @@ Modern AI applications fan out across orchestrators, agents, tools, RAG pipeline
 
 That's what this app provides: five purpose-built tabs — organized around the AI Application Architecture and around complete investigations — that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request through a cache-aware cost model, and surface layer-tagged findings you can pivot from directly into Traces, Services, and Problems.
 
+## What's new in v0.2.48
+
+This release lands a large UX-quality pass, several correctness fixes to the topology and charting, and a new upstream-services deep-dive on Pulse. It is the first **stable** release (all prior releases were pre-release).
+
+**New**
+
+- **Pulse › Upstream services detail modal.** Clicking the architecture map's **Client node** now opens a near-full-screen modal instead of a thin drawer: a sortable **golden-signals table** for every upstream caller service (requests · error % · P90 · P95 · throughput · # AI services called · Smartscape deep-link per row), a **P90-latency-over-time** chart (top-8 callers with a show-all toggle and per-caller spotlight), and a fresh standalone **3-column service-flow map** — caller → AI service → the frameworks / agents / tools / LLMs each reaches — where selecting a caller (or table row) spotlights its reachable path and dims the rest. Fidelity is topology-level (Smartscape `calls` edges + `gen_ai.*` aggregation), stated plainly on the map rather than implying per-request attribution.
+- **AI Guardrails** (AWS Bedrock) — guardrail intervention rate, coverage, and top blocker on Summary, with a Pulse panel and Prompts surfacing.
+- **Field Notes tab**, a **span-bucket (AI-bucket) scan filter** that partition-prunes the scan, and app-wide **per-page scan-cost pills**.
+- **About page** with build metadata (version + git commit + date) and an **executive Summary landing page** front door.
+
+**Enhanced**
+
+- **137-item UX / data-design overhaul** across every tab: a unified chart **color system** with WCAG-AA contrast and keyboard + non-color-cue **accessibility**; **cause-aware empty/error/loading states** (a failed query never reads as "no data"); grouped **tab navigation** with Summary↔Pulse differentiation; always-on **scan/sampling transparency**; per-page insight polish; and a shared `StatTile` + semantic `statusColor` system.
+- **Chart tooltips show correct units everywhere** — durations as time, cost as dollars, tokens/counts as grouped integers, each with sensible decimals.
+- Modal focus-trap/restore/Esc across every dialog; info icons with formulas on Summary; value-on-hover on all charts.
+
+**Fixed**
+
+- **Smartscape upstream callers now resolve.** `smartscapeEdges.target_id` is a *smartscape-id* type; the filter was comparing it against a string array and silently matching nothing — coerced with `toString()`, so the Pulse Client tier and the Models A/B "typical caller" picker populate (19 real callers where they previously showed 0/1).
+- **Explorer AI-services table** rebuilt on a single CSS-grid template — service names and every column now align (the name column was being crushed to one character).
+- **Pulse token-consumption dashed cost line** renders inline (it was flattened onto the x-axis by a token-derived right-axis max; the inline chart now uses the same builder as the expanded view).
+- Provider-mix request-total string-concat bug; token-consumption forecast / blended-cost caption regression; trace-scope injection capped under the DQL 250-sub-expression limit.
+
+**Removed**
+
+- Dead boilerplate: the `/home` starter route + `Home.tsx`, the unrouted `Data.tsx`, and the retired `pages/Topology/` subsystem (its force-graph renderer lives on, agent-scoped, under Agents → Topology).
+- The **density / tile-style** Tweaks (superseded by the scan-bucket filter and the shared tile system).
+
 ## Features
 
 **Five** purpose-built tabs — **Pulse · Explorer · Agents · Prompts · Models / FinOps** — each reading the same `gen_ai.*` spans and sharing one global scope (timeframe + segments + filters). The navigation is organized around the **AI Application Architecture** and around complete investigations, not isolated features: the old Tools and Topology tabs fold into **Agents** (as per-agent sub-views), MCP Health folds into **Pulse**, and FinOps merges into **Models / FinOps**. Every chart can be expanded to a modal, most values are click-to-filter, and each tab degrades gracefully with a data-gap note (or optional **example data**) when an attribute your telemetry doesn't emit yet would otherwise power a panel.
@@ -25,7 +54,7 @@ That's what this app provides: five purpose-built tabs — organized around the 
 One-screen health and efficiency dashboard for the whole AI footprint, fronted by the architecture map.
 
 - **AI Application Architecture map** *(hero)* — the eight layers as a live schematic: each node shows a health glyph driven by that layer's dominant signal (orchestrator → reasoning-loop rate; agent → error + loop rate; tools → error/retry; llm → logical-error + truncation + rate-limit; vectordb/memory → capability-gated), routes to the owning tab on click, and expands to a problem-pattern card sourced from the layer model. `gateway` is an `otelGap` layer — it shows a "no native OTel" chip, never a fabricated reading; the **`client` layer is reconstructed from Smartscape topology** (see below). A **use-case lens** (Cut cost · Chase latency · Stop a loop) highlights the contributing layers.
-- **Client layer · upstream callers** *(reconstructed from Smartscape `calls` topology)* — the services that call into your AI services aren't captured on the `gen_ai.*` spans (no `parent.service.name`), so the Client node is reconstructed from Smartscape `calls` edges: it shows the **count of upstream caller services** plus aggregate **error-rate** and **worst-p90** chips and a throughput sparkline. Clicking the node opens a drawer listing each upstream service (requests · error % · p90, each with a mini throughput chart); **clicking any service filters the whole app** to it.
+- **Client layer · upstream callers** *(reconstructed from Smartscape `calls` topology)* — the services that call into your AI services aren't captured on the `gen_ai.*` spans (no `parent.service.name`), so the Client node is reconstructed from Smartscape `calls` edges: it shows the **count of upstream caller services** plus aggregate **error-rate** and **worst-p90** chips and a throughput sparkline. Clicking the node opens the **upstream-services detail modal** — a sortable golden-signals table (requests · error % · P90 · P95 · throughput · # AI services called, with a Smartscape deep-link per row), a **P90-over-time** chart (top-8 + show-all), and a **3-column caller → AI-service → component flow map** with per-caller spotlight; selecting a table row spotlights that caller across the chart and the flow.
 - **MCP summary strip** *(auto-appears)* — MCP requests, tool calls, and error rate, shown when MCP spans are detected.
 - **Spend glance** — 24h / 7d / projected-30d effective cost (through the cost model); full analysis lives in Models / FinOps.
 - **Summary tiles** — Tokens, Spend (blended estimate), P95 latency, Error rate, Models, MCP servers, MCP tools, Cost / request, and Token efficiency. Each tile carries a sparkline or donut glyph and expands to a modal with a full-size chart, a stats grid (total / avg / min / max / resolution), and sortable breakdown tables (model / server / tool, with latency percentiles, error and cost columns).
@@ -288,7 +317,7 @@ All persisted via `@dynatrace-sdk/react-hooks` `useUserAppState` / `useSetUserAp
 
 Pure functions — pricing, classification, attribute normalization, agent health scoring, FinOps scoring — are covered by Vitest. Run `npm test` for a single pass or `npm run test:watch` while developing.
 
-Current coverage: 426 tests across 34 files spanning detection, the attribute-capability registry + enrichment-tier gating, the cache-aware cost model (cache tiers, provider accounting, blended fallback), the AI-layer model + use-case-lens drift guards, the within-trace token-growth detector, the high-frequency-tool predicate, scan-limit injection, the **hybrid global filter** (direct per-span injection + the cross-span trace-scope resolver, including the **250-sub-expressions-per-expression cap safety** so a large trace set can't overflow DQL, and the **attribute-presence "exists" condition**), the **fleet TTFT summary** (per-agent → median/P90 + emitting-agent set), the **trace span-attribute namespace grouping** (humanized keys, per-namespace sections, "Other" catch-all), the **Prompts focus presets** (every same-span predicate + cross-span trace resolver) and the **server-side agent join + status-tile content relaxation**, **trace-topology cycle safety** (recursive agent/MCP traces collapse to cyclic node graphs — the layout must not loop), SLA scoring, and FinOps comparison scoring.
+Current coverage: 726 tests across 72 files spanning detection, the attribute-capability registry + enrichment-tier gating, the cache-aware cost model (cache tiers, provider accounting, blended fallback), the AI-layer model + use-case-lens drift guards, the within-trace token-growth detector, the high-frequency-tool predicate, scan-limit injection, the **hybrid global filter** (direct per-span injection + the cross-span trace-scope resolver, including the **250-sub-expressions-per-expression cap safety** so a large trace set can't overflow DQL, and the **attribute-presence "exists" condition**), the **fleet TTFT summary** (per-agent → median/P90 + emitting-agent set), the **trace span-attribute namespace grouping** (humanized keys, per-namespace sections, "Other" catch-all), the **Prompts focus presets** (every same-span predicate + cross-span trace resolver) and the **server-side agent join + status-tile content relaxation**, **trace-topology cycle safety** (recursive agent/MCP traces collapse to cyclic node graphs — the layout must not loop), SLA scoring, FinOps comparison scoring, the **upstream-services detail** (query builders, graph assembly, sort/top-N, Smartscape URL builder), and the **semantic status-color** helpers.
 
 ## Known issues
 
