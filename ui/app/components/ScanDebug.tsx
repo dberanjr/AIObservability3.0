@@ -35,9 +35,34 @@ export const neonPill = (size: number): React.CSSProperties => ({
 });
 
 /**
+ * Amber "scan limit hit" badge — the truncation warning split out of the neon
+ * diagnostic pill (scan-5). Truncation is a fidelity caveat, not a neutral
+ * bytes/time stat, so it gets the Strato amber status treatment (--amber-strong
+ * meets contrast for a small badge) at a bumped font instead of a stowaway ⚠ on
+ * the neon chip.
+ */
+const amberTruncBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  // Bumped from the neon pill's 11px so the caveat itself is legible.
+  fontSize: 12,
+  lineHeight: 1.3,
+  fontWeight: 600,
+  color: "var(--amber-strong)",
+  border: "1px solid var(--amber-strong)",
+  background: "color-mix(in oklab, var(--amber) 14%, transparent)",
+  borderRadius: 999,
+  padding: "2px 8px",
+  whiteSpace: "nowrap",
+};
+
+/**
  * Compact page-wide scan total for the status line: the sum of every query's
  * scanned bytes across the current page and the slowest single response. Sits
- * left of "Last refreshed". Only when the debug toggle is on.
+ * left of "Last refreshed". Only when the debug toggle is on. The neon chip is
+ * now the NEUTRAL bytes/time diagnostic only; truncation is its own amber badge
+ * (scan-5).
  */
 export const PageScanTotal = () => {
   const { scanStats } = useTweaks().pageConfig;
@@ -45,14 +70,24 @@ export const PageScanTotal = () => {
   if (scanStats !== "tiles" || !total) return null;
   const q = total.queryCount;
   return (
-    <span
-      style={neonPill(11)}
-      title={`${q} DQL quer${q === 1 ? "y" : "ies"} · ${fmtScanBytes(total.scannedBytes)} scanned · slowest ${fmtSecs1(total.executionMs)}${total.limitHit ? " · some queries hit the scan limit" : ""}`}
-    >
-      page · {q} quer{q === 1 ? "y" : "ies"} · {fmtScanBytes(total.scannedBytes)} ·{" "}
-      {fmtSecs1(total.executionMs)}
-      {total.limitHit ? " ⚠" : ""}
-    </span>
+    <>
+      <span
+        style={neonPill(11)}
+        title={`${q} DQL quer${q === 1 ? "y" : "ies"} · ${fmtScanBytes(total.scannedBytes)} scanned · slowest ${fmtSecs1(total.executionMs)}`}
+      >
+        page · {q} quer{q === 1 ? "y" : "ies"} · {fmtScanBytes(total.scannedBytes)} ·{" "}
+        {fmtSecs1(total.executionMs)}
+      </span>
+      {total.limitHit && (
+        <span
+          role="status"
+          style={amberTruncBadge}
+          title="At least one query on this page reached its scan-limit budget, so some results are truncated and may undercount. Raise the scan limit in Tweaks, narrow the timeframe, or add a segment to see complete data."
+        >
+          <span aria-hidden>⚠</span> scan limit hit
+        </span>
+      )}
+    </>
   );
 };
 

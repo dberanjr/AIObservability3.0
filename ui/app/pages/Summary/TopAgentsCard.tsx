@@ -1,7 +1,7 @@
 import React from "react";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
-import { fmtCount, fmtUSD, fmtUSDCompact } from "../../data/format";
+import { fmtCount, fmtUSD } from "../../data/format";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
@@ -19,7 +19,7 @@ export const TopAgentsCard = () => {
     key: r.agent,
     label: r.agent,
     value: r.cost,
-    displayValue: fmtUSDCompact(r.cost),
+    displayValue: fmtUSD(r.cost),
     secondary: `${fmtCount(r.invocations)} calls · ${
       r.invocations > 0 ? fmtUSD(r.cost / r.invocations) : "—"
     }/call`,

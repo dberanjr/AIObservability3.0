@@ -9,10 +9,16 @@ import {
   useChartExpander,
 } from "../../components/charts/ChartExpander";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
+import {
+  SCAN_LIMITS_GB,
+  SCAN_LIMIT_LABELS,
+  useScanLimit,
+} from "../../scope/ScanLimitContext";
+import { TIME_PRESETS } from "../../scope/types";
 import { useInvocationsChart } from "./useInvocationsChart";
 
 const INFO =
@@ -24,11 +30,41 @@ const INFO =
  * analogue of Pulse's token-consumption chart.
  */
 export const InvocationsChart = () => {
-  const { setTimeframe } = useScope();
+  const { scope, setTimeframe } = useScope();
+  const { scanLimitGb, setScanLimit } = useScanLimit();
   const [forecastEnabled, setForecastEnabled] = useState(false);
   const [open, setOpen] = useState(true);
   const model = useInvocationsChart(forecastEnabled);
   const expander = useChartExpander();
+
+  // Why the panel is empty — a real error / truncated-scan / no-activity cause
+  // instead of a hardcoded "no activity" (STATE-2, STATE-4).
+  const emptyKind = emptyCause({ error: model.error, limitHit: model.limitHit });
+
+  // Empty-state remedies wired to the real scope / scan-limit setters (STATE-6):
+  // step the timeframe one preset wider, and raise the scan-limit one notch.
+  const tfOrder = TIME_PRESETS.map((p) => p.value);
+  const tfIdx = tfOrder.indexOf(scope.timeframe.from);
+  const nextTf =
+    tfIdx === -1
+      ? "now()-24h"
+      : tfIdx < tfOrder.length - 1
+        ? tfOrder[tfIdx + 1]
+        : null;
+  const widenTimeframe = nextTf
+    ? () => setTimeframe({ from: nextTf })
+    : undefined;
+  const scanIdx = SCAN_LIMITS_GB.indexOf(scanLimitGb);
+  const nextScan =
+    scanIdx >= 0 && scanIdx < SCAN_LIMITS_GB.length - 1
+      ? SCAN_LIMITS_GB[scanIdx + 1]
+      : null;
+  const raiseScanLimit =
+    nextScan != null ? () => setScanLimit(nextScan) : undefined;
+  const raiseScanLabel =
+    nextScan != null
+      ? `Raise scan limit to ${SCAN_LIMIT_LABELS[nextScan]}`
+      : "Scan limit at max";
 
   const chart = (height: number) => (
     <AreaChart
@@ -100,9 +136,21 @@ export const InvocationsChart = () => {
           ) : model.isEmpty ? (
             <EmptyState
               bare
-              cause="no-activity"
-              title="No agent invocations in the current scope."
+              cause={emptyKind}
+              title={
+                emptyKind === "no-activity"
+                  ? "No agent invocations in the current scope."
+                  : undefined
+              }
               hint="gen_ai.agent.name"
+              actions={
+                emptyKind === "error"
+                  ? undefined
+                  : [
+                      { label: "Widen timeframe", onClick: widenTimeframe },
+                      { label: raiseScanLabel, onClick: raiseScanLimit },
+                    ]
+              }
             />
           ) : (
             chart(200)

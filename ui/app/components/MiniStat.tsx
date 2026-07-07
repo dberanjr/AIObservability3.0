@@ -1,39 +1,23 @@
 /**
- * Compact labeled-value stat used by the capability-gated panels. Mirrors the
- * KPI-card look used elsewhere (uppercase label + large value + optional sub).
+ * Compact labeled-value stat used by the capability-gated panels. Now a thin
+ * shim over the shared <StatTile> so there is a single tile primitive across
+ * the app — MiniStat's public prop signature is unchanged, so its existing
+ * call sites (SafetyPanel / FeedbackPanel / RagPanel / CacheCostPanel) need no
+ * changes. `color` maps to StatTile's valueColor escape hatch.
  */
 
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
+import { StatTile } from "./StatTile";
 
 export interface MiniStatProps {
   label: string;
   value: string;
   sub?: string;
   color?: string;
+  /** One-line definition shown via an info icon next to the label. */
+  info?: React.ReactNode;
 }
 
-export const MiniStat = ({ label, value, sub, color }: MiniStatProps) => (
-  <Surface elevation="raised" padding={12}>
-    <Flex flexDirection="column" gap={4} style={{ minWidth: 0 }}>
-      <Text
-        style={{
-          fontSize: 10.5,
-          fontWeight: 600,
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          color: "var(--text-3)",
-        }}
-      >
-        {label}
-      </Text>
-      <Text style={{ fontSize: 22, fontWeight: 600, color: color ?? "var(--text)" }}>
-        {value}
-      </Text>
-      {sub && (
-        <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>{sub}</Text>
-      )}
-    </Flex>
-  </Surface>
+export const MiniStat = ({ label, value, sub, color, info }: MiniStatProps) => (
+  <StatTile label={label} value={value} sub={sub} valueColor={color} info={info} />
 );

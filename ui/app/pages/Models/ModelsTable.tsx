@@ -16,6 +16,12 @@ import {
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { BlendedBadge } from "../../components/displayHints";
 import { useModelDisplay } from "../../components/useModelDisplay";
+import {
+  STATUS_CUE,
+  statusFromThreshold,
+  toneToColor,
+  type Tone,
+} from "../../theme/statusColor";
 import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
 
@@ -154,8 +160,14 @@ const ContextUtilBar = ({ model }: { model: ModelRow }) => {
     );
   }
   const pct = Math.min(100, Math.max(0, model.contextUtilizationPct));
-  const color =
-    pct < 40 ? "var(--green-2)" : pct < 80 ? "var(--amber)" : "var(--red)";
+  // Severity via the shared threshold scale (ideal < 40%, warning 40–80%,
+  // critical >= 80%) → the semantic --status-* tokens, so the bar stays in
+  // lockstep with the app-wide severity ramp. The % label below is the
+  // non-color cue, so no glyph is needed here.
+  const sev = statusFromThreshold(pct, { warn: 40, bad: 80 });
+  const color = toneToColor(
+    sev === "critical" ? "bad" : sev === "warning" ? "warn" : "good",
+  );
   return (
     <Flex flexDirection="column" gap={2} style={{ width: "100%" }}>
       <div
@@ -228,10 +240,44 @@ const Cell = ({
   </div>
 );
 
-const costColor = (perMTok: number): string | undefined => {
-  if (perMTok > 0 && perMTok < 2) return "var(--green-2)";
-  if (perMTok > 20) return "var(--red)";
-  return undefined;
+/**
+ * Cost severity for the $/1M column: cheap (< $2/1M) reads good, pricey
+ * (> $20/1M) reads bad, and the mid-range stays neutral (default text colour).
+ * Returns a semantic {@link Tone} so the colour + non-color cue both derive
+ * from the shared severity vocabulary instead of raw --green-2 / --red.
+ */
+const costTone = (perMTok: number): Tone | null =>
+  perMTok > 0 && perMTok < 2 ? "good" : perMTok > 20 ? "bad" : null;
+
+/** Tone → the STATUS_CUE key whose glyph/word pairs with the tone. */
+const TONE_CUE_KEY = {
+  good: "good",
+  warn: "warning",
+  bad: "critical",
+  critical: "critical",
+  neutral: "neutral",
+} as const;
+
+/** Tone → its severity colour (var(--status-*)) plus the non-color cue glyph, so
+ *  a coloured numeric cell is never encoded by hue alone. */
+const toneCue = (tone: Tone): { color: string; glyph: string; word: string } => {
+  const cue = STATUS_CUE[TONE_CUE_KEY[tone]];
+  return { color: toneToColor(tone), glyph: cue.glyph, word: cue.word };
+};
+
+/** Small leading severity glyph — the non-color reinforcement for a coloured
+ *  cell (colorblind cue). Inherits the cell's severity colour. */
+const CueGlyph = ({ tone }: { tone: Tone }) => {
+  const { glyph, word } = toneCue(tone);
+  return (
+    <span
+      aria-hidden
+      title={word}
+      style={{ marginRight: 4, fontSize: 8.5, lineHeight: 1 }}
+    >
+      {glyph}
+    </span>
+  );
 };
 
 export interface ModelsTableProps {
@@ -349,7 +395,12 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
             </Text>
           </Flex>
         ) : (
-          sorted.map((m) => (
+          sorted.map((m) => {
+            // Severity tones for the two colour-only numeric columns, so both
+            // the cell colour and its non-color cue glyph derive from one place.
+            const costTn = m.pricingUnknown ? null : costTone(m.costPerMTok);
+            const errTn: Tone | null = m.errorRatePct > 5 ? "bad" : null;
+            return (
             <div
               key={m.modelKey}
               role="button"
@@ -401,8 +452,9 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 width={90}
                 align="right"
                 mono
-                color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
+                color={costTn ? toneCue(costTn).color : undefined}
               >
+                {costTn && <CueGlyph tone={costTn} />}
                 {fmtUSD(m.costPerMTok)}
                 {m.pricingUnknown && <BlendedBadge />}
               </Cell>
@@ -446,8 +498,9 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 width={70}
                 align="right"
                 mono
-                color={m.errorRatePct > 5 ? "var(--red)" : undefined}
+                color={errTn ? toneCue(errTn).color : undefined}
               >
+                {errTn && <CueGlyph tone={errTn} />}
                 {m.errors > 0 ? fmtPercent(m.errorRatePct) : "0%"}
               </Cell>
               {showTimeout && (
@@ -473,7 +526,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 </Cell>
               )}
             </div>
-          ))
+            );
+          })
         )}
 
         <Flex

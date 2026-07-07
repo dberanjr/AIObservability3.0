@@ -23,7 +23,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: 10,
+          gap: "var(--d-gap, 14px)",
         }}
       >
         {Array.from({ length: 6 }).map((_, i) => (
@@ -76,6 +76,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
           value={fmtUSDCompact(data.projected30d)}
           sub="linear from 7d run-rate"
           emphasis="amber"
+          info="Estimated 30-day spend, projected linearly from the sampled 7-day run-rate (7d spend ÷ 7 × 30)."
         />
       ),
     },
@@ -88,6 +89,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
           value={fmtPercent(data.concentrationPct, 0)}
           sub={data.services[0]?.service ?? undefined}
           emphasis={data.concentrationPct > 50 ? "amber" : "default"}
+          info="Share of fleet token volume driven by the single top service (named below) — a cost-concentration / single-point-of-spend signal for the current timeframe."
         />
       ),
     },
@@ -99,6 +101,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
           label="$/1M tokens"
           value={fmtUSD(data.costPerMTok)}
           sub="blended · current timeframe"
+          info="Blended cost per 1M tokens across the whole fleet (total cost ÷ total tokens × 1M) for the current timeframe, estimated from data/pricing.ts rates."
         />
       ),
     },
@@ -111,6 +114,7 @@ export const FinOpsTilesRow = ({ data }: FinOpsTilesRowProps) => {
           value={fmtUSDCompact(data.possibleSavings)}
           sub="within-type $/MTok outliers"
           emphasis="green"
+          info="Estimated spend avoided if each expensive service shifted its traffic to the cheapest same-type peer — compares within model type only (never generative vs embedding)."
         />
       ),
     },

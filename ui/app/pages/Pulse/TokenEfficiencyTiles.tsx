@@ -1,9 +1,10 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtCount, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
-import { InfoTooltip } from "../../components/InfoTooltip";
+import { fmtCount, fmtPercent, fmtRate, fmtTokens, fmtUSD } from "../../data/format";
+import { toneToColor } from "../../theme/statusColor";
+import { StatTile } from "../../components/StatTile";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import {
   ChartModal,
@@ -16,47 +17,10 @@ import { Spark } from "./archMap/Spark";
 
 const ok = (s: number[]): number[] | undefined => (s.length > 1 ? s : undefined);
 
-const TileShell = ({
-  label,
-  hint,
-  info,
-  headerRight,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  info?: string;
-  /** Right-aligned header slot (e.g. the expand button). */
-  headerRight?: React.ReactNode;
-  children: React.ReactNode;
-}) => (
-  <Surface elevation="raised" padding={16}>
-    <Flex flexDirection="column" gap={8} style={{ minWidth: 0 }}>
-      <Flex alignItems="flex-start" justifyContent="space-between" gap={8}>
-        <Flex flexDirection="column" gap={2}>
-          <Flex alignItems="center" gap={6}>
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-              }}
-            >
-              {label}
-            </Text>
-            {info && <InfoTooltip text={info} />}
-          </Flex>
-          {hint && (
-            <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>{hint}</Text>
-          )}
-        </Flex>
-        {headerRight && <div style={{ flex: "0 0 auto" }}>{headerRight}</div>}
-      </Flex>
-      {children}
-    </Flex>
-  </Surface>
+/** Sub-eyebrow caption that used to live in TileShell's `hint`. Rendered as
+ *  the first child of StatTile so it sits directly under the label. */
+const Hint = ({ children }: { children: React.ReactNode }) => (
+  <Text style={{ fontSize: 10.5, color: "var(--text-4)" }}>{children}</Text>
 );
 
 const Big = ({
@@ -131,8 +95,11 @@ const Driver = ({
   </Flex>
 );
 
+// Severity color routed through the shared tone→--status-* token map so the
+// score value stays in lockstep with the app-wide status ramp (CONS-4). Exact
+// thresholds preserved: >=70 ideal, >=40 warning, else critical.
 const scoreColor = (score: number): string =>
-  score >= 70 ? "var(--green-2)" : score >= 40 ? "var(--amber)" : "var(--red)";
+  toneToColor(score >= 70 ? "good" : score >= 40 ? "warn" : "bad");
 
 /**
  * One driver series rendered large inside a ChartModal: a labelled header row
@@ -213,12 +180,11 @@ const TokenEfficiencyBody = () => {
       style={{
         display: "grid",
         gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-        gap: 16,
+        gap: "var(--d-gap)",
       }}
     >
-      <TileShell
+      <StatTile
         label="Token efficiency score"
-        hint="Cost / throughput / waste — not quality-adjusted"
         headerRight={scoreExpander.expandButton("Expand token efficiency score")}
         info={
           "0–100 composite of how effectively tokens are turned into output. " +
@@ -234,6 +200,7 @@ const TokenEfficiencyBody = () => {
               "output quality can't be factored in.")
         }
       >
+        <Hint>Cost / throughput / waste — not quality-adjusted</Hint>
         {eff.isLoading ? (
           <Skeleton style={{ height: 30, width: 90 }} />
         ) : eff.score == null ? (
@@ -255,7 +222,7 @@ const TokenEfficiencyBody = () => {
                 value={fmtTokens(eff.inputTokensPerRequest)}
                 spark={ok(inputPerReq)}
                 sparkColor="var(--blue)"
-                sparkFormat={fmtTokens}
+                sparkFormat={fmtCount}
                 sparkLabels={series.labels}
               />
               <Driver
@@ -269,11 +236,10 @@ const TokenEfficiencyBody = () => {
             </Flex>
           </>
         )}
-      </TileShell>
+      </StatTile>
 
-      <TileShell
+      <StatTile
         label="Output per dollar"
-        hint="Output tokens generated per $ spent"
         headerRight={opdExpander.expandButton("Expand output per dollar")}
         info={
           "Output tokens produced per US dollar of model spend (total output " +
@@ -284,6 +250,7 @@ const TokenEfficiencyBody = () => {
           "output tokens' and 'Throughput' below for the drivers."
         }
       >
+        <Hint>Output tokens generated per $ spent</Hint>
         {eff.isLoading ? (
           <Skeleton style={{ height: 30, width: 90 }} />
         ) : eff.outputPerDollar == null ? (
@@ -306,16 +273,16 @@ const TokenEfficiencyBody = () => {
               />
               <Driver
                 label="Throughput"
-                value={`${Math.round(eff.tokensPerSec).toLocaleString()} tok/s`}
+                value={fmtRate(eff.tokensPerSec, "tok/s")}
                 spark={ok(tokPerSec)}
                 sparkColor="var(--purple)"
-                sparkFormat={(n) => `${Math.round(n).toLocaleString()} tok/s`}
+                sparkFormat={(n) => fmtRate(n, "tok/s")}
                 sparkLabels={series.labels}
               />
             </Flex>
           </>
         )}
-      </TileShell>
+      </StatTile>
     </div>
 
     <ChartModal
@@ -348,7 +315,7 @@ const TokenEfficiencyBody = () => {
           value={fmtTokens(eff.inputTokensPerRequest)}
           data={ok(inputPerReq)}
           color="var(--blue)"
-          format={fmtTokens}
+          format={fmtCount}
           labels={series.labels}
         />
         <EnlargedSpark
@@ -381,7 +348,7 @@ const TokenEfficiencyBody = () => {
         },
         {
           label: "Throughput",
-          value: `${Math.round(eff.tokensPerSec).toLocaleString()} tok/s`,
+          value: fmtRate(eff.tokensPerSec, "tok/s"),
         },
       ]}
     >
@@ -398,10 +365,10 @@ const TokenEfficiencyBody = () => {
         />
         <EnlargedSpark
           label="Throughput"
-          value={`${Math.round(eff.tokensPerSec).toLocaleString()} tok/s`}
+          value={fmtRate(eff.tokensPerSec, "tok/s")}
           data={ok(tokPerSec)}
           color="var(--purple)"
-          format={(n) => `${Math.round(n).toLocaleString()} tok/s`}
+          format={(n) => fmtRate(n, "tok/s")}
           labels={series.labels}
         />
       </Flex>

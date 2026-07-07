@@ -3,6 +3,7 @@
 // testable without pulling in Strato UI.
 
 import type { SemanticStatus } from "../../theme/statusColor";
+import { fmtUSDCents } from "../../data/format";
 
 /**
  * Quality-score colour ramp (percent scale). Shared by the aggregate quality
@@ -60,13 +61,12 @@ export const anomalyLevel = (value: number, t: Thr | null): AnomalyLevel => {
  * comparable at a glance (Prompts-8). Costs here are typically a fraction of a
  * cent, where `$0.00042` is unreadable — show fractional cents instead, and
  * only fall back to dollars once a row crosses $1.
+ *
+ * Delegates to the shared {@link fmtUSDCents} so the cents-formatting logic
+ * lives in exactly one place (data/format.ts) — CONS-3. The export name is kept
+ * so the PromptsTable / TraceTopology imports need no change.
  */
-export const fmtCentsCost = (cents: number): string => {
-  if (!Number.isFinite(cents) || cents <= 0) return "—";
-  if (cents >= 100) return `$${(cents / 100).toFixed(2)}`;
-  if (cents >= 1) return `${cents.toFixed(2)}¢`;
-  return `${cents.toFixed(3)}¢`;
-};
+export const fmtCentsCost = (cents: number): string => fmtUSDCents(cents);
 
 export interface CoverageLabel {
   text: string;

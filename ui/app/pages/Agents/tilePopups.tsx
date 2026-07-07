@@ -8,6 +8,7 @@ import { AreaChart } from "../../components/charts/AreaChart";
 import { BarList } from "../../components/charts/BarList";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
 import { DataGapNote } from "../../components/DataGapNote";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import {
   ExampleDataFrame,
@@ -26,10 +27,17 @@ import { useTweaks } from "../../tweaks/TweaksContext";
 import {
   STATUS_CUE,
   statusColor,
+  statusFromThreshold,
+  toneToColor,
   type SemanticStatus,
 } from "../../theme/statusColor";
 import type { AgentRow } from "./useAgents";
-import { errorTileStatus } from "./tileStatus";
+import {
+  errorTileStatus,
+  highFreqTileStatus,
+  loopingTileStatus,
+  slowTileStatus,
+} from "./tileStatus";
 import { summarizeAgentTtft, TTFT_ATTRIBUTES } from "./ttft";
 import { useInvocationsChart } from "./useInvocationsChart";
 import { useAgentLoops, LOOP_REPEAT_RATIO, LOOP_MAX_STEP } from "./useAgentLoops";
@@ -90,9 +98,28 @@ const CueValue = ({
 };
 
 /** Loop-rate severity: matches the red/amber/green thresholds the loop table
- *  has always used (≥50% critical, ≥15% warning, otherwise good). */
-const loopRateStatus = (pct: number): SemanticStatus =>
-  pct >= 50 ? "critical" : pct >= 15 ? "warning" : "good";
+ *  has always used (≥50% critical, ≥15% warning, otherwise good). Routed through
+ *  the shared statusFromThreshold scale; its `ideal` step maps to a positive
+ *  `good` here (this tier reads healthy, not muted-neutral). */
+const loopRateStatus = (pct: number): SemanticStatus => {
+  const sev = statusFromThreshold(pct, { warn: 15, bad: 50 });
+  return sev === "ideal" ? "good" : sev;
+};
+
+/**
+ * Severity → StatStrip value color, or `undefined` when healthy so the number
+ * keeps the default text color. Routes through the shared toneToColor so these
+ * KPI figures use the SAME semantic status hues (var(--status-*)) as the tiles
+ * and cue glyphs, instead of the decorative --amber/--red brand tokens (CONS-4).
+ */
+const stripColor = (status: SemanticStatus): string | undefined =>
+  status === "critical"
+    ? toneToColor("critical")
+    : status === "warning"
+      ? toneToColor("warn")
+      : status === "good"
+        ? toneToColor("good")
+        : undefined;
 
 export interface Stat {
   label: string;
@@ -303,6 +330,9 @@ export const InvocationsBody = () => {
   const { setTimeframe } = useScope();
   const [forecastEnabled, setForecastEnabled] = useState(false);
   const model = useInvocationsChart(forecastEnabled);
+  // Classify the empty so a query error / truncated scan reads as itself rather
+  // than a false "no activity" (STATE-4).
+  const emptyKind = emptyCause({ error: model.error, limitHit: model.limitHit });
 
   return (
     <Flex flexDirection="column" gap={16}>
@@ -318,9 +348,16 @@ export const InvocationsBody = () => {
       {model.isLoading ? (
         <Skeleton style={{ height: 360 }} />
       ) : model.isEmpty ? (
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No agent invocations in the current scope.
-        </Text>
+        <EmptyState
+          bare
+          cause={emptyKind}
+          title={
+            emptyKind === "no-activity"
+              ? "No agent invocations in the current scope."
+              : undefined
+          }
+          hint="gen_ai.agent.name"
+        />
       ) : (
         <AreaChart
           height={360}
@@ -364,7 +401,7 @@ export const SlowAgentsBody = ({ agents }: { agents: AgentRow[] }) => {
     <Flex flexDirection="column" gap={16}>
       <StatStrip
         stats={[
-          { label: "Slow agents", value: fmtCount(slow.length), color: slow.length > 0 ? "var(--amber)" : undefined },
+          { label: "Slow agents", value: fmtCount(slow.length), color: stripColor(slowTileStatus(slow.length)) },
           { label: "Threshold", value: `P90 > ${SLOW_P90_MS / 1000}s` },
           { label: "Slowest", value: slowest ? fmtMs(slowest.p90Ms) : "—", sub: slowest?.agent },
         ]}
@@ -453,7 +490,7 @@ export const ErrorRateBody = ({ agents }: { agents: AgentRow[] }) => {
           {
             label: "Fleet error rate",
             value: fmtPercent(rate),
-            color: rate > 5 ? "var(--red)" : rate > 1 ? "var(--amber)" : undefined,
+            color: stripColor(errorTileStatus(rate)),
           },
           { label: "Total errors", value: fmtCount(errors) },
           { label: "Invocations", value: fmtCount(invocations) },
@@ -676,7 +713,7 @@ export const TtftBody = ({
 /* -------------------------- Looping agents ----------------------------- */
 
 export const LoopingAgentsBody = () => {
-  const { rows, loopingCount, isLoading, isEmpty } = useAgentLoops();
+  const { rows, loopingCount, isLoading, isEmpty, error } = useAgentLoops();
   const series = useAgentLoopSeries(true);
 
   return (
@@ -686,7 +723,7 @@ export const LoopingAgentsBody = () => {
           {
             label: "Agents with loops",
             value: fmtCount(loopingCount),
-            color: loopingCount > 0 ? "var(--amber)" : undefined,
+            color: stripColor(loopingTileStatus(loopingCount)),
           },
           { label: "Node executions", value: fmtCount(series.total), sub: "this scope" },
           {
@@ -722,6 +759,9 @@ export const LoopingAgentsBody = () => {
             <Skeleton key={i} style={{ height: 28 }} />
           ))}
         </Flex>
+      ) : error ? (
+        // A failed loops query must read as an error, not "no spans" (STATE-2).
+        <EmptyState bare cause={emptyCause({ error })} />
       ) : isEmpty ? (
         <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
           No LangGraph execution spans in this scope — loop detection needs{" "}
@@ -819,7 +859,7 @@ export const HighFrequencyBody = () => {
           {
             label: "Agents flagged",
             value: fmtCount(rows.length),
-            color: rows.length > 0 ? "var(--amber)" : undefined,
+            color: stripColor(highFreqTileStatus(rows.length)),
           },
           { label: "Threshold", value: `> ${HIGH_FREQUENCY_TOOL_THRESHOLD} calls / tool` },
           {

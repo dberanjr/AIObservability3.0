@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useScanLimit } from "../../scope/ScanLimitContext";
+import { readScanMeta } from "../../scope/ScanReportContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
@@ -84,12 +86,16 @@ export interface UseModelsResult {
   models: ModelRow[];
   isLoading: boolean;
   error?: Error;
+  /** True when the model scan reached its scan-limit budget (results partial),
+   *  so an empty view can offer a "raise the scan limit" remedy (STATE-4/6). */
+  limitHit: boolean;
 }
 
 export const useModels = (serviceName?: string | null): UseModelsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
+  const { scanLimitGb } = useScanLimit();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<ModelRecord>(
@@ -256,6 +262,7 @@ export const useModels = (serviceName?: string | null): UseModelsResult => {
       models,
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
+      limitHit: readScanMeta({ data }, scanLimitGb)?.limitHit ?? false,
     };
-  }, [data, isLoading, error, resolution.isLoading, filters]);
+  }, [data, isLoading, error, resolution.isLoading, filters, scanLimitGb]);
 };

@@ -91,12 +91,14 @@ export const EstimatedBadge = () => (
   <span
     title="The cost shown is an estimate — priced at a blended/fallback rate. Add the model to the Model Pricing table for an exact figure."
     style={{
-      fontSize: 10,
+      // A11Y-5: --amber at 10px uppercase only cleared ~4:1 on the dark
+      // surface. --amber-strong at 11px clears WCAG AA for small text.
+      fontSize: 11,
       fontWeight: 600,
       letterSpacing: "0.04em",
       textTransform: "uppercase",
-      color: "var(--amber)",
-      border: "1px solid var(--amber)",
+      color: "var(--amber-strong)",
+      border: "1px solid var(--amber-strong)",
       borderRadius: 4,
       padding: "1px 6px",
       whiteSpace: "nowrap",

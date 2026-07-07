@@ -212,7 +212,17 @@ export const ExplorerPage = () => {
               />
             </ScanScopedTile>
           </div>
-          <CapabilityGate id="vectorDb">
+          <CapabilityGate
+            id="vectorDb"
+            label="Retrieval (RAG) — available with instrumentation"
+            hint={
+              <>
+                Emit vector-store retrieval spans (<code>db.system</code> /{" "}
+                <code>vector_db.*</code>) and this panel lights up with
+                retrievals, vector stores and average top-k automatically.
+              </>
+            }
+          >
             <ScanScopedTile name="Retrieval (RAG)">
               <RagPanel />
             </ScanScopedTile>

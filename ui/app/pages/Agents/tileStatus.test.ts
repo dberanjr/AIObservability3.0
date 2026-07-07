@@ -5,6 +5,7 @@ import {
   loopingTileStatus,
   highFreqTileStatus,
   statusToEmphasis,
+  statusToTone,
 } from "./tileStatus";
 
 describe("slowTileStatus", () => {
@@ -16,11 +17,13 @@ describe("slowTileStatus", () => {
 });
 
 describe("errorTileStatus", () => {
-  it("escalates neutral <=1% → warning 1–5% → critical >5%", () => {
+  it("escalates neutral <1% → warning [1%,5%) → critical >=5%", () => {
     expect(errorTileStatus(0)).toBe("neutral");
-    expect(errorTileStatus(1)).toBe("neutral"); // boundary: strictly >1 to warn
+    expect(errorTileStatus(0.9)).toBe("neutral"); // below the 1% warn threshold
+    expect(errorTileStatus(1)).toBe("warning"); // inclusive: >= warn threshold
     expect(errorTileStatus(1.1)).toBe("warning");
-    expect(errorTileStatus(5)).toBe("warning"); // boundary: strictly >5 to crit
+    expect(errorTileStatus(4.9)).toBe("warning");
+    expect(errorTileStatus(5)).toBe("critical"); // inclusive: >= bad threshold
     expect(errorTileStatus(5.1)).toBe("critical");
     expect(errorTileStatus(100)).toBe("critical");
   });
@@ -47,5 +50,15 @@ describe("statusToEmphasis", () => {
     expect(statusToEmphasis("good")).toBe("green");
     expect(statusToEmphasis("info")).toBe("default");
     expect(statusToEmphasis("neutral")).toBe("default");
+  });
+});
+
+describe("statusToTone", () => {
+  it("maps each status to the matching StatTile tone", () => {
+    expect(statusToTone("critical")).toBe("critical");
+    expect(statusToTone("warning")).toBe("warn");
+    expect(statusToTone("good")).toBe("good");
+    expect(statusToTone("info")).toBe("neutral");
+    expect(statusToTone("neutral")).toBe("neutral");
   });
 });

@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { fmtPercent } from "../../data/format";
 import { STAGE_META, stageMixLabel } from "./stageMix";
 import type { StageBreakdown } from "./useAgents";
 
@@ -38,7 +39,7 @@ export const StageBreakdownBar = ({
               width: `${(frac * 100).toFixed(2)}%`,
               background: s.color,
             }}
-            title={`${s.label}: ${(frac * 100).toFixed(0)}%`}
+            title={`${s.label}: ${fmtPercent(frac * 100)}`}
           />
         );
       })}

@@ -19,7 +19,7 @@ import { ModelsFinOpsSections } from "./ModelsFinOpsSections";
 import { useModels } from "./useModels";
 
 export const ModelsPage = () => {
-  const { models, isLoading, error } = useModels();
+  const { models, isLoading, error, limitHit } = useModels();
   const [typeFilter, setTypeFilter] = useState<ModelTypeFilter>("all");
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
 
@@ -80,7 +80,12 @@ export const ModelsPage = () => {
           defaultOpen
           bodyPadding={16}
         >
-          <ModelsFindings models={filtered} onSelect={setSelectedFinding} />
+          <ModelsFindings
+            models={filtered}
+            onSelect={setSelectedFinding}
+            error={error}
+            limitHit={limitHit}
+          />
         </CollapsibleCard>
         <CollapsibleCard
           title="Tokens, latency & mix"
@@ -96,8 +101,18 @@ export const ModelsPage = () => {
               alignItems: "start",
             }}
           >
-            <ModelBubbleChart models={filtered} isLoading={isLoading} />
-            <ModelsSidePanels models={filtered} isLoading={isLoading} />
+            <ModelBubbleChart
+              models={filtered}
+              isLoading={isLoading}
+              error={error}
+              limitHit={limitHit}
+            />
+            <ModelsSidePanels
+              models={filtered}
+              isLoading={isLoading}
+              error={error}
+              limitHit={limitHit}
+            />
           </div>
         </CollapsibleCard>
         <CollapsibleCard

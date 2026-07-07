@@ -10,8 +10,16 @@ import {
   fmtMs,
   fmtPercent,
   fmtTokens,
+  fmtUSD,
+  fmtUSDCents,
   fmtUSDCompact,
 } from "../../data/format";
+import {
+  STATUS_CUE,
+  toneToColor,
+  type SemanticStatus,
+  type Tone,
+} from "../../theme/statusColor";
 import { useScanScope } from "../../scope/ScanReportContext";
 import { TileScanFooter } from "../../scope/TileScanFooter";
 import { SUMMARY_SCAN_OPTS } from "./summaryScanGroups";
@@ -25,17 +33,22 @@ import { trendPct, deltaTone, type DeltaTone } from "./posture";
 
 type Delta = { text: string; color: string } | null;
 
-const TONE_COLOR: Record<DeltaTone, string> = {
-  flat: "var(--text-3)",
-  good: "var(--green-2)",
-  warn: "var(--amber)",
-  severe: "var(--red)",
+/**
+ * Delta-severity tone → the shared tile-tone vocabulary, so the chip color
+ * resolves through toneToColor (var(--status-*)) instead of hardcoded brand
+ * hues — one severity ramp across the app (CONS-4).
+ */
+const DELTA_TONE: Record<DeltaTone, Tone> = {
+  flat: "neutral",
+  good: "good",
+  warn: "warn",
+  severe: "critical",
 };
 
 /**
  * Directional delta chip. `invert` marks metrics where a rise is bad; `severeAt`
- * is the |percent| at which a bad movement escalates from amber to red, so a
- * regression worth paging on doesn't read like a 3% wobble (SUM-8). The arrow
+ * is the |percent| at which a bad movement escalates from warning to critical, so
+ * a regression worth paging on doesn't read like a 3% wobble (SUM-8). The arrow
  * glyph stays the non-color cue for accessibility.
  */
 const deltaLabel = (
@@ -46,7 +59,7 @@ const deltaLabel = (
   const arrow = pct === 0 ? "→" : pct > 0 ? "▲" : "▼";
   return {
     text: `${arrow} ${Math.abs(pct)}%`,
-    color: TONE_COLOR[deltaTone(pct, opts)],
+    color: toneToColor(DELTA_TONE[deltaTone(pct, opts)]),
   };
 };
 
@@ -56,31 +69,42 @@ const mean = (arr: number[]): number | null => {
   return vals.length ? vals.reduce((a, v) => a + v, 0) / vals.length : null;
 };
 
-/** Trust-index band color for the gauge + status dot. */
+/**
+ * Trust-index band color for the gauge + status dot. The severity tiers route
+ * through the shared status ramp (toneToColor → var(--status-*)) so they match
+ * the rest of the app instead of hardcoding brand hues; the original band cut
+ * points (85 / 70 / 50) are preserved exactly, and the 70–85 "Stable" tier is
+ * an info state — not a severity — so it deliberately stays blue (CONS-4).
+ */
 const bandColor = (score: number | null): string => {
   if (score == null) return "var(--text-4, var(--text-3))";
-  if (score >= 85) return "var(--green-2)";
+  if (score >= 85) return toneToColor("good");
   if (score >= 70) return "var(--blue)";
-  if (score >= 50) return "var(--amber)";
-  return "var(--red)";
+  if (score >= 50) return toneToColor("warn");
+  return toneToColor("bad");
+};
+
+/**
+ * Health-pillar status → the shared tone + semantic-status keys, so both the
+ * bar color (toneToColor) and the non-color cue glyph (STATUS_CUE) derive from
+ * one source instead of a hand-rolled color ternary (CONS-4).
+ */
+const PILLAR_TONE: Record<PillarStatus, Tone> = {
+  good: "good",
+  warning: "warn",
+  critical: "critical",
+  "no-data": "neutral",
+};
+const PILLAR_STATUS: Record<PillarStatus, SemanticStatus> = {
+  good: "good",
+  warning: "warning",
+  critical: "critical",
+  "no-data": "neutral",
 };
 
 /** Health-pillar status color (reserved status ramp, always paired with text). */
 const pillarColor = (status: PillarStatus): string =>
-  status === "good"
-    ? "var(--green-2)"
-    : status === "warning"
-      ? "var(--amber)"
-      : status === "critical"
-        ? "var(--red)"
-        : "var(--text-4, var(--text-3))";
-
-const fmtPerReq = (n: number | null): string => {
-  if (n == null || !Number.isFinite(n)) return "—";
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  // Sub-dollar per-request cost needs more precision than $0.02.
-  return `$${n.toFixed(n < 0.01 ? 4 : 3)}`;
-};
+  toneToColor(PILLAR_TONE[status]);
 
 // ---- Health pillar bar ----------------------------------------------------
 
@@ -168,17 +192,20 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
       >
         {Math.round(pillar.score as number)}
       </Text>
+      {/* Non-color severity cue: a distinct glyph per status (● good, ▲ warning,
+          ⬤ critical) so the pillar state is legible without relying on hue. */}
       <span
         aria-hidden
         title={pillar.status}
         style={{
-          width: 8,
-          height: 8,
-          borderRadius: 999,
-          background: color,
+          color,
+          fontSize: 10,
+          lineHeight: 1,
           flex: "0 0 auto",
         }}
-      />
+      >
+        {STATUS_CUE[PILLAR_STATUS[pillar.status]].glyph}
+      </span>
       {attention && (
         <Text
           style={{
@@ -212,6 +239,10 @@ interface KpiTileProps {
   sparkLabels?: string[];
   sparkVariant?: "line" | "bars";
   sparkColor?: string;
+  /** Unit-aware formatter for the sparkline hover tooltip and a11y readout, so
+   *  the trend's values render in the tile's own metric (e.g. fmtMs / fmtUSD /
+   *  fmtPercent / fmtCount) instead of the Sparkline's raw-number default. */
+  sparkFormatter?: (n: number) => string;
   reference?: number | null;
   referenceLabel?: string;
   tone?: "default" | "risk";
@@ -237,6 +268,7 @@ const KpiTile = ({
   sparkLabels,
   sparkVariant = "line",
   sparkColor,
+  sparkFormatter,
   reference,
   referenceLabel,
   tone = "default",
@@ -357,6 +389,7 @@ const KpiTile = ({
               height={34}
               labels={sparkLabels}
               variant={sparkVariant}
+              valueFormatter={sparkFormatter}
               reference={reference ?? undefined}
               referenceLabel={referenceLabel}
             />
@@ -500,12 +533,23 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       <KpiTile
         label="Cost / request"
         info="Blended cost per request = fleet spend ÷ requests over the current timeframe. Spend prices the tokens at the cost model's blended fallback rate (the per-agent breakdown is the authoritative dollar figure). Sampling-invariant, since spend and requests scale together. Sparkline is per-bucket cost/req; the dashed line is the timeframe average."
-        value={fmtPerReq(summary.costPerRequest)}
+        // Per-request cost is a sub-dollar micro-value — the shared cents
+        // formatter shows it in fractional cents, then falls back to dollars
+        // past $1 (CONS-3). costPerRequest is in dollars → ×100 to cents.
+        value={
+          summary.costPerRequest != null
+            ? fmtUSDCents(summary.costPerRequest * 100)
+            : "—"
+        }
         sub="blended $/req"
         delta={costDelta}
         spark={s.costPerReq}
         sparkLabels={s.labels}
         sparkColor={costDelta?.color}
+        // Per-bucket cost/req is a sub-dollar micro-value in dollars — mirror the
+        // tile's headline cents formatter (×100 → cents) so the hover unit
+        // matches the value above it.
+        sparkFormatter={(n) => fmtUSDCents(n * 100)}
         reference={mean(s.costPerReq)}
         referenceLabel="avg"
       />,
@@ -522,6 +566,9 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
         spark={s.spend}
         sparkLabels={s.labels}
         sparkColor={spendDelta?.color}
+        // Per-bucket spend in dollars — precise USD hover (compact is reserved
+        // for the tile's projected headline).
+        sparkFormatter={fmtUSD}
         reference={mean(s.spend)}
         referenceLabel="avg"
         sparkCaption="spend · current timeframe"
@@ -537,6 +584,8 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
         spark={s.p95Ms}
         sparkLabels={s.labels}
         sparkColor={p95Delta?.color}
+        // Per-bucket p95 in milliseconds → duration formatter.
+        sparkFormatter={fmtMs}
         reference={mean(s.p95Ms)}
         referenceLabel="avg"
       />,
@@ -551,6 +600,8 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
         spark={s.errorRatePct}
         sparkLabels={s.labels}
         sparkColor={errDelta?.color}
+        // Per-bucket error rate is already a percent → percent formatter.
+        sparkFormatter={(n) => fmtPercent(n)}
         reference={mean(s.errorRatePct)}
         referenceLabel="avg"
       />,
@@ -571,6 +622,9 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
         sparkLabels={s.labels}
         sparkVariant="bars"
         sparkColor="var(--blue)"
+        // Per-bucket token counts — precise grouped integer on hover (the
+        // headline uses the compact fmtTokens for its cramped hero slot).
+        sparkFormatter={fmtCount}
       />,
     ),
     kpi(

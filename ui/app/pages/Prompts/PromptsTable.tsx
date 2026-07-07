@@ -192,7 +192,7 @@ const TempCell = ({ t }: { t: number | null }) => {
   const c = tempColor(t);
   return (
     <span
-      title={`temperature ${t}`}
+      title={`temperature ${t.toFixed(2)}`}
       style={{
         display: "inline-block",
         padding: "1px 7px",

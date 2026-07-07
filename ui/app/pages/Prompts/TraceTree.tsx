@@ -12,6 +12,7 @@ import {
   WarningIcon,
 } from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
 import { MCP_LIFECYCLE_METHODS } from "../../scope/queries";
 import type { TraceSpan } from "./useTraceSpans";
 import {
@@ -1074,9 +1075,11 @@ export const TraceTree = ({
 
   if (spans.length === 0) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>No spans found in trace</Text>
-      </div>
+      <EmptyState
+        bare
+        title="No spans found in trace"
+        description="This trace returned no spans in the current scope."
+      />
     );
   }
 
@@ -1181,11 +1184,11 @@ export const TraceTree = ({
 
         <div style={{ maxHeight, overflowY: "auto" }}>
           {rows.length === 0 ? (
-            <div style={{ padding: 12, textAlign: "center" }}>
-              <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                No spans match the selected indicators.
-              </Text>
-            </div>
+            <EmptyState
+              bare
+              title="No spans match the selected indicators"
+              description="Enable more categories in the Indicators menu to reveal spans."
+            />
           ) : (
             rows.map(({ node, depth }) => (
               <WaterfallRow

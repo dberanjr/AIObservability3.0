@@ -12,7 +12,8 @@ import {
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useSampling } from "../../scope/SamplingContext";
 import { ErrorState } from "../../components/ErrorState";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
+import { useScanGroup, useScanScope } from "../../scope/ScanReportContext";
 import { useServiceModelDetail } from "./useServiceModelDetail";
 import { costTrioStats, isEstimatedCost } from "./serviceModelCost";
 
@@ -150,6 +151,10 @@ export const ServiceModelModal = ({
     service,
     rawModels,
   );
+  // Read the modal's own scan telemetry (its <ScanScope> is set by the heatmap
+  // at the render site) so a truncated detail scan surfaces the amber "Scan
+  // budget reached" empty rather than a misleading "no data" (STATE-4).
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
   const { upsertCondition } = useGlobalFilters();
   const { samplingRatio } = useSampling();
 
@@ -313,8 +318,12 @@ export const ServiceModelModal = ({
         ) : empty ? (
           <EmptyState
             bare
-            cause="no-activity"
-            title="No data for this service / model pair in the current scope."
+            cause={emptyCause({ error, limitHit })}
+            title={
+              limitHit
+                ? undefined
+                : "No data for this service / model pair in the current scope."
+            }
           />
         ) : (
           metrics &&
@@ -395,12 +404,12 @@ export const ServiceModelModal = ({
                   <Stat label="Latency p95" value={fmtMs(metrics.p95Ms)} />
                   <Stat
                     label="Tokens / req"
-                    value={fmtTokens(metrics.tokensPerReq)}
+                    value={fmtCount(metrics.tokensPerReq)}
                   />
-                  <Stat label="Total tokens in" value={fmtTokens(metrics.inTok)} />
+                  <Stat label="Total tokens in" value={fmtCount(metrics.inTok)} />
                   <Stat
                     label="Total tokens out"
-                    value={fmtTokens(metrics.outTok)}
+                    value={fmtCount(metrics.outTok)}
                   />
                 </StatGrid>
               </Section>

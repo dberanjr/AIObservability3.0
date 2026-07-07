@@ -1,5 +1,14 @@
-import type { SemanticStatus } from "../../theme/statusColor";
-import type { StatTileEmphasis } from "../../components/StatTile";
+import { statusFromThreshold } from "../../theme/statusColor";
+import type { SemanticStatus, Sev } from "../../theme/statusColor";
+import type { StatTileEmphasis, StatTileTone } from "../../components/StatTile";
+
+/**
+ * These fleet KPI tiles read as "quiet" (neutral, not a green "good") when
+ * healthy, so map the shared threshold scale's `ideal` step to neutral while
+ * `warning` / `critical` pass straight through.
+ */
+const sevToStatus = (sev: Sev): SemanticStatus =>
+  sev === "critical" ? "critical" : sev === "warning" ? "warning" : "neutral";
 
 /**
  * Severity classification for the Agents KPI tiles, extracted so the thresholds
@@ -14,23 +23,24 @@ import type { StatTileEmphasis } from "../../components/StatTile";
  * surfaced per-agent in the table, not in this fleet count.
  */
 export const slowTileStatus = (slowCount: number): SemanticStatus =>
-  slowCount > 0 ? "warning" : "neutral";
+  sevToStatus(statusFromThreshold(slowCount, { warn: 1, bad: Infinity }));
 
 /**
- * Fleet error-rate tile (percent): >5% critical, >1% warning, otherwise
- * neutral — mirroring the per-agent breakdown thresholds.
+ * Fleet error-rate tile (percent): >=5% critical, >=1% warning, otherwise
+ * neutral — mirroring the per-agent breakdown thresholds, now routed through
+ * the shared statusFromThreshold scale (so the boundary is inclusive).
  */
 export const errorTileStatus = (errorRatePct: number): SemanticStatus =>
-  errorRatePct > 5 ? "critical" : errorRatePct > 1 ? "warning" : "neutral";
+  sevToStatus(statusFromThreshold(errorRatePct, { warn: 1, bad: 5 }));
 
 /** "Looping agents" count tile: any detected loop is a warning. */
 export const loopingTileStatus = (loopingCount: number): SemanticStatus =>
-  loopingCount > 0 ? "warning" : "neutral";
+  sevToStatus(statusFromThreshold(loopingCount, { warn: 1, bad: Infinity }));
 
 /** "N+1 tool loops" (high tool frequency) count tile: any flagged agent is a
  *  warning. Same count-based shape as the looping tile. */
 export const highFreqTileStatus = (flaggedCount: number): SemanticStatus =>
-  flaggedCount > 0 ? "warning" : "neutral";
+  sevToStatus(statusFromThreshold(flaggedCount, { warn: 1, bad: Infinity }));
 
 /** Map a semantic status to the shared StatTile emphasis (color) enum. */
 export const statusToEmphasis = (s: SemanticStatus): StatTileEmphasis =>
@@ -41,3 +51,18 @@ export const statusToEmphasis = (s: SemanticStatus): StatTileEmphasis =>
       : s === "good"
         ? "green"
         : "default";
+
+/**
+ * Map a semantic status to the shared StatTile tone. Preferred over
+ * statusToEmphasis: the tone drives the value color via toneToColor
+ * (var(--status-*)), keeping the tile hue on the semantic status ramp instead
+ * of the decorative --amber/--red brand tokens (CONS-4).
+ */
+export const statusToTone = (s: SemanticStatus): StatTileTone =>
+  s === "critical"
+    ? "critical"
+    : s === "warning"
+      ? "warn"
+      : s === "good"
+        ? "good"
+        : "neutral";

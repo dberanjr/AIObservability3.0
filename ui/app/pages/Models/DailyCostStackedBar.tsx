@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtUSDCompact } from "../../data/format";
+import { fmtUSD, fmtUSDCompact } from "../../data/format";
 import { EmptyState } from "../../components/EmptyState";
 import { SR_ONLY } from "../../components/charts/AreaChart";
 import type { DailyCostSummary } from "./useFinOps";
@@ -102,12 +102,12 @@ export const DailyCostStackedBar = ({
     const stack = stacks[dayIdx];
     if (!stack) return "";
     const label = daily.dayLabels[dayIdx] ?? `Day ${dayIdx + 1}`;
-    const parts = [`${label}, total ${fmtUSDCompact(stack.total)}`];
+    const parts = [`${label}, total ${fmtUSD(stack.total)}`];
     stack.segments
       .filter((s) => s.value > 0)
       .sort((a, b) => b.value - a.value)
       .slice(0, 4)
-      .forEach((s) => parts.push(`${s.model} ${fmtUSDCompact(s.value)}`));
+      .forEach((s) => parts.push(`${s.model} ${fmtUSD(s.value)}`));
     return parts.join(", ");
   };
 
@@ -297,7 +297,7 @@ export const DailyCostStackedBar = ({
                     {hoverLabel}
                   </Text>
                   <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                    Total {fmtUSDCompact(hovered.total)}
+                    Total {fmtUSD(hovered.total)}
                   </Text>
                   {hovered.segments
                     .filter((s) => s.value > 0)
@@ -337,7 +337,7 @@ export const DailyCostStackedBar = ({
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
-                          {fmtUSDCompact(s.value)}
+                          {fmtUSD(s.value)}
                         </Text>
                       </Flex>
                     ))}

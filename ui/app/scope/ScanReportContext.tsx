@@ -24,6 +24,14 @@ export interface ScanEntry {
   executionMs: number;
   /** True when the query reached its scan-limit budget (results truncated). */
   limitHit: boolean;
+  /**
+   * Epoch ms this entry's result last changed. Stamped by the report dispatch
+   * when a genuinely new scan lands (preserved on an identical re-registration),
+   * so the status line can age "Last refreshed" to the OLDEST contributing query
+   * rather than a single roll-up timestamp (scan-8). Optional: the store fills it
+   * in, so reporters (useScopedDql) need not supply it.
+   */
+  refreshedAt?: number;
 }
 
 /** Aggregate of one or more scan entries (a group, or the whole page). */
@@ -34,6 +42,14 @@ export interface ScanAggregate {
   limitHit: boolean;
   /** How many DQL queries contributed. */
   queryCount: number;
+  /**
+   * Epoch ms of the OLDEST contributing query's last refresh (min refreshedAt
+   * across the deduplicated set), or null when no entry carries a timestamp.
+   * Lets the status line age "Last refreshed" to the stalest tile (scan-8).
+   */
+  oldestRefreshedAt?: number | null;
+  /** Group name of that oldest contributing query (null when ungrouped). */
+  oldestGroup?: string | null;
 }
 
 interface ScanReportDispatch {
@@ -75,9 +91,11 @@ export const ScanReportProvider = ({
             existing.executionMs === entry.executionMs &&
             existing.limitHit === entry.limitHit
           ) {
-            return prev; // no-op: identical entry
+            return prev; // no-op: identical entry — keep its original refreshedAt
           }
-          return { ...prev, [id]: entry };
+          // Genuinely new/changed result: stamp when it landed so the status line
+          // can rebase "Last refreshed" to the oldest contributing query (scan-8).
+          return { ...prev, [id]: { ...entry, refreshedAt: Date.now() } };
         }),
     };
   }
@@ -113,11 +131,24 @@ const aggregate = (list: ScanEntry[]): ScanAggregate => {
     if (!cur || e.scannedBytes > cur.scannedBytes) byQuery.set(e.query, e);
   }
   const uniq = [...byQuery.values()];
+  // Oldest contributing query drives the page's freshness (scan-8): one stale
+  // tile shouldn't hide behind a fresh aggregate.
+  let oldestRefreshedAt: number | null = null;
+  let oldestGroup: string | null = null;
+  for (const e of uniq) {
+    if (e.refreshedAt == null) continue;
+    if (oldestRefreshedAt == null || e.refreshedAt < oldestRefreshedAt) {
+      oldestRefreshedAt = e.refreshedAt;
+      oldestGroup = e.group;
+    }
+  }
   return {
     scannedBytes: uniq.reduce((a, e) => a + e.scannedBytes, 0),
     executionMs: uniq.reduce((a, e) => Math.max(a, e.executionMs), 0),
     limitHit: uniq.some((e) => e.limitHit),
     queryCount: uniq.length,
+    oldestRefreshedAt,
+    oldestGroup,
   };
 };
 

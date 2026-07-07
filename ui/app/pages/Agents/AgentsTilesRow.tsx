@@ -5,11 +5,7 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { StatTile } from "../../components/StatTile";
 import { ChartModal } from "../../components/charts/ChartExpander";
 import { fmtCount, fmtMs, fmtPercent, fmtUSDCompact } from "../../data/format";
-import {
-  STATUS_CUE,
-  statusColor,
-  type SemanticStatus,
-} from "../../theme/statusColor";
+import { type SemanticStatus } from "../../theme/statusColor";
 import { useEditLayout } from "../../layout/EditLayoutContext";
 import { CustomizableGrid, type GridTile } from "../Summary/CustomizableGrid";
 import { SLOW_P90_MS, HIGH_FREQUENCY_TOOL_THRESHOLD } from "./constants";
@@ -18,7 +14,7 @@ import {
   errorTileStatus,
   loopingTileStatus,
   highFreqTileStatus,
-  statusToEmphasis,
+  statusToTone,
 } from "./tileStatus";
 import { useAgentLoops } from "./useAgentLoops";
 import { useHighFrequencyAgentRows } from "./useHighFrequencyAgents";
@@ -50,27 +46,7 @@ type TileId =
 const GRID: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-  gap: 10,
-};
-
-// Redundant, non-color severity cue (glyph + word) rendered under a tile's
-// value so warning/critical tiles aren't distinguished by color alone. Renders
-// nothing for good/neutral/info so a healthy tile stays quiet.
-const StatusCue = ({ status }: { status: SemanticStatus }) => {
-  if (status !== "warning" && status !== "critical") return null;
-  const cue = STATUS_CUE[status];
-  return (
-    <Flex alignItems="center" gap={4} style={{ color: statusColor(status) }}>
-      <span aria-hidden style={{ fontSize: 9, lineHeight: 1 }}>
-        {cue.glyph}
-      </span>
-      <Text
-        style={{ fontSize: 10.5, fontWeight: 600, color: statusColor(status) }}
-      >
-        {cue.label}
-      </Text>
-    </Flex>
-  );
+  gap: "var(--d-gap)",
 };
 
 const MODAL_META: Record<TileId, { title: string; subtitle: string }> = {
@@ -123,7 +99,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
   const ttft = summarizeAgentTtft(agents);
 
   // Severity for the color-bearing tiles, classified once so the tile color
-  // (emphasis) and the non-color cue (glyph + word) always agree.
+  // (tone → var(--status-*)) and StatTile's non-color cue glyph always agree.
   const slowStatus = slowTileStatus(slow);
   const errStatus = errorTileStatus(errorRate);
   const loopStatus: SemanticStatus = loops.isLoading
@@ -205,13 +181,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           label="Slow agents"
           value={fmtCount(slow)}
           sub={`P90 > ${SLOW_P90_MS / 1000}s`}
-          emphasis={statusToEmphasis(slowStatus)}
+          tone={statusToTone(slowStatus)}
+          cue
           info={`Agents whose P90 latency exceeds ${SLOW_P90_MS / 1000}s. Click for the ranked list.`}
           onActivate={() => setOpen("slow")}
           actionLabel="Open Slow agents details"
-        >
-          <StatusCue status={slowStatus} />
-        </StatTile>
+        />
       ),
     },
     {
@@ -221,13 +196,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
         <StatTile
           label="Error rate"
           value={fmtPercent(errorRate)}
-          emphasis={statusToEmphasis(errStatus)}
+          tone={statusToTone(errStatus)}
+          cue
           info="Share of agent invocations that failed, including logical failures (refusals / content-filter) where emitted. Click for the per-agent breakdown."
           onActivate={() => setOpen("error")}
           actionLabel="Open Error rate details"
-        >
-          <StatusCue status={errStatus} />
-        </StatTile>
+        />
       ),
     },
     {
@@ -252,13 +226,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           label="Looping agents"
           value={loops.isLoading ? "…" : fmtCount(loops.loopingCount)}
           sub="with detected loops"
-          emphasis={statusToEmphasis(loopStatus)}
+          tone={statusToTone(loopStatus)}
+          cue
           info="Agents with at least one run flagged as looping by the revisit-ratio / step-depth heuristic. Click for the full loop table and LangGraph activity trend."
           onActivate={() => setOpen("looping")}
           actionLabel="Open Looping agents details"
-        >
-          <StatusCue status={loopStatus} />
-        </StatTile>
+        />
       ),
     },
     {
@@ -269,13 +242,12 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
           label="N+1 tool loops"
           value={highFreq.isLoading ? "…" : fmtCount(highFreqCount)}
           sub="agents · repeated tool"
-          emphasis={statusToEmphasis(highFreqStatus)}
+          tone={statusToTone(highFreqStatus)}
+          cue
           info={`Agents that called a single tool more than ${HIGH_FREQUENCY_TOOL_THRESHOLD}× within a run — the agent analogue of an N+1 query (retry storm / un-terminated tool loop). Click for the flagged agents and their busiest-tool counts.`}
           onActivate={() => setOpen("highfreq")}
           actionLabel="Open N+1 tool loops details"
-        >
-          <StatusCue status={highFreqStatus} />
-        </StatTile>
+        />
       ),
     },
   ];

@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtCount, fmtMs, fmtTokens, fmtUSD } from "../../data/format";
+import { fmtCount, fmtMs, fmtUSD } from "../../data/format";
 import {
   PROVIDER_COLOR,
   PROVIDER_DISPLAY,
@@ -11,8 +11,15 @@ import {
 import { median } from "./finopsLogic";
 import type { ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { SR_ONLY } from "../../components/charts/AreaChart";
+import { useScope } from "../../scope/ScopeContext";
+import { TIME_PRESETS } from "../../scope/types";
+import {
+  SCAN_LIMITS_GB,
+  SCAN_LIMIT_LABELS,
+  useScanLimit,
+} from "../../scope/ScanLimitContext";
 
 /**
  * Per-provider stroke dash pattern — a non-color identity channel so providers
@@ -150,12 +157,22 @@ const shortLabel = (model: string): string =>
 export interface ModelBubbleChartProps {
   models: ModelRow[];
   isLoading: boolean;
+  /** A model-query error, so the empty view distinguishes "failed" from "no
+   *  data" (STATE-2). */
+  error?: Error;
+  /** True when the model scan hit its scan-limit budget, so the empty view can
+   *  offer a "raise the scan limit" remedy (STATE-4/6). */
+  limitHit?: boolean;
 }
 
 export const ModelBubbleChart = ({
   models,
   isLoading,
+  error,
+  limitHit,
 }: ModelBubbleChartProps) => {
+  const { scope, setTimeframe } = useScope();
+  const { scanLimitGb, setScanLimit } = useScanLimit();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<ModelRow | null>(null);
@@ -312,6 +329,30 @@ export const ModelBubbleChart = ({
     return `Model cost-efficiency scatter, ${models.length} models. Top by spend — ${top}`;
   }, [models]);
 
+  // Empty-state classification + remedies wired to the real scope / scan-limit
+  // setters, so an empty chart never mislabels an error or a truncated scan as
+  // "no data" (STATE-2) and offers a one-click widen / raise (STATE-4/6).
+  const cause = emptyCause({ error, limitHit });
+  const tfOrder = TIME_PRESETS.map((p) => p.value);
+  const tfIdx = tfOrder.indexOf(scope.timeframe.from);
+  const nextTf =
+    tfIdx === -1
+      ? "now()-24h"
+      : tfIdx < tfOrder.length - 1
+        ? tfOrder[tfIdx + 1]
+        : null;
+  const widenTimeframe = nextTf ? () => setTimeframe({ from: nextTf }) : undefined;
+  const scanIdx = SCAN_LIMITS_GB.indexOf(scanLimitGb);
+  const nextScan =
+    scanIdx >= 0 && scanIdx < SCAN_LIMITS_GB.length - 1
+      ? SCAN_LIMITS_GB[scanIdx + 1]
+      : null;
+  const raiseScanLimit = nextScan != null ? () => setScanLimit(nextScan) : undefined;
+  const raiseScanLabel =
+    nextScan != null
+      ? `Raise scan limit to ${SCAN_LIMIT_LABELS[nextScan]}`
+      : "Scan limit at max";
+
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={12}>
@@ -326,12 +367,29 @@ export const ModelBubbleChart = ({
         {isLoading && points.length === 0 ? (
           <Skeleton style={{ height: VIEW_H, borderRadius: 8 }} />
         ) : points.length === 0 ? (
-          <EmptyState
-            bare
-            cause="no-activity"
-            title="No models in the current scope."
-            hint="gen_ai.request.model"
-          />
+          cause === "error" ? (
+            <EmptyState
+              bare
+              cause="error"
+              title="Couldn't load models"
+              description="The model query failed — see the error banner above. Retry once the cause is resolved."
+            />
+          ) : (
+            <EmptyState
+              bare
+              cause={cause}
+              title={
+                cause === "no-activity"
+                  ? "No models in the current scope."
+                  : undefined
+              }
+              hint={cause === "no-activity" ? "gen_ai.request.model" : undefined}
+              actions={[
+                { label: "Widen timeframe", onClick: widenTimeframe },
+                { label: raiseScanLabel, onClick: raiseScanLimit },
+              ]}
+            />
+          )
         ) : (
           <div style={{ position: "relative" }}>
             <svg
@@ -557,7 +615,7 @@ export const ModelBubbleChart = ({
                   </Text>
                   <Text style={{ fontSize: 11.5 }}>
                     {fmtCount(hovered.model.requests)} req ·{" "}
-                    {fmtTokens(
+                    {fmtCount(
                       hovered.model.inputTokens + hovered.model.outputTokens,
                     )}{" "}
                     tok

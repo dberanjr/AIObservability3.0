@@ -476,7 +476,7 @@ const AIServicesTableBody = ({
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {fmtTokens(Math.round(r.tokPerReq))}
+                {fmtCount(r.tokPerReq)}
               </Cell>
               <Cell
                 width={70}

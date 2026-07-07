@@ -7,6 +7,11 @@ import { useResolvedCounts } from "../scope/useResolvedCounts";
 import { PageScanReadout, PageScanTotal } from "../components/ScanDebug";
 import { SamplingBadge } from "../components/SamplingBadge";
 import { useScanTotal } from "../scope/ScanReportContext";
+import {
+  SCAN_LIMITS_GB,
+  SCAN_LIMIT_LABELS,
+  useScanLimit,
+} from "../scope/ScanLimitContext";
 import { useTweaks } from "../tweaks/TweaksContext";
 import { parseBuckets } from "../scope/queries";
 import { fmtSecs1 } from "../data/format";
@@ -30,6 +35,22 @@ const formatRelative = (ms: number): string => {
 
 const formatCount = (n: number | null): string => (n == null ? "—" : String(n));
 
+// Shared amber "partial data" chip styling — used by both the interactive
+// (button) and the ceiling (static) truncation indicators (scan-4).
+const TRUNC_CHIP_STYLE: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  fontSize: 10.5,
+  fontWeight: 600,
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid var(--amber)",
+  color: "var(--amber)",
+  background: "color-mix(in oklab, var(--amber) 12%, transparent)",
+  whiteSpace: "nowrap",
+};
+
 export const ResolutionStatusLine = () => {
   const counts = useResolvedCounts();
   const { pageConfig } = useTweaks();
@@ -38,6 +59,16 @@ export const ResolutionStatusLine = () => {
   // any query on the page hit its scan-limit budget, the results are partial and
   // the user must know before trusting the numbers.
   const scan = useScanTotal();
+  // scan-4: the truncation chip is a real control that raises the scan limit —
+  // wired to the SAME setter the toolbar ScanLimitSegmented selector uses — so a
+  // "partial data" warning is one click from being fixed. Offer the next tier up
+  // (unless already at the ceiling, where the fix is a narrower scope instead).
+  const { scanLimitGb, setScanLimit } = useScanLimit();
+  const scanLimitIdx = SCAN_LIMITS_GB.indexOf(scanLimitGb);
+  const nextScanGb =
+    scanLimitIdx >= 0 && scanLimitIdx < SCAN_LIMITS_GB.length - 1
+      ? SCAN_LIMITS_GB[scanLimitIdx + 1]
+      : null;
   // Buckets (DQL text) and segments (filterSegments request param) live on
   // different layers, so both apply (intersection) — surface a chip so the user
   // knows their bucket tweak isn't being overridden by the active segment.
@@ -58,10 +89,29 @@ export const ResolutionStatusLine = () => {
   }, []);
 
   const refreshing = counts.isFetching || counts.lastRefreshed == null;
-  const refreshAge = counts.lastRefreshed == null ? null : now - counts.lastRefreshed;
+  // scan-8: age "Last refreshed" to the OLDEST contributing query on the page
+  // (the stalest of the fleet-count roll-up and every per-tile scan timestamp),
+  // not just useResolvedCounts.lastRefreshed — otherwise one aging tile hides
+  // behind a freshly-recomputed aggregate.
+  const oldestQueryTs = scan?.oldestRefreshedAt ?? null;
+  const baseRefreshed = (() => {
+    const ts = [counts.lastRefreshed, oldestQueryTs].filter(
+      (t): t is number => t != null,
+    );
+    return ts.length > 0 ? Math.min(...ts) : null;
+  })();
+  const refreshAge = baseRefreshed == null ? null : now - baseRefreshed;
   const refreshedLabel = refreshing
     ? "refreshing..."
     : formatRelative(refreshAge ?? 0);
+  // Hover breakdown naming the stalest tile behind the aged timestamp (scan-8).
+  const oldestAge = oldestQueryTs == null ? null : now - oldestQueryTs;
+  const oldestBreakdown =
+    oldestAge == null
+      ? ""
+      : ` Oldest ${
+          scan?.oldestGroup ? `tile "${scan.oldestGroup}"` : "query"
+        }: ${formatRelative(oldestAge)}.`;
   // Escalate the freshness indicator once data ages past the staleness cutoff
   // (scan-8): the label turns amber so a "refreshed 8m ago" that's actually
   // serving stale cache reads as a caveat, not decoration.
@@ -119,27 +169,33 @@ export const ResolutionStatusLine = () => {
           Buckets + segment both active
         </span>
       )}
-      {scan?.limitHit && (
-        <span
-          role="status"
-          title="At least one query on this page reached its scan-limit budget, so some results are truncated and may undercount. Raise the scan limit in Tweaks, narrow the timeframe, or add a segment to see complete data."
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            fontSize: 10.5,
-            fontWeight: 600,
-            padding: "2px 8px",
-            borderRadius: 999,
-            border: "1px solid var(--amber)",
-            color: "var(--amber)",
-            background: "color-mix(in oklab, var(--amber) 12%, transparent)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <span aria-hidden>⚠</span> Partial data — scan limit hit
-        </span>
-      )}
+      {scan?.limitHit &&
+        (nextScanGb != null ? (
+          // scan-4: a real, keyboard-focusable control. `all: unset` strips the
+          // native button chrome (the global `button:focus-visible` rule in
+          // tokens.ts still paints the keyboard ring); click raises the scan
+          // limit via the shared setter.
+          <button
+            type="button"
+            onClick={() => setScanLimit(nextScanGb)}
+            aria-label={`Partial data — a query hit its ${SCAN_LIMIT_LABELS[scanLimitGb]} scan-limit budget. Raise the scan limit to ${SCAN_LIMIT_LABELS[nextScanGb]} to load complete data.`}
+            title={`At least one query on this page reached its ${SCAN_LIMIT_LABELS[scanLimitGb]} scan-limit budget, so some results are truncated and may undercount. Click to raise the scan limit to ${SCAN_LIMIT_LABELS[nextScanGb]} (or narrow the timeframe / add a segment).`}
+            style={{ all: "unset", ...TRUNC_CHIP_STYLE, cursor: "pointer" }}
+          >
+            <span aria-hidden>⚠</span> Partial data — scan limit hit
+            <span aria-hidden style={{ textDecoration: "underline" }}>
+              {" · "}Raise to {SCAN_LIMIT_LABELS[nextScanGb]}
+            </span>
+          </button>
+        ) : (
+          <span
+            role="status"
+            title={`At least one query on this page reached its ${SCAN_LIMIT_LABELS[scanLimitGb]} scan-limit budget (already the maximum), so some results are truncated. Narrow the timeframe or add a segment to see complete data.`}
+            style={TRUNC_CHIP_STYLE}
+          >
+            <span aria-hidden>⚠</span> Partial data — scan limit hit
+          </span>
+        ))}
       {/* scan-4/5/7: always-on, calm scan-cost + budget readout for everyone,
           independent of the scan-debug toggle. */}
       <PageScanReadout />
@@ -153,9 +209,10 @@ export const ResolutionStatusLine = () => {
           whiteSpace: "nowrap",
         }}
         title={
-          stale
+          (stale
             ? "This page hasn't refreshed in over 5 minutes — some tiles may be serving cached data. Change the timeframe or narrow scope to refresh."
-            : "When the fleet-wide counts last completed. The slowest query on this page is shown alongside."
+            : "When the page last refreshed, aged to the oldest tile on the page. The slowest query on this page is shown alongside.") +
+          oldestBreakdown
         }
       >
         Last refreshed {refreshedLabel}

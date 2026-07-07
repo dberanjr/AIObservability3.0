@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
+import { EmptyState } from "../../components/EmptyState";
 import { PageIntro } from "../../components/PageIntro";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
@@ -61,6 +63,7 @@ export const SummaryPage = () => {
   const summary = usePulseSummary();
   const posture = useFleetPosture();
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const navigate = useNavigate();
   // Layout customization is opt-in and driven by the global header "Customize"
   // toggle, so it's reachable from every page (SUM-4).
   const { editLayout } = useEditLayout();
@@ -72,6 +75,24 @@ export const SummaryPage = () => {
     summary.refetch();
     posture.refetch();
   };
+
+  // First-run / no-AI-telemetry gate (IA-7 + STATE-7). REUSES the two hero
+  // hooks already on the page — no extra scan — and only fires once BOTH have
+  // resolved with no error and every headline volume signal is genuinely empty
+  // (requests, tokens, models, services, agents) and no pillar scored. In that
+  // state the wall of em-dash tiles is noise, so we show ONE getting-started
+  // card instead. The strict "all empty" conjunction keeps a real-but-sparse
+  // fleet (any one signal present) on the normal grid.
+  const heroLoading = summary.isLoading || posture.isLoading;
+  const noTelemetry =
+    !heroLoading &&
+    !firstError &&
+    !(summary.requests && summary.requests > 0) &&
+    !(summary.tokens && summary.tokens > 0) &&
+    !(summary.models && summary.models > 0) &&
+    !(posture.serviceCount && posture.serviceCount > 0) &&
+    !(posture.agentCount && posture.agentCount > 0) &&
+    posture.trustIndex == null;
 
   // Each tile is wrapped once: ScanScope (attributes DQL scan cost to the tile)
   // → CollapsibleTile (tuck-away + lazy queries). The customizable grid then
@@ -135,38 +156,59 @@ export const SummaryPage = () => {
         />
         {firstError && <ErrorBanner error={firstError} onRetry={retryHero} />}
 
-        {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}
-        <ScanScope name="posture">
-          <PostureBand summary={summary} posture={posture} />
-        </ScanScope>
+        {noTelemetry ? (
+          // No AI telemetry anywhere in scope: a single getting-started state
+          // instead of a grid of empty tiles (IA-7 + STATE-7). Routes to the
+          // Attributes audit to see what's (not) being emitted; the timeframe
+          // control lives in the global header, called out in the hint.
+          <EmptyState
+            cause="no-instrumentation"
+            title="No AI telemetry yet"
+            description="Nothing in the current scope is emitting AI (gen_ai.*) spans, so there is no fleet scorecard to show. As soon as your services start sending AI spans, every tile here fills in automatically."
+            hint="Widen the timeframe with the control in the header, or open the Attributes audit to see exactly which AI attributes are (and aren't) arriving."
+            actions={[
+              {
+                label: "Open Attributes audit",
+                onClick: () => navigate("/attributes"),
+              },
+            ]}
+          />
+        ) : (
+          <>
+            {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}
+            <ScanScope name="posture">
+              <PostureBand summary={summary} posture={posture} />
+            </ScanScope>
 
-        {/* Value story — is it good, what does it cost, how efficient is it. */}
-        <Section
-          label="Quality, cost & efficiency"
-          hint={
-            editLayout
-              ? "Drag a tile's top strip to reorder, drag a corner to resize · Done editing to lock"
-              : "Trust, spend, and how much output each dollar buys"
-          }
-        >
-          <CustomizableGrid storageKey="quality2" columns={12} tiles={qualityTiles} editable={editLayout} />
-        </Section>
+            {/* Value story — is it good, what does it cost, how efficient is it. */}
+            <Section
+              label="Quality, cost & efficiency"
+              hint={
+                editLayout
+                  ? "Drag a tile's top strip to reorder, drag a corner to resize · Done editing to lock"
+                  : "Trust, spend, and how much output each dollar buys"
+              }
+            >
+              <CustomizableGrid storageKey="quality2" columns={12} tiles={qualityTiles} editable={editLayout} />
+            </Section>
 
-        {/* Operations — where latency, hidden failures, and load actually live. */}
-        <Section
-          label="Operations & activity"
-          hint="Latency, silent failures, cost drivers, and 24-hour load"
-        >
-          <CustomizableGrid storageKey="operations" columns={12} tiles={opsTiles} editable={editLayout} />
-        </Section>
+            {/* Operations — where latency, hidden failures, and load actually live. */}
+            <Section
+              label="Operations & activity"
+              hint="Latency, silent failures, cost drivers, and 24-hour load"
+            >
+              <CustomizableGrid storageKey="operations" columns={12} tiles={opsTiles} editable={editLayout} />
+            </Section>
 
-        {/* Signals — the detectors and findings that drive investigation. */}
-        <Section
-          label="Problem signals"
-          hint="Detector volume and the findings worth opening first"
-        >
-          <CustomizableGrid storageKey="signals" columns={12} tiles={signalTiles} editable={editLayout} />
-        </Section>
+            {/* Signals — the detectors and findings that drive investigation. */}
+            <Section
+              label="Problem signals"
+              hint="Detector volume and the findings worth opening first"
+            >
+              <CustomizableGrid storageKey="signals" columns={12} tiles={signalTiles} editable={editLayout} />
+            </Section>
+          </>
+        )}
       </Flex>
       </div>
       <FindingDrawer finding={selectedFinding} onDismiss={() => setSelectedFinding(null)} />

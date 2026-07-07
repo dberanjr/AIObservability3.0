@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { FindingCard } from "../../components/FindingCard";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { DEFAULT_FINDING_INTENTS, type Finding } from "../../components/drawers/types";
 import { fmtCount } from "../../data/format";
 import type { ModelRow } from "./useModels";
@@ -8,9 +8,20 @@ import type { ModelRow } from "./useModels";
 export interface ModelsFindingsProps {
   models: ModelRow[];
   onSelect: (finding: Finding) => void;
+  /** Model-query error, so an empty findings row reads as a failure rather than
+   *  "no data" (STATE-2). */
+  error?: Error;
+  /** True when the model scan hit its scan-limit budget, so an empty row can
+   *  surface the truncation instead of "no activity" (STATE-4). */
+  limitHit?: boolean;
 }
 
-export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
+export const ModelsFindings = ({
+  models,
+  onSelect,
+  error,
+  limitHit,
+}: ModelsFindingsProps) => {
   const findings = useMemo<Finding[]>(() => {
     if (models.length === 0) return [];
     const out: Finding[] = [];
@@ -75,11 +86,18 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
   }, [models]);
 
   if (findings.length === 0) {
+    // STATE-2/STATE-4: never let an errored or truncated model scan read as
+    // "no data" — classify from the real signals when the parent supplies them.
+    const cause = emptyCause({ error, limitHit });
     return (
       <EmptyState
         bare
-        cause="no-activity"
-        title="No model findings surfaced in the current scope."
+        cause={cause}
+        title={
+          cause === "no-activity"
+            ? "No model findings surfaced in the current scope."
+            : undefined
+        }
       />
     );
   }

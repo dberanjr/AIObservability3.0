@@ -14,9 +14,24 @@ import {
 } from "../../components/charts/ChartExpander";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
-import { EmptyState, emptyCause } from "../../components/EmptyState";
+import {
+  EmptyState,
+  emptyCause,
+  type EmptyStateAction,
+} from "../../components/EmptyState";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
+import { TIME_PRESETS } from "../../scope/types";
+import {
+  SCAN_LIMITS_GB,
+  SCAN_LIMIT_LABELS,
+  useScanLimit,
+} from "../../scope/ScanLimitContext";
+import {
+  ScanScope,
+  useScanGroup,
+  useScanScope,
+} from "../../scope/ScanReportContext";
 import { intervalPhraseFromMs } from "../../scope/chartInterval";
 import { costOf } from "../../data/pricing";
 import { usePersistedState } from "../../state/usePersistedState";
@@ -87,14 +102,43 @@ const buildAxisTicks = (
 
 const TokenConsumptionBody = () => {
   const result = useTokenConsumption();
-  const emptyKind = emptyCause({ error: result.error });
+  // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
+  // so a truncated scan surfaces the amber "Scan budget reached" empty rather
+  // than a misleading "no activity" (STATE-4).
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
+  const emptyKind = emptyCause({ error: result.error, limitHit });
   const [forecastEnabled, onToggleForecast] = usePersistedState<boolean>(
     "ai-obs.pulse.forecast-enabled",
     false,
   );
   const forecast = useTokenForecast(forecastEnabled);
-  const { setTimeframe } = useScope();
+  const { scope, setTimeframe } = useScope();
   const spend = useSpendBreakdown();
+  // Empty-state remedies wired to the real scope / scan-limit setters, so a
+  // scope-driven empty offers one-click widen / raise instead of inert prose
+  // (STATE-6). A truncated scan skips "widen" (that scans MORE); an error offers
+  // neither. Buttons disable themselves at the widest preset / max scan budget.
+  const { scanLimitGb, setScanLimit } = useScanLimit();
+  const tfOrder = TIME_PRESETS.map((p) => p.value);
+  const tfIdx = tfOrder.indexOf(scope.timeframe.from);
+  const nextTf =
+    tfIdx === -1 ? "now()-24h" : tfIdx < tfOrder.length - 1 ? tfOrder[tfIdx + 1] : null;
+  const widenTimeframe = nextTf ? () => setTimeframe({ from: nextTf }) : undefined;
+  const scanIdx = SCAN_LIMITS_GB.indexOf(scanLimitGb);
+  const nextScan =
+    scanIdx >= 0 && scanIdx < SCAN_LIMITS_GB.length - 1 ? SCAN_LIMITS_GB[scanIdx + 1] : null;
+  const raiseScanLimit = nextScan != null ? () => setScanLimit(nextScan) : undefined;
+  const raiseScanLabel =
+    nextScan != null ? `Raise scan limit to ${SCAN_LIMIT_LABELS[nextScan]}` : "Scan limit at max";
+  const remedyActions: EmptyStateAction[] =
+    emptyKind === "error"
+      ? []
+      : emptyKind === "truncated"
+        ? [{ label: raiseScanLabel, onClick: raiseScanLimit }]
+        : [
+            { label: "Widen timeframe", onClick: widenTimeframe },
+            { label: raiseScanLabel, onClick: raiseScanLimit },
+          ];
   const spendTotal = !spend.isLoading && spend.total > 0 ? spend.total : result.totalCost;
   // Reconcile the per-bucket cost to the ACTUAL fleet spend. The raw per-bucket
   // estCost is a blended estimate; scale it so the dashed cost line's total
@@ -276,6 +320,7 @@ const TokenConsumptionBody = () => {
                 : undefined
             }
             hint="gen_ai.usage.input_tokens · gen_ai.usage.output_tokens"
+            actions={remedyActions}
           />
         ) : (
           <AreaChart
@@ -331,6 +376,8 @@ export const TokenConsumptionChart = () => (
     info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; the dashed line is estimated cost on the right axis, reconciled to the actual fleet spend (distributed across intervals by token share, since exact per-model cost per interval needs a per-model time query). The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range; focus the chart and use arrow keys to read values."
     defaultOpen
   >
-    <TokenConsumptionBody />
+    <ScanScope name="Token consumption">
+      <TokenConsumptionBody />
+    </ScanScope>
   </CollapsibleCard>
 );

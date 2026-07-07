@@ -89,14 +89,22 @@ export const PulsePage = () => {
         <LatencyTierPanel />
         <TopFindingsStrip onSelect={setSelectedFinding} />
         <PlatformHealthCard />
-        <CapabilityGate id={["guardrails", "piiCategories"]}>
+        <CapabilityGate
+          id={["guardrails", "piiCategories"]}
+          label="Safety & guardrails — available with instrumentation"
+          hint="Emit gen_ai.*.guardrail_* and gen_ai.privacy.* to light up this panel."
+        >
           <SafetyPanel />
         </CapabilityGate>
         {/* AWS Bedrock guardrail metrics — real intervention data, independent
             of the span-based SafetyPanel capability above (guardrails emit no
             spans in this tenant). Has its own empty/loading/error states. */}
         <GuardrailsPanel />
-        <CapabilityGate id={["feedback", "promptVersion"]}>
+        <CapabilityGate
+          id={["feedback", "promptVersion"]}
+          label="Feedback & prompt versions — available with instrumentation"
+          hint="Emit gen_ai.feedback.* and gen_ai.prompt_hub.* to light up this panel."
+        >
           <FeedbackPanel />
         </CapabilityGate>
         <div

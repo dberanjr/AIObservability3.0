@@ -11,7 +11,7 @@ import {
   patternDisabledReason,
   patternStatus,
 } from "../../../data/ai-layer-patterns";
-import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDCompact } from "../../../data/format";
+import { fmtCount, fmtMs, fmtPercent, fmtUSD } from "../../../data/format";
 import { ARCH_COLORS, statusColor } from "./tokens";
 import { Spark } from "./Spark";
 import { FilterTrigger } from "../../../components/FilterTrigger";
@@ -136,8 +136,8 @@ const buildTrends = (series: TierSeries): TrendSpec[] => {
     { key: "throughput", title: "Throughput", data: series.throughput, color: ARCH_COLORS.core, format: fmtCount },
     { key: "latency", title: "Latency p90", data: series.latencyMs, color: "var(--blue)", format: fmtMs },
     { key: "errors", title: "Errors", data: series.errors, color: "var(--red)", format: fmtCount },
-    { key: "tokens", title: "Tokens", data: series.tokens, color: "var(--purple)", format: fmtTokens },
-    { key: "spend", title: "Spend", data: series.spendUsd, color: "var(--green-2)", format: fmtUSDCompact },
+    { key: "tokens", title: "Tokens", data: series.tokens, color: "var(--purple)", format: fmtCount },
+    { key: "spend", title: "Spend", data: series.spendUsd, color: "var(--green-2)", format: fmtUSD },
   ];
   return specs.filter(
     (s): s is TrendSpec => !!s.data && s.data.length >= 2 && s.data.some((v) => v > 0),

@@ -1,13 +1,8 @@
 import React from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
-import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtTokens } from "../../data/format";
-import {
-  statusColor,
-  STATUS_CUE,
-  type SemanticStatus,
-} from "../../theme/statusColor";
+import type { SemanticStatus } from "../../theme/statusColor";
+import { StatTile, type StatTileTone } from "../../components/StatTile";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import { useEditLayout } from "../../layout/EditLayoutContext";
@@ -17,106 +12,51 @@ import { isScopeFiltered } from "./filterScope";
 import { countSeverity } from "./promptCells";
 import type { PromptsFilter } from "./usePrompts";
 
+/** countSeverity's SemanticStatus → StatTile's tone vocabulary. countSeverity
+ *  only ever emits neutral / warning / critical; `good`/`info` are mapped too
+ *  so the type stays total. */
+const STATUS_TONE: Record<SemanticStatus, StatTileTone> = {
+  neutral: "neutral",
+  good: "good",
+  info: "neutral",
+  warning: "warn",
+  critical: "bad",
+};
+
 interface TileProps {
   label: string;
   value: string;
   sub?: string;
   /**
-   * Severity of the tile's value, routed through the shared statusColor +
-   * STATUS_CUE vocabulary so it is never encoded by color alone: a non-"neutral"
-   * status prints a small glyph cue (▲ warning / ⬤ critical) next to the value.
+   * Severity of the tile's value, routed through the shared status vocabulary
+   * so it is never encoded by color alone: a non-"neutral" status prints a
+   * small glyph cue (▲ warning / ⬤ critical) next to the value via StatTile.
    */
   status?: SemanticStatus;
+  /** One-line definition surfaced through StatTile's info tooltip (CONS-5). */
+  info?: React.ReactNode;
   /** When set, the tile becomes a toggle button that filters the list. */
   onClick?: () => void;
   active?: boolean;
 }
 
-const Tile = ({
-  label,
-  value,
-  sub,
-  status = "neutral",
-  onClick,
-  active,
-}: TileProps) => {
-  const interactive = !!onClick;
-  // Neutral keeps the full-strength text color; a real status tints the value
-  // AND is announced via the glyph's aria-label (non-color cue).
-  const valueColor = status === "neutral" ? "var(--text)" : statusColor(status);
+// Thin adapter over the shared StatTile (CONS-2 / IA-4) so the Prompts KPI row
+// no longer forks its own tile: tone + non-color cue glyph, the info tooltip,
+// and the click/toggle affordance all come from the one primitive.
+const Tile = ({ label, value, sub, status = "neutral", info, onClick, active }: TileProps) => {
+  const tone = STATUS_TONE[status];
   return (
-    <Surface elevation="raised" padding={0}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!interactive}
-        aria-pressed={interactive ? !!active : undefined}
-        title={interactive ? "Click to filter the list" : undefined}
-        // Shared clickable-tile class restores a keyboard :focus-visible ring
-        // (the `all: unset` reset strips the default outline) and the app-wide
-        // hover lift, matching every other clickable KPI tile.
-        className={interactive ? "aiobs-clickable-tile" : undefined}
-        style={{
-          all: "unset",
-          display: "block",
-          width: "100%",
-          boxSizing: "border-box",
-          padding: 12,
-          cursor: interactive ? "pointer" : "default",
-          borderRadius: 8,
-          outline: active ? "2px solid var(--blue)" : "none",
-          outlineOffset: -2,
-          background: active
-            ? "color-mix(in oklab, var(--blue) 8%, transparent)"
-            : "transparent",
-        }}
-      >
-        <Flex flexDirection="column" gap={4}>
-          <Text
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              color: "var(--text-3)",
-              minHeight: 28,
-              whiteSpace: "normal",
-              lineHeight: 1.2,
-            }}
-          >
-            {label}
-          </Text>
-          <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
-            {status !== "neutral" && (
-              <span
-                role="img"
-                aria-label={STATUS_CUE[status].label}
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1,
-                  color: valueColor,
-                  flex: "0 0 auto",
-                }}
-              >
-                {STATUS_CUE[status].glyph}
-              </span>
-            )}
-            <Text
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                color: valueColor,
-                fontVariantNumeric: "tabular-nums",
-                lineHeight: 1,
-              }}
-            >
-              {value}
-            </Text>
-          </Flex>
-          {sub && <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sub}</Text>}
-        </Flex>
-      </button>
-    </Surface>
+    <StatTile
+      label={label}
+      value={value}
+      sub={sub}
+      tone={tone}
+      cue={tone !== "neutral"}
+      info={info}
+      onClick={onClick}
+      active={active}
+      actionLabel={onClick ? "Click to filter the list" : undefined}
+    />
   );
 };
 
@@ -152,17 +92,12 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-          gap: 10,
-          padding: 16,
+          gap: "var(--d-gap)",
+          padding: "var(--d-gap)",
         }}
       >
         {Array.from({ length: 7 }).map((_, i) => (
-          <Surface key={i} elevation="raised" padding={12}>
-            <Flex flexDirection="column" gap={6}>
-              <Skeleton style={{ height: 12, width: "60%" }} />
-              <Skeleton style={{ height: 22, width: "80%" }} />
-            </Flex>
-          </Surface>
+          <StatTile key={i} loading label="" value="" />
         ))}
       </div>
     );
@@ -227,6 +162,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
           label="PII detected"
           value={fmtCount(summary.piiDetected)}
           status={countSeverity(summary.piiDetected)}
+          info="Prompts flagged as containing personally identifiable information (gen_ai.privacy.pii_detected = true)."
           sub="gen_ai.privacy.pii_detected"
           onClick={
             onFilterChange && filter
@@ -245,6 +181,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
           label="Warnings"
           value={fmtCount(summary.warnings)}
           status={countSeverity(summary.warnings)}
+          info="Prompts the provider returned a non-fatal warning for (gen_ai.response.warning = true)."
           onClick={
             onFilterChange && filter
               ? () =>
@@ -287,6 +224,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
           label="Truncated"
           value={fmtCount(summary.truncated)}
           status={countSeverity(summary.truncated)}
+          info="Responses cut off at the model's output-token limit (finish_reason = max_tokens)."
           sub="finish_reasons: max_tokens"
           onClick={
             onFilterChange && filter
@@ -305,7 +243,7 @@ const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProp
 
   return (
     <>
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: "var(--d-gap)" }}>
       <CustomizableGrid
         storageKey="prompts-kpis"
         columns={7}

@@ -4,7 +4,8 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
+import { useScanGroup, useScanScope } from "../../scope/ScanReportContext";
 import { TIER_COLORS } from "./constants";
 import {
   useLatencyDecomposition,
@@ -24,7 +25,14 @@ const TIER_COLOR: Record<LatencyTier, string> = {
 // when the section is expanded — CollapsibleCard renders children solely while
 // open, so a collapsed section issues no DQL.
 const LatencyTierBody = () => {
-  const { tiers, totalMs, dominant, isLoading } = useLatencyDecomposition();
+  const { tiers, totalMs, dominant, isLoading, error } =
+    useLatencyDecomposition();
+  // Classify the empty honestly: a query error must read as an error, and a
+  // scan capped at its budget as "truncated", not a false "no AI spans"
+  // (STATE-2 / STATE-4). limitHit is this tile's own scan-group truncation —
+  // the "Latency by tier" scope holds exactly this one query, so it's precise.
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
+  const emptyKind = emptyCause({ error, limitHit });
 
   return (
       <Flex flexDirection="column" gap={0}>
@@ -45,8 +53,12 @@ const LatencyTierBody = () => {
         ) : tiers.length === 0 ? (
           <EmptyState
             bare
-            cause="no-activity"
-            title="No AI spans in the current scope."
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No AI spans in the current scope."
+                : undefined
+            }
           />
         ) : (
           <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>

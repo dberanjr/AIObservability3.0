@@ -92,9 +92,17 @@ export const EfficiencyMixCard = () => {
                   size={12}
                 />
               </Flex>
-              <Text style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
-                {eff.outputPerDollar != null ? `${fmtCount(eff.outputPerDollar)}` : "—"}
-              </Text>
+              {/* Skeleton the figure while it loads instead of a bare em-dash,
+                  so the tile uses the same loading idiom as the gauge and the
+                  provider-mix half below (STATE-5). A genuine null (loaded, no
+                  priced output) still reads as "—". */}
+              {eff.isLoading && eff.outputPerDollar == null ? (
+                <Skeleton style={{ height: 24, width: 88, borderRadius: 6 }} />
+              ) : (
+                <Text style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+                  {eff.outputPerDollar != null ? `${fmtCount(eff.outputPerDollar)}` : "—"}
+                </Text>
+              )}
               <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
                 output tokens per dollar
               </Text>
@@ -141,7 +149,14 @@ export const EfficiencyMixCard = () => {
               description="No spans carried a gen_ai.provider.name for this timeframe and scope."
             />
           ) : (
-            <StackedBar segments={slices} height={16} />
+            <StackedBar
+              segments={slices}
+              height={16}
+              // Segment value is a request count (extrapolated for sampling) —
+              // round to a grouped integer with an explicit unit on hover
+              // instead of the raw fractional default.
+              formatValue={(seg) => `${fmtCount(seg.value)} req`}
+            />
           )}
         </Flex>
       </Flex>

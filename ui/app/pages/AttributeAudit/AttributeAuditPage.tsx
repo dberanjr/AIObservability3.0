@@ -16,6 +16,7 @@ import { useAttributeAudit, type AttrResult, type SectionResult } from "./useAtt
 import { useBucketDetection } from "./useBucketDetection";
 import { SectionCard, TierBadge, TIER_META } from "./SectionCard";
 import { AttributeDetailModal } from "./AttributeDetailModal";
+import { InstrumentationChecklist } from "./InstrumentationChecklist";
 import { coverageRampColor } from "./coverage";
 
 const timeframeLabel = (from: string, to?: string): string => {
@@ -1083,6 +1084,12 @@ export const AttributeAuditPage = () => {
                 the OpenTelemetry / OpenLLMetry conventions each attribute follows.
               </Text>
             </Surface>
+
+            {/* IA-8: centralized, prioritized instrumentation checklist. This is
+                the destination the per-page DataGapNote "Full instrumentation
+                checklist →" links resolve to (route /attributes; anchor
+                #instrumentation-checklist auto-expands + scrolls it). */}
+            <InstrumentationChecklist />
 
             {/* Community / emerging attribute discovery */}
             <div id="aaa-community">

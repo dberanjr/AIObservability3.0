@@ -2,11 +2,16 @@ import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtTokens } from "../../data/format";
+import { fmtCount, fmtTokens } from "../../data/format";
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { ErrorState } from "../../components/ErrorState";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
+import {
+  ScanScope,
+  useScanGroup,
+  useScanScope,
+} from "../../scope/ScanReportContext";
 import { useExplorerHeatmap } from "./useExplorerHeatmap";
 import { ServiceModelModal } from "./ServiceModelModal";
 
@@ -98,6 +103,10 @@ const HeatmapLegend = ({ values }: { values: number[] }) => {
 // issues no query.
 const ServiceModelHeatmapBody = () => {
   const result = useExplorerHeatmap();
+  // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>
+  // in ExplorerPage's ScanScopedTile) so a truncated scan surfaces the amber
+  // "Scan budget reached" empty rather than a misleading "no activity" (STATE-4).
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
   const [selected, setSelected] = React.useState<SelectedCell | null>(null);
 
   // Roving-tabindex position for the keyboard grid. Only ONE data cell is
@@ -280,8 +289,8 @@ const ServiceModelHeatmapBody = () => {
       ) : result.rows.length === 0 ? (
         <EmptyState
           bare
-          cause="no-activity"
-          title="No usage data in the current scope."
+          cause={emptyCause({ error: result.error, limitHit })}
+          title={limitHit ? undefined : "No usage data in the current scope."}
           hint="gen_ai.usage.input_tokens · gen_ai.usage.output_tokens"
         />
       ) : (
@@ -446,9 +455,9 @@ const ServiceModelHeatmapBody = () => {
                       aria-label={
                         zero
                           ? `${row.service}, ${col.model}: no usage`
-                          : `${row.service}, ${col.model}: ${fmtTokens(
+                          : `${row.service}, ${col.model}: ${fmtCount(
                               tokens,
-                            )} tokens, ${cell?.requests ?? 0} requests. Press Enter for detail.`
+                            )} tokens, ${fmtCount(cell?.requests ?? 0)} requests. Press Enter for detail.`
                       }
                       onClick={
                         zero
@@ -470,7 +479,7 @@ const ServiceModelHeatmapBody = () => {
                       }
                       title={
                         cell
-                          ? `${row.service} · ${col.model}: ${fmtTokens(tokens)} tokens (${cell.requests} req)`
+                          ? `${row.service} · ${col.model}: ${fmtCount(tokens)} tokens (${fmtCount(cell.requests)} req)`
                           : `${row.service} · ${col.model}: 0`
                       }
                       style={{
@@ -530,12 +539,16 @@ const ServiceModelHeatmapBody = () => {
       )}
     </Flex>
     {selected && (
-      <ServiceModelModal
-        service={selected.service}
-        rawModels={selected.rawModels}
-        modelLabel={selected.modelLabel}
-        onClose={() => setSelected(null)}
-      />
+      // Own scan group so the modal's detail query drives ITS truncated-empty
+      // signal, isolated from the heatmap's own scan (STATE-4).
+      <ScanScope name="Service / model detail">
+        <ServiceModelModal
+          service={selected.service}
+          rawModels={selected.rawModels}
+          modelLabel={selected.modelLabel}
+          onClose={() => setSelected(null)}
+        />
+      </ScanScope>
     )}
     </>
   );

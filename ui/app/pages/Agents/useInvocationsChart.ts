@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useScanLimit } from "../../scope/ScanLimitContext";
+import { readScanMeta } from "../../scope/ScanReportContext";
 import {
   canQueryScope,
   useResolvedServices,
@@ -93,6 +95,12 @@ export interface InvocationsChartModel {
   intervalPhrase: string;
   isLoading: boolean;
   isEmpty: boolean;
+  /** Underlying series-query error, surfaced so the chart can show a real
+   *  error empty-state instead of a false "no activity". */
+  error?: Error;
+  /** True when the series query reached its scan-limit budget (partial data),
+   *  so the empty-state can nudge "raise the scan limit". */
+  limitHit: boolean;
   forecastLoading: boolean;
   forecastError?: Error;
 }
@@ -110,6 +118,7 @@ export const useInvocationsChart = (
   forecastEnabled: boolean,
 ): InvocationsChartModel => {
   const { scope } = useScope();
+  const { scanLimitGb } = useScanLimit();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
 
@@ -234,6 +243,8 @@ export const useInvocationsChart = (
     intervalPhrase: phrase,
     isLoading: series.isLoading,
     isEmpty: !series.isLoading && histLen === 0,
+    error: series.error ?? undefined,
+    limitHit: readScanMeta(series, scanLimitGb)?.limitHit ?? false,
     forecastLoading: forecast.isLoading,
     forecastError: forecast.error,
   };

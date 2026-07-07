@@ -85,7 +85,18 @@ export const ModelsFinOpsSections = ({
         </Flex>
       </CollapsibleSection>
 
-      <CapabilityGate id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}>
+      <CapabilityGate
+        id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}
+        label="Prompt cache & reported cost — available with instrumentation"
+        hint={
+          <>
+            Emit <code>gen_ai.usage.cached_tokens</code>,{" "}
+            <code>cache_creation_input_tokens</code>, or{" "}
+            <code>gen_ai.usage.cost</code> to surface prompt-cache hit rate and
+            provider-reported spend here.
+          </>
+        }
+      >
         <CollapsibleSection
           title="Prompt cache & reported cost"
           subtitle="auto-detected"

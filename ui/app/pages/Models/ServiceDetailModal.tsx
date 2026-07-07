@@ -64,7 +64,7 @@ export const ServiceDetailModal = ({
         label: m.model,
         value: m.cost,
         displayValue: fmtUSD(m.cost),
-        secondary: `${fmtTokens(m.tokens)} tok · ${fmtCount(m.requests)} calls`,
+        secondary: `${fmtCount(m.tokens)} tok · ${fmtCount(m.requests)} calls`,
       })),
     [service.models],
   );

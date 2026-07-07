@@ -3,7 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../components/charts/Sparkline";
-import { InfoTooltip } from "../components/InfoTooltip";
+import { MiniStat } from "../components/MiniStat";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { fmtCount, fmtPercent, fmtMs } from "../data/format";
@@ -17,55 +17,6 @@ export const GUARDRAIL_TONE_COLOR: Record<GuardrailTone, string> = {
   watch: "var(--amber)",
   high: "var(--red)",
 };
-
-const MiniStat = ({
-  label,
-  value,
-  sub,
-  mono,
-  info,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  mono?: boolean;
-  info?: string;
-}) => (
-  <Flex flexDirection="column" gap={2} style={{ minWidth: 0 }}>
-    <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
-      <Text
-        style={{
-          fontSize: 9.5,
-          fontWeight: 600,
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          color: "var(--text-3)",
-        }}
-      >
-        {label}
-      </Text>
-      {info && <InfoTooltip text={info} size={12} />}
-    </Flex>
-    <Text
-      style={{
-        fontSize: 14,
-        fontWeight: 700,
-        fontVariantNumeric: "tabular-nums",
-        fontFamily: mono ? "var(--mono, monospace)" : undefined,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-      }}
-    >
-      {value}
-    </Text>
-    {sub && (
-      <Text style={{ fontSize: 9.5, color: "var(--text-3)", whiteSpace: "nowrap" }}>
-        {sub}
-      </Text>
-    )}
-  </Flex>
-);
 
 /**
  * Summary front-door guardrails tile: the fleet intervention rate (blocked ÷
@@ -134,7 +85,6 @@ export const GuardrailsSummaryCard = () => {
                 label="Top blocker"
                 value={g.fleet.topIntervening.guardrailId}
                 sub={`${fmtCount(g.fleet.topIntervening.intervened)} blocked`}
-                mono
                 info="The guardrail with the most interventions in the window; the sub-count is how many invocations it blocked."
               />
             )}

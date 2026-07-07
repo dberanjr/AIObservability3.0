@@ -17,7 +17,7 @@ import {
   MaximizeIcon,
   ImageIcon,
 } from "@dynatrace/strato-icons";
-import { fmtTokens, fmtMs } from "../../data/format";
+import { fmtTokens, fmtMs, fmtCount } from "../../data/format";
 import { costOf } from "../../data/pricing";
 import { fmtCentsCost } from "./promptCells";
 import {
@@ -608,7 +608,7 @@ const TopologyGraph = ({
                 return (
                   <div
                     key={n.key}
-                    title={`${n.label}${n.isError ? " · errored" : ""} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCentsCost(n.cost)}`}
+                    title={`${n.label}${n.isError ? " · errored" : ""} · ${fmtCount(n.count)} span${n.count === 1 ? "" : "s"} · ${fmtCount(n.inTok)} in / ${fmtCount(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCentsCost(n.cost)}`}
                     aria-label={n.isError ? `${n.label} (errored)` : n.label}
                     style={{ position: "absolute", left: n.x - n.r, top: n.y - n.r, width: d, height: d }}
                   >

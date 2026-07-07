@@ -63,6 +63,10 @@ const lightSurfaces = {
   "--text-3": "#67655b",
   "--text-4": "#77756b",
   "--intel-soft": brand.intelSoftLight,
+  // Accessible amber for tiny (10-11px) status badges. brand.amber (#B45F06)
+  // dips to ~4.34:1 on white / ~4.2:1 on --bg-app, so it is darkened for light
+  // mode: #a35405 clears 4.5:1 on both (~5.5:1 on white, ~4.8:1 on --bg-app).
+  "--amber-strong": "#a35405",
 };
 
 const darkSurfaces = {
@@ -79,6 +83,11 @@ const darkSurfaces = {
   "--text-3": "#96938d",
   "--text-4": "#807f77",
   "--intel-soft": brand.intelSoftDark,
+  // Accessible amber for tiny (10-11px) status badges. brand.amber (#B45F06)
+  // only reaches ~4.27:1 on --surface, so it is brightened for dark mode:
+  // #cc7008 clears 4.5:1 across the dark surfaces (~5.2:1 on --surface,
+  // ~4.7:1 on the lightest --surface-3).
+  "--amber-strong": "#cc7008",
 };
 
 const brandVars = {
@@ -94,6 +103,29 @@ const brandVars = {
   "--pink": brand.pink,
   "--amber": brand.amber,
   "--red": brand.red,
+};
+
+/**
+ * Semantic status tokens — the single palette source for severity across the
+ * app (see theme/statusColor.ts, which maps STATUS_COLOR / toneToColor onto
+ * these). Values come from Strato's Colors.Charts.Status.*.Default so severity
+ * stays in lockstep with the chart status ramp (chartPalette above) and adapts
+ * with the Strato theme at runtime. Distinct from --red/--amber/--green-2,
+ * which remain free for non-severity decoration.
+ */
+const statusVars = {
+  "--status-critical": Colors.Charts.Status.Critical.Default,
+  "--status-warning": Colors.Charts.Status.Warning.Default,
+  "--status-ideal": Colors.Charts.Status.Ideal.Default,
+};
+
+/**
+ * Shared eyebrow (section-label / KPI-label) typography tokens so every tile
+ * and section header renders its uppercase eyebrow identically.
+ */
+const eyebrow = {
+  "--eyebrow-size": "11px",
+  "--eyebrow-spacing": "0.06em",
 };
 
 const density = {
@@ -149,6 +181,8 @@ const accentForegroundCss = Object.entries(ACCENT_HEX)
 export const themeCss = `
 :root {
 ${toBlock(brandVars)}
+${toBlock(statusVars)}
+${toBlock(eyebrow)}
 ${toBlock(density)}
 ${toBlock(radii)}
   /* Default foreground for marks sitting on the accent fill; per-accent

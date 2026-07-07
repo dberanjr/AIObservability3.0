@@ -24,7 +24,11 @@ interface GridLayout {
   sizes: Record<string, TileSize>;
 }
 
-const GAP = 16;
+// Grid gutter from the shared density token (theme/tokens.ts --d-gap). GAP is
+// the numeric mirror that drives the pointer→column resize math; GAP_CSS is the
+// token the grid actually renders with, so both stay in lockstep (CONS-8).
+const GAP = 14;
+const GAP_CSS = "var(--d-gap, 14px)";
 const MIN_HEIGHT = 120;
 
 /** Columns actually rendered at a given container width (responsive step-down). */
@@ -201,7 +205,7 @@ export const CustomizableGrid = ({
           display: "grid",
           gridTemplateColumns: `repeat(${effCols}, minmax(0, 1fr))`,
           gridAutoFlow: "row dense",
-          gap: GAP,
+          gap: GAP_CSS,
           alignItems: "stretch",
         }}
       >

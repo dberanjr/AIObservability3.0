@@ -71,7 +71,7 @@ const MetricTrend = ({
         labels={trend.labels}
         color={color}
         height={24}
-        valueFormatter={(n) => `${Math.round(n)}%`}
+        valueFormatter={(n) => fmtPercent(n, 0)}
         ariaLabel={`${metric} over scored spans in view`}
       />
     </Flex>

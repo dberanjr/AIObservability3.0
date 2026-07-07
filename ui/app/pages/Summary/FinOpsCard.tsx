@@ -3,7 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
-import { fmtUSDCompact } from "../../data/format";
+import { fmtUSD, fmtUSDCompact } from "../../data/format";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
 import { SummaryCard } from "./SummaryCard";
@@ -92,7 +92,7 @@ const StackedDailyBars = ({
                 return (
                   <div
                     key={s.model}
-                    title={`${s.model} · ${daily.dayLabels[dayIdx] ?? ""}: ${fmtUSDCompact(v)} (${share.toFixed(1)}%)`}
+                    title={`${s.model} · ${daily.dayLabels[dayIdx] ?? ""}: ${fmtUSD(v)} (${share.toFixed(1)}%)`}
                     style={{
                       height: `${share}%`,
                       background: colorFor(i),
@@ -129,7 +129,7 @@ const StackedDailyBars = ({
             </span>
             {" · "}
             <span style={{ fontWeight: 600 }}>
-              {fmtUSDCompact(daily.totals[hoverIdx])}
+              {fmtUSD(daily.totals[hoverIdx])}
             </span>
           </div>
         )}
@@ -155,7 +155,7 @@ export const FinOpsCard = () => {
     key: s.key,
     label: s.label,
     value: s.cost,
-    displayValue: fmtUSDCompact(s.cost),
+    displayValue: fmtUSD(s.cost),
     secondary: `${s.sharePct.toFixed(1)}% of spend`,
     filter:
       s.key === "__others__"

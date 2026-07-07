@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { FindingCard } from "../../components/FindingCard";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import {
   DEFAULT_FINDING_INTENTS,
   type Finding,
@@ -118,11 +118,20 @@ export const FinOpsFindings = ({
   }, [data, models]);
 
   if (findings.length === 0) {
+    // STATE-2: a failed FinOps query must read as an error, not "no data". The
+    // spend/service data flows in via `data`, which carries the query error.
+    // (useFinOps doesn't expose a scan-limit signal, so STATE-4/truncated stays
+    // a page-level concern — see the scan footer.)
+    const cause = emptyCause({ error: data.error });
     return (
       <EmptyState
         bare
-        cause="no-activity"
-        title="No FinOps findings surfaced in the current scope."
+        cause={cause}
+        title={
+          cause === "no-activity"
+            ? "No FinOps findings surfaced in the current scope."
+            : undefined
+        }
       />
     );
   }

@@ -14,7 +14,7 @@ import {
 } from "../../detection/attributes";
 import type { ModelRow } from "./useModels";
 import { ModelDetailModal } from "./ModelDetailModal";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 
 const Panel = ({
   title,
@@ -43,11 +43,19 @@ const Panel = ({
 export interface ModelsSidePanelsProps {
   models: ModelRow[];
   isLoading: boolean;
+  /** Model-query error, so an empty panel reads as a failure rather than "no
+   *  data" (STATE-2). */
+  error?: Error;
+  /** True when the model scan hit its scan-limit budget, so an empty panel can
+   *  surface the truncation instead of "no activity" (STATE-4). */
+  limitHit?: boolean;
 }
 
 export const ModelsSidePanels = ({
   models,
   isLoading,
+  error,
+  limitHit,
 }: ModelsSidePanelsProps) => {
   const [selected, setSelected] = useState<ModelRow | null>(null);
   const topSpenders = useMemo<BarListItem[]>(
@@ -60,7 +68,7 @@ export const ModelsSidePanels = ({
           label: m.model,
           value: m.cost,
           displayValue: fmtUSD(m.cost),
-          secondary: `${m.provider.label} · ${m.requests.toLocaleString()} req`,
+          secondary: `${m.provider.label} · ${fmtCount(m.requests)} req`,
         })),
     [models],
   );
@@ -85,6 +93,10 @@ export const ModelsSidePanels = ({
 
   const totalRequests = models.reduce((acc, m) => acc + m.requests, 0);
 
+  // STATE-2/STATE-4: shared empty-state cause for both panels below — an
+  // errored or truncated model scan must not masquerade as "no data".
+  const cause = emptyCause({ error, limitHit });
+
   return (
     <Flex flexDirection="column" gap={16}>
       <Panel
@@ -100,9 +112,13 @@ export const ModelsSidePanels = ({
         ) : topSpenders.length === 0 ? (
           <EmptyState
             bare
-            cause="no-activity"
-            title="No priced models in the current scope."
-            hint="gen_ai.request.model"
+            cause={cause}
+            title={
+              cause === "no-activity"
+                ? "No priced models in the current scope."
+                : undefined
+            }
+            hint={cause === "no-activity" ? "gen_ai.request.model" : undefined}
           />
         ) : (
           <BarList
@@ -125,9 +141,13 @@ export const ModelsSidePanels = ({
         ) : providerShares.length === 0 ? (
           <EmptyState
             bare
-            cause="no-activity"
-            title="No provider data in the current scope."
-            hint="gen_ai.provider.name"
+            cause={cause}
+            title={
+              cause === "no-activity"
+                ? "No provider data in the current scope."
+                : undefined
+            }
+            hint={cause === "no-activity" ? "gen_ai.provider.name" : undefined}
           />
         ) : (
           <Donut

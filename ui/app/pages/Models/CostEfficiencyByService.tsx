@@ -4,7 +4,7 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList } from "../../components/charts/BarList";
 import type { BarListItem } from "../../components/charts/BarList";
-import { fmtUSD, fmtTokens, fmtCount } from "../../data/format";
+import { fmtUSD, fmtCount } from "../../data/format";
 import {
   statusColor,
   STATUS_CUE,
@@ -53,7 +53,7 @@ export const CostEfficiencyByService = ({
           label: s.service,
           value: s.costPerRequest,
           displayValue: `${cue}${fmtUSD(s.costPerRequest)}/call`,
-          secondary: `${fmtTokens(s.tokensPerRequest)} tok/call · ${s.topModel ?? "model unknown"} · ${fmtCount(s.requests)} calls`,
+          secondary: `${fmtCount(s.tokensPerRequest)} tok/call · ${s.topModel ?? "model unknown"} · ${fmtCount(s.requests)} calls`,
         };
       });
     return { items, fleetMedian, statusByKey };

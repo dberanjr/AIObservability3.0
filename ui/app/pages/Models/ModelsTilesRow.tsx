@@ -23,7 +23,7 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: 10,
+          gap: "var(--d-gap, 14px)",
         }}
       >
         {Array.from({ length: 6 }).map((_, i) => (
@@ -86,6 +86,7 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
           value={cheapest ? fmtUSD(cheapest.costPerMTok) : "—"}
           sub={cheapest?.model}
           emphasis={cheapest ? "green" : "default"}
+          info="Lowest blended cost per 1M tokens among priced models in the current scope (named below)."
         />
       ),
     },
@@ -98,6 +99,7 @@ export const ModelsTilesRow = ({ models, isLoading }: ModelsTilesRowProps) => {
           value={mostExpensive ? fmtUSD(mostExpensive.costPerMTok) : "—"}
           sub={mostExpensive?.model}
           emphasis={mostExpensive ? "red" : "default"}
+          info="Highest blended cost per 1M tokens among priced models in the current scope (named below)."
         />
       ),
     },
