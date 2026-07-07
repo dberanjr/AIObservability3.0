@@ -35,26 +35,35 @@ type SortKey =
 interface ColDef {
   id: string;
   label: string;
-  width?: number;
+  /** CSS grid track size for this column. */
+  track: string;
   align?: "left" | "right";
   /** When set, the header is a sort toggle over this key. */
   sortKey?: SortKey;
 }
 
+// One column template drives the header AND every row (via CSS grid) so columns
+// line up perfectly regardless of content. Service is the single flexible track
+// (minmax → never crushed below a readable width); everything else is fixed.
 const COLS: ColDef[] = [
-  { id: "status", label: "", width: 24 },
-  { id: "service", label: "Service", sortKey: "service" },
-  { id: "framework", label: "Framework", width: 120, sortKey: "framework" },
-  { id: "models", label: "Models", width: 220 },
-  { id: "req", label: "LLM req", width: 80, align: "right", sortKey: "req" },
-  { id: "tokens", label: "Tokens", width: 90, align: "right", sortKey: "tokens" },
-  { id: "cost", label: "Est. cost", width: 96, align: "right", sortKey: "cost" },
-  { id: "tokPerReq", label: "Tok/req", width: 90, align: "right", sortKey: "tokPerReq" },
-  { id: "agents", label: "Agents", width: 70, align: "right", sortKey: "agents" },
-  { id: "errors", label: "Errors", width: 90, align: "right", sortKey: "errors" },
-  { id: "logical", label: "Logical err", width: 100, align: "right", sortKey: "logical" },
-  { id: "drill", label: "", width: 24 },
+  { id: "status", label: "", track: "28px" },
+  { id: "service", label: "Service", track: "minmax(180px, 2fr)", sortKey: "service" },
+  { id: "framework", label: "Framework", track: "120px", sortKey: "framework" },
+  { id: "models", label: "Models", track: "220px" },
+  { id: "req", label: "LLM req", track: "88px", align: "right", sortKey: "req" },
+  { id: "tokens", label: "Tokens", track: "96px", align: "right", sortKey: "tokens" },
+  { id: "cost", label: "Est. cost", track: "104px", align: "right", sortKey: "cost" },
+  { id: "tokPerReq", label: "Tok/req", track: "92px", align: "right", sortKey: "tokPerReq" },
+  { id: "agents", label: "Agents", track: "76px", align: "right", sortKey: "agents" },
+  { id: "errors", label: "Errors", track: "132px", align: "right", sortKey: "errors" },
+  { id: "logical", label: "Logical err", track: "108px", align: "right", sortKey: "logical" },
+  { id: "drill", label: "", track: "28px" },
 ];
+
+const GRID_TEMPLATE = COLS.map((c) => c.track).join(" ");
+// Sum of the fixed tracks + Service's minimum. Below this the table scrolls
+// horizontally instead of crushing the Service name to a single character.
+const MIN_W = 1272;
 
 /** String keys default to ascending; numeric keys to descending on first click. */
 const STRING_KEYS: ReadonlySet<SortKey> = new Set(["service", "framework"]);
@@ -112,8 +121,7 @@ const HeaderCell = ({
     : undefined;
 
   const base: React.CSSProperties = {
-    flex: col.width ? "0 0 auto" : 1,
-    width: col.width,
+    minWidth: 0,
     textAlign: col.align,
     fontSize: 10.5,
     fontWeight: 600,
@@ -121,6 +129,10 @@ const HeaderCell = ({
     textTransform: "uppercase",
     color: active ? "var(--text-2)" : "var(--text-3)",
     padding: "8px 6px",
+    // Right-aligned numeric headers: keep the label + sort caret flush right.
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   };
 
   if (!col.sortKey) {
@@ -162,19 +174,17 @@ const HeaderCell = ({
 
 const Cell = ({
   children,
-  width,
   align,
   style,
 }: {
   children: React.ReactNode;
+  /** Legacy prop — column widths are now driven by the shared grid template. */
   width?: number;
   align?: "left" | "right";
   style?: React.CSSProperties;
 }) => (
   <div
     style={{
-      flex: width ? "0 0 auto" : 1,
-      width,
       minWidth: 0,
       textAlign: align,
       padding: "8px 6px",
@@ -360,9 +370,16 @@ const AIServicesTableBody = ({
 
   return (
     <Flex flexDirection="column" gap={0} role="table" aria-label="AI services">
+     <div style={{ overflowX: "auto" }}>
+      <div style={{ minWidth: MIN_W }}>
       <div
         role="row"
-        style={{ display: "flex", alignItems: "center", padding: "0 10px" }}
+        style={{
+          display: "grid",
+          gridTemplateColumns: GRID_TEMPLATE,
+          alignItems: "center",
+          padding: "0 10px",
+        }}
       >
         {COLS.map((c) => (
           <HeaderCell key={c.id} col={c} sort={sort} onSort={onSort} />
@@ -396,7 +413,8 @@ const AIServicesTableBody = ({
                 }
               }}
               style={{
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: GRID_TEMPLATE,
                 alignItems: "center",
                 padding: "0 10px",
                 borderTop: "1px solid var(--border)",
@@ -545,6 +563,8 @@ const AIServicesTableBody = ({
           ))}
         </Flex>
       )}
+      </div>
+     </div>
 
       {truncated && rows.length > 0 && (
         <Flex
