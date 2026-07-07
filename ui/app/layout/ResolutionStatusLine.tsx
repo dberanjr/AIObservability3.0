@@ -143,7 +143,7 @@ export const ResolutionStatusLine = () => {
       {/* scan-4/5/7: always-on, calm scan-cost + budget readout for everyone,
           independent of the scan-debug toggle. */}
       <PageScanReadout />
-      {/* Verbose engineer diagnostic — still gated behind showScanDebug. */}
+      {/* Verbose engineer diagnostic — still gated on the scanStats tweak (tiles mode). */}
       <PageScanTotal />
       <Text
         style={{

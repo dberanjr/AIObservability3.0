@@ -8,6 +8,7 @@ import {
   type ChartLabels,
   type ChartStyle,
   type ColorBlindFilter,
+  type ScanStatsMode,
   type Theme,
   type ToolsMode,
 } from "./TweaksContext";
@@ -283,6 +284,11 @@ const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
   { value: "off", label: "Off" },
   { value: "on", label: "On" },
 ];
+const SCAN_STATS_OPTIONS: SegmentOption<ScanStatsMode>[] = [
+  { value: "off", label: "off" },
+  { value: "totals", label: "totals" },
+  { value: "tiles", label: "tiles & totals" },
+];
 
 export const TweaksPanel = () => {
   const t = useTweaks();
@@ -500,17 +506,19 @@ export const TweaksPanel = () => {
               </Text>
             </Flex>
             <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Scanned-data debug</FieldLabel>
+              <FieldLabel>Scanned-data stats</FieldLabel>
               <Segmented
-                ariaLabel="Scanned-data debug"
-                options={ON_OFF_OPTIONS}
-                value={t.pageConfig.showScanDebug ? "on" : "off"}
-                onChange={(v) => t.setShowScanDebug(v === "on")}
+                ariaLabel="Scanned-data stats"
+                options={SCAN_STATS_OPTIONS}
+                value={t.pageConfig.scanStats}
+                onChange={t.setScanStats}
               />
               <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-                Annotate each data element with the bytes Grail scanned and the
-                query response time, and total the scan across the page in the
-                footer. A diagnostic aid — off by default.
+                <strong>Off</strong> hides scan stats.{" "}
+                <strong>Totals</strong> shows the page-wide bytes-scanned /
+                budget readout in the footer. <strong>Tiles &amp; totals</strong>{" "}
+                adds per-element scan pills (bytes + response time) for
+                pinpointing expensive queries.
               </Text>
             </Flex>
             <Flex flexDirection="column" gap={6}>

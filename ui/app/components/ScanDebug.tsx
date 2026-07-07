@@ -40,9 +40,9 @@ export const neonPill = (size: number): React.CSSProperties => ({
  * left of "Last refreshed". Only when the debug toggle is on.
  */
 export const PageScanTotal = () => {
-  const { showScanDebug } = useTweaks().pageConfig;
+  const { scanStats } = useTweaks().pageConfig;
   const total = useScanTotal();
-  if (!showScanDebug || !total) return null;
+  if (scanStats !== "tiles" || !total) return null;
   const q = total.queryCount;
   return (
     <span
@@ -60,16 +60,17 @@ export const PageScanTotal = () => {
  * MINIMAL ALWAYS-ON scan-cost readout for the status line (scan-4/5/7): scanned
  * bytes, the scanned-vs-budget ratio, and the query count — phrased for a normal
  * user, in calm Strato text tokens (NOT the dev-only neon pill, which stays
- * gated behind showScanDebug). The page budget is the per-fetch scan limit times
+ * gated on scanStats=tiles). The page budget is the per-fetch scan limit times
  * the query count (each query carries the same cap). Neutral by default; the
  * scanned value turns amber when a query truncated (limitHit) and the percentage
  * turns amber as it approaches the budget, so the everyday number itself signals
  * fidelity. Renders nothing until the first query lands.
  */
 export const PageScanReadout = () => {
+  const { scanStats } = useTweaks().pageConfig;
   const total = useScanTotal();
   const { scanLimitGb } = useScanLimit();
-  if (!total || total.queryCount === 0) return null;
+  if (scanStats === "off" || !total || total.queryCount === 0) return null;
 
   const q = total.queryCount;
   const fraction = scanBudgetFraction(total.scannedBytes, scanLimitGb, q);

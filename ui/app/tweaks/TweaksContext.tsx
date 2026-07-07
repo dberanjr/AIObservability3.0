@@ -96,11 +96,12 @@ export interface PageConfig {
   /** App-wide: how aggressively to cap the global filter's trace-id set. */
   traceMatchCap: TraceMatchCap;
   /**
-   * App-wide: surface per-query scan diagnostics (bytes scanned + response
-   * time) next to each data element, plus a page-wide scan total. Off by
-   * default — it's a debugging aid, not a default view.
+   * App-wide: how much scan-cost telemetry to surface.
+   *   "off"    — nothing.
+   *   "totals" — the calm page-wide scanned / budget readout in the footer.
+   *   "tiles"  — the totals PLUS per-tile scan pills and the verbose page pill.
    */
-  showScanDebug: boolean;
+  scanStats: ScanStatsMode;
   /**
    * App-wide: when enabled, restrict every span query to the named Grail
    * buckets (OR) to prune scan cost by not scanning the default span bucket.
@@ -110,6 +111,9 @@ export interface PageConfig {
   bucketFilterEnabled: boolean;
   bucketFilterText: string;
 }
+
+/** How much scan-cost telemetry the Tweaks panel surfaces (see PageConfig). */
+export type ScanStatsMode = "off" | "totals" | "tiles";
 
 export interface TweaksState {
   theme: Theme;
@@ -140,7 +144,7 @@ export const DEFAULT_TWEAKS: TweaksState = {
     showExampleData: false,
     showRawModels: false,
     traceMatchCap: "balanced",
-    showScanDebug: false,
+    scanStats: "totals",
     bucketFilterEnabled: false,
     bucketFilterText: "",
   },
@@ -159,7 +163,7 @@ export interface TweaksContextValue extends TweaksState {
   setShowExampleData: (v: boolean) => void;
   setShowRawModels: (v: boolean) => void;
   setTraceMatchCap: (v: TraceMatchCap) => void;
-  setShowScanDebug: (v: boolean) => void;
+  setScanStats: (v: ScanStatsMode) => void;
   setBucketFilterEnabled: (v: boolean) => void;
   setBucketFilterText: (v: string) => void;
   resetTweaks: () => void;
@@ -250,7 +254,7 @@ export const TweaksProvider = ({
       setShowExampleData: mergePage("showExampleData"),
       setShowRawModels: mergePage("showRawModels"),
       setTraceMatchCap: mergePage("traceMatchCap"),
-      setShowScanDebug: mergePage("showScanDebug"),
+      setScanStats: mergePage("scanStats"),
       setBucketFilterEnabled: mergePage("bucketFilterEnabled"),
       setBucketFilterText: mergePage("bucketFilterText"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),

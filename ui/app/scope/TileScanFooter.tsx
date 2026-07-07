@@ -26,15 +26,16 @@ export const TileScanFooter = ({
   group: string | null;
   opts?: TileScanOpts;
 }) => {
-  const { showScanDebug } = useTweaks().pageConfig;
+  const { scanStats } = useTweaks().pageConfig;
+  const tiles = scanStats === "tiles";
   const entries = useScanEntries();
   const report = useMemo(
     () => computeTileReport(entries, group, opts),
     [entries, group, opts],
   );
 
-  const showBadge = showScanDebug && report.owned != null;
-  const showInherit = showScanDebug && report.inheritedFrom.length > 0;
+  const showBadge = tiles && report.owned != null;
+  const showInherit = tiles && report.inheritedFrom.length > 0;
   if (!report.limitHit && !showBadge && !showInherit) return null;
 
   const q = report.owned?.queryCount ?? 0;

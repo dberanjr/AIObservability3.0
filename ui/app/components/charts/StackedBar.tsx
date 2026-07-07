@@ -20,6 +20,9 @@ export interface StackedBarProps {
   height?: number;
   /** Format a segment's share for its legend (default: one-decimal percent). */
   formatShare?: (pct: number, seg: StackedSegment) => string;
+  /** Format a segment's raw value for the hover tooltip (default: grouped
+   *  integer). Pass a unit-aware formatter (e.g. fmtUSD / fmtTokens). */
+  formatValue?: (seg: StackedSegment) => string;
 }
 
 /**
@@ -33,6 +36,7 @@ export const StackedBar = ({
   segments,
   height = 14,
   formatShare = (pct) => `${pct.toFixed(1)}%`,
+  formatValue = (s) => s.value.toLocaleString("en-US"),
 }: StackedBarProps) => {
   const total = segments.reduce((a, s) => a + s.value, 0);
   const shareOf = (s: StackedSegment) => (total > 0 ? (s.value / total) * 100 : 0);
@@ -55,7 +59,7 @@ export const StackedBar = ({
           return (
             <div
               key={s.key}
-              title={`${s.label}: ${formatShare(pct, s)}`}
+              title={`${s.label}: ${formatValue(s)} · ${formatShare(pct, s)}`}
               style={{ width: `${pct}%`, minWidth: 2, background: s.color }}
             />
           );

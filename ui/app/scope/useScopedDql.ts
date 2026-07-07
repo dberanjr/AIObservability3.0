@@ -190,7 +190,7 @@ export function useScopedDql<T = ResultRecord>(
   // cheap (the metadata rides along on the response we already have) — so the
   // footer can warn about truncated / partial results app-wide, not only when
   // the scan-debug toggle is on. The verbose per-tile badges and the neon page
-  // pill still gate their DISPLAY on showScanDebug (see TileScanFooter /
+  // pill still gate their DISPLAY on the scanStats tweak (see TileScanFooter /
   // PageScanTotal); this only ungates the underlying signal.
   const report = useScanReporter();
   const group = useScanScope();
