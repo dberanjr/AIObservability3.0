@@ -46,7 +46,15 @@ export const UpstreamServicesModal = ({
   const closeBtnRef = React.useRef<HTMLButtonElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useModalA11y(dialogRef, onClose, {
+  // Reset the spotlight selection whenever the modal closes, so a stale id
+  // (e.g. from a caller that scrolled out of scope) can't persist into the
+  // next open and dim everything before any data has loaded.
+  const handleClose = () => {
+    setSelectedId(null);
+    onClose();
+  };
+
+  useModalA11y(dialogRef, handleClose, {
     initialFocusRef: closeBtnRef,
     active: open,
   });
@@ -62,7 +70,7 @@ export const UpstreamServicesModal = ({
       role="dialog"
       aria-modal
       aria-label="Upstream services"
-      onClick={onClose}
+      onClick={handleClose}
       style={{
         position: "fixed",
         inset: 0,
@@ -112,7 +120,7 @@ export const UpstreamServicesModal = ({
             ref={closeBtnRef}
             type="button"
             aria-label="Close"
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               all: "unset",
               cursor: "pointer",

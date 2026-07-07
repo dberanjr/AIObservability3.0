@@ -192,6 +192,13 @@ const numericCellStyle: React.CSSProperties = {
   fontVariantNumeric: "tabular-nums",
 };
 
+/** `fmtCount` rounds to the nearest whole number, which would render a real
+ *  but low-volume caller (e.g. 0.02/min) as a misleading "0/min". Render a
+ *  positive-but-sub-1 rate with one decimal place instead so traffic never
+ *  disappears into a false zero. */
+const fmtThroughput = (perMin: number): string =>
+  perMin > 0 && perMin < 1 ? perMin.toFixed(1) : fmtCount(perMin);
+
 export interface UpstreamGoldenSignalsTableProps {
   callers: UpstreamCaller[];
   selectedId: string | null;
@@ -299,7 +306,7 @@ export const UpstreamGoldenSignalsTable = ({
                       {fmtMs(c.p95Ms)}
                     </Cell>
                     <Cell align="right" style={numericCellStyle}>
-                      {fmtCount(c.throughputPerMin)}/min
+                      {fmtThroughput(c.throughputPerMin)}/min
                     </Cell>
                     <Cell align="right" style={numericCellStyle}>
                       {fmtCount(c.aiServiceIds.length)}

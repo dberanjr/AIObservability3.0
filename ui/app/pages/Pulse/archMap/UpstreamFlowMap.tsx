@@ -132,7 +132,7 @@ const ChipGroup = ({ label, items }: { label: string; items: string[] }) => {
         ))}
         {overflow > 0 && (
           <span style={{ fontSize: 10.5, color: "var(--text-3)", alignSelf: "center" }}>
-            +{overflow}
+            +{fmtCount(overflow)}
           </span>
         )}
       </div>
@@ -302,7 +302,11 @@ export const UpstreamFlowMap = ({ graph, selectedId, onSelect }: UpstreamFlowMap
     () => (selectedId ? (graph.callers.find((c) => c.id === selectedId) ?? null) : null),
     [graph.callers, selectedId],
   );
-  const spotlighting = selectedId != null;
+  // Based on the RESOLVED caller, not the raw selectedId — a stale id that
+  // no longer matches any caller in the current data (selection persisted
+  // across a modal close/reopen, or a timeframe/scope change) must not dim
+  // every node.
+  const spotlighting = selected != null;
   const reachableServiceIds = useMemo(
     () => new Set(selected ? selected.aiServiceIds : []),
     [selected],

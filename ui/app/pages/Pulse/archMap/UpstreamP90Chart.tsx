@@ -81,10 +81,15 @@ export const UpstreamP90Chart = ({
     return callers.filter((c) => !visibleIds.has(c.id));
   }, [callers, visibleCallers]);
 
+  // Only fade when the selected caller actually exists among `callers` — a
+  // stale selectedId (persisted across modal close/reopen, or a
+  // timeframe/scope change that dropped the caller) must not fade every line.
+  const hasSelection = selectedId != null && callers.some((c) => c.id === selectedId);
+
   const series: AreaSeries[] = useMemo(() => {
     const out: AreaSeries[] = visibleCallers.map((c, i) => {
       const baseColor = CATEGORICAL[i % CATEGORICAL.length];
-      const faded = selectedId != null && c.id !== selectedId;
+      const faded = hasSelection && c.id !== selectedId;
       return {
         label: c.name,
         values: toMsSeries(p90Series.get(c.id) ?? []),
@@ -101,7 +106,7 @@ export const UpstreamP90Chart = ({
       });
     }
     return out;
-  }, [visibleCallers, others, p90Series, selectedId]);
+  }, [visibleCallers, others, p90Series, selectedId, hasSelection]);
 
   return (
     <Flex flexDirection="column" gap={8}>

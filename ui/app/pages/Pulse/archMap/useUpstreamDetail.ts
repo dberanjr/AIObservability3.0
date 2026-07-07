@@ -71,6 +71,27 @@ interface CompRec {
 
 const EMPTY_GRAPH: UpstreamGraph = { callers: [], services: [], edges: [] };
 
+/**
+ * Relative-time x-axis labels ("just now" / "Xm ago" / "Xh ago" / "Xd ago")
+ * for the P90-over-time chart. Replicates the historical-position formatting
+ * of `buildLabels` in TokenConsumptionChart.tsx (that helper isn't exported,
+ * and this hook has no forecast concept, so only the historical half is
+ * needed here) — bucket `i` is `totalMs - i * intervalMs` ago, with the
+ * newest bucket last.
+ */
+const buildRelativeLabels = (bucketCount: number, intervalMs: number): string[] => {
+  const totalMs = bucketCount * intervalMs;
+  const out: string[] = [];
+  for (let i = 0; i < bucketCount; i++) {
+    const agoMs = totalMs - i * intervalMs;
+    if (agoMs < 60_000) out.push("just now");
+    else if (agoMs < 3_600_000) out.push(`${Math.round(agoMs / 60_000)}m ago`);
+    else if (agoMs < 86_400_000) out.push(`${Math.round(agoMs / 3_600_000)}h ago`);
+    else out.push(`${Math.round(agoMs / 86_400_000)}d ago`);
+  }
+  return out;
+};
+
 export const useUpstreamDetail = (enabled: boolean): UpstreamDetail => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
@@ -145,6 +166,14 @@ export const useUpstreamDetail = (enabled: boolean): UpstreamDetail => {
     [scope.timeframe.from],
   );
 
+  // Window span in ms, same parseScopeMs basis as windowMinutes above, so the
+  // P90 chart's x-axis labels and the golden-signals throughput figure agree
+  // on the length of the scope window.
+  const windowMs = useMemo(
+    () => Math.max(1, parseScopeMs(scope.timeframe.from)),
+    [scope.timeframe.from],
+  );
+
   return useMemo<UpstreamDetail>(() => {
     const graph =
       aiServiceIds.length === 0
@@ -170,9 +199,19 @@ export const useUpstreamDetail = (enabled: boolean): UpstreamDetail => {
     // NB: the p90 makeTimeseries is grouped `by: { svcId }`, so there's no
     // single shared `timeframe`/`interval` record to derive x-axis labels
     // from the way usePulseSeries does (its bucket helpers are also private,
-    // unexported) — leaving this empty per the task brief; the chart (a
-    // later task) degrades gracefully without labels.
-    const labels: string[] = [];
+    // unexported). Instead, derive the bucket count from any non-empty
+    // per-caller p90 series (every caller shares the same bucket count from
+    // the underlying makeTimeseries) and spread the scope window evenly
+    // across them.
+    let bucketCount = 0;
+    for (const series of p90Series.values()) {
+      if (series.length > 0) {
+        bucketCount = series.length;
+        break;
+      }
+    }
+    const labels: string[] =
+      bucketCount > 0 ? buildRelativeLabels(bucketCount, windowMs / bucketCount) : [];
 
     return {
       graph,
@@ -210,6 +249,7 @@ export const useUpstreamDetail = (enabled: boolean): UpstreamDetail => {
     idsResult.isLoading,
     idsResult.error,
     windowMinutes,
+    windowMs,
     limitHit,
   ]);
 };
