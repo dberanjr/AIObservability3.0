@@ -323,33 +323,13 @@ const TokenConsumptionBody = () => {
             actions={remedyActions}
           />
         ) : (
-          <AreaChart
-            height={220}
-            ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost (reconciled to actual spend) on the right axis`}
-            formatLeft={(n) => fmtTokens(n)}
-            formatRight={(n) => fmtUSDCompact(n)}
-            rightAxisFromLeftMax={tokensToCost}
-            xLabels={xLabels}
-            axisTicks={axisTicks}
-            forecasts={forecastBands}
-            xDomain={xDomain}
-            onBrushSelect={(range) => setTimeframe(range)}
-            series={[
-              {
-                label: "Tokens",
-                color: "var(--blue)",
-                values: tokensCombined,
-                axis: "left",
-              },
-              {
-                label: "Est. cost",
-                color: "var(--purple)",
-                values: costsCombined,
-                axis: "right",
-                dashed: true,
-              },
-            ]}
-          />
+          // Render the inline chart through the SAME builder as the expanded
+          // modal so the two can't drift. (Previously the inline copy passed
+          // rightAxisFromLeftMax={tokensToCost}, which inflated the right-axis
+          // max to a blended null-model cost far above the actual per-bucket
+          // estCost, squashing the dashed cost line flat onto the x-axis so it
+          // appeared to vanish inline while rendering fine when expanded.)
+          chart(220)
         )}
 
         {forecastEnabled && forecast.error && (
