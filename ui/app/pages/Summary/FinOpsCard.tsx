@@ -88,11 +88,13 @@ const StackedDailyBars = ({
               {daily.series.map((s, i) => {
                 const v = s.values[dayIdx] ?? 0;
                 if (v <= 0) return null;
+                const share = total > 0 ? (v / total) * 100 : 0;
                 return (
                   <div
                     key={s.model}
+                    title={`${s.model} · ${daily.dayLabels[dayIdx] ?? ""}: ${fmtUSDCompact(v)} (${share.toFixed(1)}%)`}
                     style={{
-                      height: `${(v / total) * 100}%`,
+                      height: `${share}%`,
                       background: colorFor(i),
                     }}
                   />
