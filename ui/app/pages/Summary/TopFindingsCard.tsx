@@ -46,6 +46,7 @@ export const TopFindingsCard = ({
   return (
     <SummaryCard
       title="Top findings"
+      info="Threshold-detected anomalies — the same findings Pulse surfaces, each tagged with its architecture layer, showing the top 6 by the detectors' ranking. This reflects the detectors' instrumented inputs; an empty list is not a guaranteed all-clear. Click a card to open the shared finding drawer (drill-outs to Traces / Services / Problems / contributing prompts)."
       drill={{ label: "Pulse", to: "/pulse" }}
       headerRight={<IntelBadge />}
     >

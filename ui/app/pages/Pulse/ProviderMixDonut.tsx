@@ -6,7 +6,7 @@ import { Donut } from "../../components/charts/Donut";
 import type { DonutSlice } from "../../components/charts/Donut";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { EmptyState, emptyCause } from "../../components/EmptyState";
-import { fmtCountCompact } from "../../data/format";
+import { fmtCount, fmtCountCompact } from "../../data/format";
 import { useProviderMix } from "./useProviderMix";
 
 const ProviderMixBody = () => {
@@ -51,6 +51,7 @@ const ProviderMixBody = () => {
             slices={slices}
             centerValue={fmtCountCompact(result.totalRequests)}
             centerLabel="requests"
+            valueFormatter={(n) => `${fmtCount(n)} req`}
           />
         )}
 

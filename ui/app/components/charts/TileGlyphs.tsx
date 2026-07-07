@@ -358,6 +358,9 @@ export interface MiniScaleProps {
    *  --blue sequential ramp (magnitude, not a red/green good-vs-bad judgment). */
   gradient?: string;
   height?: number;
+  /** Pre-formatted value (with unit) surfaced as a native `title` on hover, so
+   *  the marker's underlying number is reachable by hovering the scale. */
+  valueLabel?: string;
 }
 
 /**
@@ -376,13 +379,17 @@ export const MiniScale = ({
   ticks,
   gradient = "linear-gradient(90deg, color-mix(in oklab, var(--blue) 12%, transparent), var(--blue))",
   height = 8,
+  valueLabel,
 }: MiniScaleProps) => {
   const span = Math.max(1e-9, max - min);
   const frac = Math.max(0, Math.min(1, (value - min) / span));
   const dotSize = 10;
 
   return (
-    <div style={{ position: "relative", width: "100%", paddingTop: dotSize / 2 }}>
+    <div
+      title={valueLabel}
+      style={{ position: "relative", width: "100%", paddingTop: dotSize / 2 }}
+    >
       <div
         style={{
           height,

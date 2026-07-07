@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { StackedBar, type StackedSegment } from "../../components/charts/StackedBar";
 import { MiniPartialDonut } from "../../components/charts/TileGlyphs";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { fmtCount } from "../../data/format";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
@@ -30,7 +31,11 @@ export const EfficiencyMixCard = () => {
   }));
 
   return (
-    <SummaryCard title="Efficiency & mix" drill={{ label: "Models", to: "/models" }}>
+    <SummaryCard
+      title="Efficiency & mix"
+      info="Two views. Left: the token-efficiency score (a composite gauge — see its own tooltip) with output tokens per dollar = total output tokens ÷ total cost, each model priced at its own rate, embedding/rerank models excluded. Right: provider mix = share of requests by gen_ai.provider.name, extrapolated for sampling, with Bedrock-proxied vendors unwrapped to the real vendor."
+      drill={{ label: "Models", to: "/models" }}
+    >
       {/* Two segmented halves: the efficiency gauge up top, the provider-mix
           donut centered in the space that remains below a hairline divider —
           so the tile reads as two deliberate blocks rather than a gauge with a
@@ -60,21 +65,33 @@ export const EfficiencyMixCard = () => {
                   centerValue={eff.score != null ? String(Math.round(eff.score)) : "—"}
                   ariaLabel={`Token-efficiency score ${eff.score != null ? Math.round(eff.score) : "unavailable"} of 100`}
                 />
-                <Text style={{ fontSize: 9.5, color: "var(--text-3)" }}>score / 100</Text>
+                <Flex alignItems="center" gap={4}>
+                  <Text style={{ fontSize: 9.5, color: "var(--text-3)" }}>score / 100</Text>
+                  <InfoTooltip
+                    text="Token-efficiency score, 0–100 = 100 × (0.5 × leverage + 0.3 × completion + 0.2 × throughput). Leverage = output ÷ (input + output) tokens; completion = 1 − truncation rate; throughput = min(1, output tokens/sec ÷ 60 target). Embedding/rerank models are excluded. This measures cost/throughput efficiency, not answer quality."
+                    size={12}
+                  />
+                </Flex>
               </Flex>
             )}
             <Flex flexDirection="column" gap={4}>
-              <Text
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  letterSpacing: "0.05em",
-                  textTransform: "uppercase",
-                  color: "var(--text-3)",
-                }}
-              >
-                Token efficiency
-              </Text>
+              <Flex alignItems="center" gap={4}>
+                <Text
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                    color: "var(--text-3)",
+                  }}
+                >
+                  Token efficiency
+                </Text>
+                <InfoTooltip
+                  text="Output tokens produced per US dollar = total output tokens ÷ total cost, with each model priced at its own per-token rate. Embedding/rerank models are excluded (they emit no output tokens). Higher means more generated text per dollar spent."
+                  size={12}
+                />
+              </Flex>
               <Text style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
                 {eff.outputPerDollar != null ? `${fmtCount(eff.outputPerDollar)}` : "—"}
               </Text>
@@ -96,17 +113,23 @@ export const EfficiencyMixCard = () => {
             borderTop: "1px solid var(--border)",
           }}
         >
-          <Text
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              color: "var(--text-3)",
-            }}
-          >
-            Provider mix
-          </Text>
+          <Flex alignItems="center" gap={4}>
+            <Text
+              style={{
+                fontSize: 10.5,
+                fontWeight: 600,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                color: "var(--text-3)",
+              }}
+            >
+              Provider mix
+            </Text>
+            <InfoTooltip
+              text="Share of requests by provider = each provider's request count ÷ total requests (gen_ai.provider.name), extrapolated for sampling. Bedrock-proxied vendors are unwrapped to the real vendor and flagged 'Bedrock proxy'. Each segment click-filters to that provider."
+              size={12}
+            />
+          </Flex>
           {mix.isLoading && slices.length === 0 ? (
             <Skeleton style={{ height: 120, borderRadius: 8 }} />
           ) : mix.error ? (

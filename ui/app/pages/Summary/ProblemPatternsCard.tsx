@@ -182,6 +182,7 @@ export const ProblemPatternsCard = () => {
   return (
     <SummaryCard
       title="Problem patterns"
+      info="Every architecture problem-pattern detector, ranked by match volume. Same-span detectors (▪) count matching spans in one scan built from the shared FOCUS_PREDICATES; cross-span detectors (◆) run their own trace resolvers and count resolved traces (capped at 2000, shown as N+). Same-span counts are extrapolated for sampling; cross-span and proxy '≈' counts are floors, not extrapolated. Bar length = count ÷ the largest count. Click a row to drive the board (drills to Prompts with that detector's focus)."
       subtitle={`${patterns.length || 11} detectors · ranked by match volume · click to drive the board`}
       drill={{ label: "Prompts", to: "/prompts" }}
       headerRight={

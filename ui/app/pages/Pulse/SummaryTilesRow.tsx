@@ -1055,6 +1055,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
               min={0}
               max={costScaleMax}
               ticks={[costScaleMax / 2]}
+              valueLabel={`${fmtUSD(costPerReq)} / request`}
             />
           ) : null
         }

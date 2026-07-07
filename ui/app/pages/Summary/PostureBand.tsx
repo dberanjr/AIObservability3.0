@@ -3,6 +3,7 @@ import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../../components/charts/Sparkline";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { MiniPartialDonut } from "../../components/charts/TileGlyphs";
 import {
   fmtCount,
@@ -105,6 +106,7 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
         <Text style={labelStyle}>{pillar.label}</Text>
         <div
           aria-hidden
+          title={`${pillar.label}: not measured`}
           style={{
             flex: 1,
             minWidth: 0,
@@ -134,6 +136,7 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
     <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
       <Text style={labelStyle}>{pillar.label}</Text>
       <div
+        title={`${pillar.label}: ${Math.round(pillar.score as number)}/100 (${pillar.status})`}
         style={{
           flex: 1,
           minWidth: 0,
@@ -197,6 +200,8 @@ const PillarBar = ({ pillar }: { pillar: Pillar }) => {
 
 interface KpiTileProps {
   label: string;
+  /** One-line, plain-language definition shown via an info icon by the label. */
+  info?: string;
   value: string;
   /** Show a skeleton in place of the value while the tile's data loads, so the
    *  hero uses the same loading idiom as the cards — no bare "…" (SUM-10). */
@@ -223,6 +228,7 @@ interface KpiTileProps {
 
 const KpiTile = ({
   label,
+  info,
   value,
   loading,
   sub,
@@ -262,20 +268,24 @@ const KpiTile = ({
       }}
     >
       <Flex alignItems="center" gap={6} justifyContent="space-between" style={{ minWidth: 0 }}>
-        <Text
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            color: risk ? "var(--red)" : "var(--text-3)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {label}
-        </Text>
+        <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
+          <Text
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: risk ? "var(--red)" : "var(--text-3)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              minWidth: 0,
+            }}
+          >
+            {label}
+          </Text>
+          {info && <InfoTooltip text={info} size={12} />}
+        </Flex>
         {window && (
           <Text
             title="This tile's time basis"
@@ -489,6 +499,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-cost",
       <KpiTile
         label="Cost / request"
+        info="Blended cost per request = fleet spend ÷ requests over the current timeframe. Spend prices the tokens at the cost model's blended fallback rate (the per-agent breakdown is the authoritative dollar figure). Sampling-invariant, since spend and requests scale together. Sparkline is per-bucket cost/req; the dashed line is the timeframe average."
         value={fmtPerReq(summary.costPerRequest)}
         sub="blended $/req"
         delta={costDelta}
@@ -503,6 +514,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-spend",
       <KpiTile
         label="Spend · 30d proj"
+        info="Projected 30-day spend = (sum of the last 7 daily-window costs ÷ 7) × 30. Each day is scanned separately and priced per-model via the cost model (blended fallback for unpriced models); the heavy day scans run at a sampling floor and extrapolate the token sums. The delta is day-over-day (last 24h vs the prior day)."
         value={fmtUSDCompact(daily.projected30d)}
         window="30d proj"
         delta={spendDelta}
@@ -519,6 +531,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-p95",
       <KpiTile
         label="P95 latency"
+        info="95th-percentile end-to-end LLM span duration over the current timeframe (percentiles are sampling-invariant, so no extrapolation). Sparkline is the per-bucket p95; the dashed line is the timeframe average. A rise is treated as bad."
         value={fmtMs(summary.p95Ms)}
         delta={p95Delta}
         spark={s.p95Ms}
@@ -532,6 +545,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-error",
       <KpiTile
         label="Error rate"
+        info="Share of LLM requests that errored = errored requests ÷ total requests over the current timeframe (a ratio, so sampling-invariant). Sparkline is the per-bucket error rate; the dashed line is the timeframe average. This is the most sensitive KPI — a +25% swing already escalates the delta to severe (red)."
         value={fmtPercent(summary.errorRatePct)}
         delta={errDelta}
         spark={s.errorRatePct}
@@ -545,6 +559,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-tokens",
       <KpiTile
         label="Tokens"
+        info="Total tokens (input + output) across LLM requests in scope over the timeframe, extrapolated from the sampled population back to the full volume. Sub-line counts the distinct models and MCP servers in scope. Bars show per-bucket token volume."
         value={fmtTokens(summary.tokens)}
         sub={
           summary.models != null
@@ -562,6 +577,7 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
       "kpi-hidden",
       <KpiTile
         label="Hidden risk"
+        info="HTTP-200 LLM responses that actually carry a failure signal — refusals (refusal_reason / finish_reasons contains 'refusal'), max-token truncation ('max_tokens'), content-filter blocks ('content_filter'), or other provider/guardrail markers (gen_ai.error.type / guardrail.action / moderation.action). Counts are sampled aggregates, extrapolated. Rate in the sub-line = hidden ÷ total LLM responses over the timeframe; the bar splits by category."
         loading={hidden.isLoading}
         // On error, show "—" instead of a fmtCount(0) that reads as a reassuring
         // "0 hidden failures" when the query actually failed (SUM-3).
@@ -641,7 +657,13 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
                 )}
               </div>
               )}
-              <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>trust index</Text>
+              <Flex alignItems="center" gap={4}>
+                <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>trust index</Text>
+                <InfoTooltip
+                  text="Fleet trust grade (A–F) and its 0–100 index. Weighted blend of the health pillars — Operational 45%, Quality 35%, Cost 20% — renormalized over whichever pillars actually have data (a missing pillar is dropped, never scored 0). The index maps to a letter via academic bands (93+ = A, 83+ = B, 73+ = C, 63+ = D, else F). A 'partial' badge shows when a high-weight pillar (Quality) is unmeasured."
+                  size={12}
+                />
+              </Flex>
               {posture.pillarsScored > 0 &&
                 posture.pillarsScored < posture.pillarsTotal && (
                   <Text
@@ -682,17 +704,23 @@ export const PostureBand = ({ summary, posture }: PostureBandProps) => {
             gap={8}
             style={{ paddingTop: 12, borderTop: "1px solid var(--border)" }}
           >
-            <Text
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-              }}
-            >
-              Health pillars
-            </Text>
+            <Flex alignItems="center" gap={4}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: "var(--text-3)",
+                }}
+              >
+                Health pillars
+              </Text>
+              <InfoTooltip
+                text="The three 0–100 scores behind the grade. Operational = 100 − latency penalty ((p95 ms − 2000) ÷ 100, capped 0–60) − error penalty (error-rate% × 10, capped 0–40). Quality = average gen_ai.evaluation.* score × 100 (shows 'not measured' when no eval attributes exist). Cost = 100 − |ratio − 1| × 40 (capped 0–60), where ratio = current tokens/hour ÷ the rolling 7-day hourly baseline."
+                size={12}
+              />
+            </Flex>
             {posture.isLoading && posture.pillarsScored === 0 ? (
               // Skeleton bars during load — one loading idiom with the cards
               // below, not the ad-hoc "Scoring pillars…" text (SUM-10).

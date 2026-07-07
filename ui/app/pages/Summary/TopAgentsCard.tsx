@@ -27,7 +27,11 @@ export const TopAgentsCard = () => {
   }));
 
   return (
-    <SummaryCard title="Top agents by cost" drill={{ label: "Agents", to: "/agents" }}>
+    <SummaryCard
+      title="Top agents by cost"
+      info="Agents ranked by estimated cost (top 5). Agent spans carry no tokens on this tenant, so cost is a trace-join: LLM token usage that shares the agent's trace.id, priced per-model (blended fallback) and extrapolated for sampling. 'calls' = linked traces; '$/call' = cost ÷ calls. Agents whose LLM calls run in separate traces won't appear."
+      drill={{ label: "Agents", to: "/agents" }}
+    >
       {isLoading && items.length === 0 ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
       ) : error ? (

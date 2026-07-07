@@ -4,6 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { useTabNav, type FocusParam } from "../../lib/nav";
 import { useScanScope } from "../../scope/ScanReportContext";
 import { useCanQueryScope } from "../../scope/useResolvedServices";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { EmptyState } from "../../components/EmptyState";
 import { TileScanFooter } from "../../scope/TileScanFooter";
 import { SUMMARY_SCAN_OPTS } from "./summaryScanGroups";
@@ -21,6 +22,8 @@ export interface SummaryCardDrill {
 export interface SummaryCardProps {
   /** Uppercase micro-title (mock uses monospace eyebrow labels). */
   title: string;
+  /** One-line, plain-language definition shown via an info icon by the title. */
+  info?: string;
   subtitle?: string;
   /** Top-right drill affordance — the tile's entry point into its owning tab. */
   drill?: SummaryCardDrill;
@@ -39,6 +42,7 @@ export interface SummaryCardProps {
  */
 export const SummaryCard = ({
   title,
+  info,
   subtitle,
   drill,
   headerRight,
@@ -80,20 +84,24 @@ export const SummaryCard = ({
         style={{ marginBottom: 12, minHeight: 20 }}
       >
         <Flex flexDirection="column" gap={2} style={{ minWidth: 0 }}>
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "var(--text-2)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {title}
-          </Text>
+          <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--text-2)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                minWidth: 0,
+              }}
+            >
+              {title}
+            </Text>
+            {info && <InfoTooltip text={info} size={13} />}
+          </Flex>
           {subtitle && (
             <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
               {subtitle}

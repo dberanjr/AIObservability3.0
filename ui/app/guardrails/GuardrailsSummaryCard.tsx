@@ -3,6 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../components/charts/Sparkline";
+import { InfoTooltip } from "../components/InfoTooltip";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { fmtCount, fmtPercent, fmtMs } from "../data/format";
@@ -22,24 +23,29 @@ const MiniStat = ({
   value,
   sub,
   mono,
+  info,
 }: {
   label: string;
   value: string;
   sub?: string;
   mono?: boolean;
+  info?: string;
 }) => (
   <Flex flexDirection="column" gap={2} style={{ minWidth: 0 }}>
-    <Text
-      style={{
-        fontSize: 9.5,
-        fontWeight: 600,
-        letterSpacing: "0.05em",
-        textTransform: "uppercase",
-        color: "var(--text-3)",
-      }}
-    >
-      {label}
-    </Text>
+    <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
+      <Text
+        style={{
+          fontSize: 9.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "var(--text-3)",
+        }}
+      >
+        {label}
+      </Text>
+      {info && <InfoTooltip text={info} size={12} />}
+    </Flex>
     <Text
       style={{
         fontSize: 14,
@@ -74,6 +80,7 @@ export const GuardrailsSummaryCard = () => {
   return (
     <SummaryCard
       title="AI Guardrails"
+      info="AWS Bedrock Guardrails, from cloud metrics (there are no span attributes for these). The headline intervention rate = total interventions ÷ total invocations across every guardrail in the window. Guardrail metrics are sparse — widen the timeframe if empty. The sparkline is the per-bucket intervention rate (gaps where a bucket had no invocations)."
       subtitle="Bedrock guardrail interventions"
       drill={{ label: "Pulse", to: "/pulse" }}
     >
@@ -114,14 +121,21 @@ export const GuardrailsSummaryCard = () => {
               label="Guardrails"
               value={`${g.fleet.activeGuardrails}/${g.fleet.guardrails}`}
               sub="active / configured"
+              info="Active ÷ configured = guardrails with at least one invocation ÷ guardrails that reported any metric in the window."
             />
-            <MiniStat label="Avg latency" value={fmtMs(g.fleet.avgLatencyMs)} sub="guardrail" />
+            <MiniStat
+              label="Avg latency"
+              value={fmtMs(g.fleet.avgLatencyMs)}
+              sub="guardrail"
+              info="Invocation-weighted average guardrail evaluation latency (ms), so a low-traffic guardrail can't skew the fleet number the way an unweighted mean would."
+            />
             {g.fleet.topIntervening && (
               <MiniStat
                 label="Top blocker"
                 value={g.fleet.topIntervening.guardrailId}
                 sub={`${fmtCount(g.fleet.topIntervening.intervened)} blocked`}
                 mono
+                info="The guardrail with the most interventions in the window; the sub-count is how many invocations it blocked."
               />
             )}
           </Flex>

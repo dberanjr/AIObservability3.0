@@ -27,7 +27,11 @@ export const HiddenFailuresCard = () => {
   const colorByKey = new Map(hidden.categories.map((c) => [c.key, c.color]));
 
   return (
-    <SummaryCard title="Hidden · 200-OK" drill={{ label: "Explorer", to: "/explorer" }}>
+    <SummaryCard
+      title="Hidden · 200-OK"
+      info="HTTP-200 LLM responses that are really failures, split by cause: refusals (refusal_reason, or finish_reasons contains 'refusal'), max-token truncation (finish_reasons 'max_tokens'), content-filter blocks ('content_filter'), and other provider/guardrail markers (gen_ai.error.type / guardrail.action / moderation.action). One dedup'd scan over LLM spans (gen_ai.provider.name present); counts are sampled aggregates, extrapolated. An empty result depends on finish_reasons instrumentation being present — it is not a guaranteed all-clear."
+      drill={{ label: "Explorer", to: "/explorer" }}
+    >
       {hidden.isLoading && items.length === 0 ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
       ) : hidden.error ? (

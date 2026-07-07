@@ -163,7 +163,11 @@ export const FinOpsCard = () => {
   const colorByKey = new Map(conc.slices.map((s) => [s.key, s.color]));
 
   return (
-    <SummaryCard title="Spend · FinOps" drill={{ label: "Models", to: "/models" }}>
+    <SummaryCard
+      title="Spend · FinOps"
+      info="Model spend concentration for the current timeframe: each model's effective spend priced per-model through the cost model, top models ranked by share of total (the rest folded into 'Others'). The bars below show per-model daily cost over the last 7 days (heavy per-day scans run sampled and extrapolate). The 'save ~$/mo' pill estimates shifting an expensive service to its cheapest same-type peer — fires when a service's blended $/MTok is > 3× the cheapest peer and assumes it could halve its rate."
+      drill={{ label: "Models", to: "/models" }}
+    >
       <Flex flexDirection="column" gap={16} style={{ height: "100%" }}>
         {conc.isLoading && items.length === 0 ? (
           <Skeleton style={{ height: 130, borderRadius: 8 }} />

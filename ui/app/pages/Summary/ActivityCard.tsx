@@ -24,6 +24,7 @@ export const ActivityCard = () => {
   return (
     <SummaryCard
       title="Activity · 24h"
+      info="Requests per hour over a FIXED trailing 24-hour window, independent of the global timeframe. Each hourly bar is a request count, extrapolated for sampling; the peak hour is highlighted. Honors the toolbar scan-limit like every other query."
       drill={{ label: "Pulse", to: "/pulse" }}
       headerRight={
         <span

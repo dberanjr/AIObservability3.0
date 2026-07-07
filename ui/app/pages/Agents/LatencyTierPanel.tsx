@@ -65,7 +65,9 @@ const LatencyTierBody = () => {
                 t.sharePct > 0 ? (
                   <div
                     key={t.tier}
-                    title={`${t.tier} · ${fmtPercent(t.sharePct, 1)} of total time`}
+                    title={`${t.tier} · ${fmtPercent(t.sharePct, 1)} of total time · ${fmtCount(
+                      t.spans,
+                    )} spans · avg ${fmtMs(t.avgMs)} · P95 ${fmtMs(t.p95Ms)}`}
                     style={{
                       width: `${t.sharePct}%`,
                       background: TIER_COLOR[t.tier],

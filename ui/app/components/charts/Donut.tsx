@@ -25,6 +25,10 @@ export interface DonutProps {
   /** Accessible label for the chart. Defaults to a spoken summary of the slices
    *  so a screen reader announces the actual distribution, not a fixed name. */
   ariaLabel?: string;
+  /** Formats each slice's raw value for the hover tooltip (native `title` on the
+   *  arc + legend row). Callers pass the right unit (e.g. `n => `${fmtCount(n)} req``);
+   *  defaults to a rounded integer so the value is always surfaced on hover. */
+  valueFormatter?: (n: number) => string;
 }
 
 const arcPath = (
@@ -71,8 +75,13 @@ export const Donut = ({
   size = 140,
   thickness = 22,
   ariaLabel,
+  valueFormatter,
 }: DonutProps) => {
   const total = slices.reduce((acc, s) => acc + s.value, 0);
+  const fmtVal = valueFormatter ?? ((n: number) => String(Math.round(n)));
+  /** Native-title hover text: label + raw value + share. */
+  const hoverText = (label: string, value: number, pct: number): string =>
+    `${label}: ${fmtVal(value)} (${pct.toFixed(1)}%)`;
   const label =
     ariaLabel ??
     (slices.length > 0
@@ -104,8 +113,14 @@ export const Donut = ({
       >
         <svg width={size} height={size} role="img" aria-label={label}>
           <circle cx={cx} cy={cy} r={r} fill="var(--surface-2)" />
-          {arcs.map(({ slice, d }) =>
-            d ? <path key={slice.key} d={d} fill={safeFill(slice.color)} /> : null,
+          {arcs.map(({ slice, d, frac }) =>
+            d ? (
+              <path key={slice.key} d={d} fill={safeFill(slice.color)}>
+                {/* Native SVG <title> — hovering the arc surfaces its raw value
+                    (formatted by the caller) alongside label + share. */}
+                <title>{hoverText(slice.label, slice.value, frac * 100)}</title>
+              </path>
+            ) : null,
           )}
           <circle cx={cx} cy={cy} r={rInner} fill="var(--surface)" />
         </svg>
@@ -144,7 +159,12 @@ export const Donut = ({
         {slices.map((s) => {
           const pct = total > 0 ? (s.value / total) * 100 : 0;
           return (
-            <Flex key={s.key} alignItems="center" gap={8}>
+            <Flex
+              key={s.key}
+              alignItems="center"
+              gap={8}
+              title={hoverText(s.label, s.value, pct)}
+            >
               <span
                 aria-hidden
                 style={{

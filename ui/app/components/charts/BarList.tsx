@@ -116,6 +116,11 @@ export const BarList = ({
               </Text>
             </Flex>
             <div
+              // Native `title` so hovering the bar itself surfaces the value
+              // (label + formatted value + optional secondary line).
+              title={`${item.label}: ${item.displayValue}${
+                item.secondary ? ` · ${item.secondary}` : ""
+              }`}
               style={{
                 position: "relative",
                 height: 6,

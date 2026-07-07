@@ -1,6 +1,7 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { InfoTooltip } from "../../components/InfoTooltip";
 import { EmptyState } from "../../components/EmptyState";
 import { fmtPercent } from "../../data/format";
 import { useCapability } from "../../scope/CapabilityContext";
@@ -63,10 +64,12 @@ const MiniTile = ({
   label,
   value,
   tone = "default",
+  info,
 }: {
   label: string;
   value: string;
   tone?: "default" | "risk";
+  info?: string;
 }) => (
   <Flex
     flexDirection="column"
@@ -81,17 +84,20 @@ const MiniTile = ({
           : "var(--surface-2)",
     }}
   >
-    <Text
-      style={{
-        fontSize: 9.5,
-        fontWeight: 600,
-        letterSpacing: "0.05em",
-        textTransform: "uppercase",
-        color: tone === "risk" ? "var(--red)" : "var(--text-3)",
-      }}
-    >
-      {label}
-    </Text>
+    <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
+      <Text
+        style={{
+          fontSize: 9.5,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: tone === "risk" ? "var(--red)" : "var(--text-3)",
+        }}
+      >
+        {label}
+      </Text>
+      {info && <InfoTooltip text={info} size={12} />}
+    </Flex>
     <Text
       style={{
         fontSize: 16,
@@ -127,7 +133,11 @@ export const QualityTrustCard = () => {
   // Setup state — no eval scores and example data toggle off.
   if (!hasEval && !showExample) {
     return (
-      <SummaryCard title="Is it good? · Quality & trust" drill={{ label: "Agents", to: "/agents" }}>
+      <SummaryCard
+        title="Is it good? · Quality & trust"
+        info="Agent answer-quality from gen_ai.evaluation.* attributes on agent spans. Each bar is the average of that evaluation score × 100 (task-success and tool-call correctness are live; groundedness and answer relevance only render under the example-data toggle). The dashed line on each bar marks the 90 target. Halluc. and Coverage are summarized in the two tiles below."
+        drill={{ label: "Agents", to: "/agents" }}
+      >
         <Flex flexDirection="column" gap={12} style={{ height: "100%" }}>
           <EmptyState
             bare
@@ -157,6 +167,7 @@ export const QualityTrustCard = () => {
   return (
     <SummaryCard
       title="Is it good? · Quality & trust"
+      info="Agent answer-quality from gen_ai.evaluation.* attributes on agent spans. Each bar is the average of that evaluation score × 100 (task-success and tool-call correctness are live; groundedness and answer relevance only render under the example-data toggle). The dashed line on each bar marks the 90 target. Halluc. and Coverage are summarized in the two tiles below."
       drill={{ label: "Agents", to: "/agents" }}
       headerRight={
         showExample ? (
@@ -189,8 +200,13 @@ export const QualityTrustCard = () => {
             label="Halluc."
             value={v.hallucination != null ? fmtPercent(v.hallucination) : "—"}
             tone="risk"
+            info="Average hallucination rate = avg(gen_ai.evaluation.hallucination) × 100 across agent spans that carry the score. Lower is better."
           />
-          <MiniTile label="Coverage" value={v.coverage != null ? fmtPercent(v.coverage, 0) : "—"} />
+          <MiniTile
+            label="Coverage"
+            value={v.coverage != null ? fmtPercent(v.coverage, 0) : "—"}
+            info="Evaluation coverage = agent spans carrying a task-success score ÷ all agent spans, as a %. Low coverage means most agent activity is unevaluated, so the quality bars rest on a small sample."
+          />
         </Flex>
       </Flex>
     </SummaryCard>

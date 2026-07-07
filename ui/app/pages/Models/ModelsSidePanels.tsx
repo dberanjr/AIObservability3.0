@@ -134,6 +134,7 @@ export const ModelsSidePanels = ({
             slices={providerShares}
             centerValue={fmtCount(totalRequests)}
             centerLabel="requests"
+            valueFormatter={(n) => `${fmtCount(n)} req`}
           />
         )}
       </Panel>

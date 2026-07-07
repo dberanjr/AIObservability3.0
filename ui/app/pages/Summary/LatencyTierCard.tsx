@@ -35,7 +35,12 @@ export const LatencyTierCard = ({ summary }: { summary: PulseSummary }) => {
     }));
 
   return (
-    <SummaryCard title="Latency by tier" subtitle="share of wall-clock time" drill={{ label: "Agents", to: "/agents" }}>
+    <SummaryCard
+      title="Latency by tier"
+      info="Where wall-clock time goes, split by execution tier — LLM generation, Retrieval/DB, Tool, and Orchestration. Each tier's share = its summed span duration ÷ total duration across all tiers. Each segment's 'p95' sublabel is that tier's own 95th-percentile span time. The caption's Fleet P95 is the overall end-to-end 95th-percentile latency from the summary."
+      subtitle="share of wall-clock time"
+      drill={{ label: "Agents", to: "/agents" }}
+    >
       {isLoading && segs.length === 0 ? (
         <Skeleton style={{ height: 130, borderRadius: 8 }} />
       ) : error ? (
