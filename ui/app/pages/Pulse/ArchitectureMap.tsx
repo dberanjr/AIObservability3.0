@@ -24,6 +24,7 @@ import {
 import { NodeMap } from "./archMap/NodeMap";
 import { NodeDrawer } from "./archMap/NodeDrawer";
 import { DetailModal } from "./archMap/DetailModal";
+import { UpstreamServicesModal } from "./archMap/UpstreamServicesModal";
 import { useArchitectureData } from "./archMap/useArchitectureData";
 import { useFrameworkNodes } from "./archMap/useFrameworkNodes";
 import { resolveDetail, type DetailDrill, type ModalDetail } from "./archMap/getDetail";
@@ -406,10 +407,10 @@ export const ArchitectureMap = () => {
       </div>
 
       <NodeDrawer
-        meta={picked}
-        view={picked ? data.nodes[picked.key] : null}
+        meta={picked && picked.key !== "client" ? picked : null}
+        view={picked && picked.key !== "client" ? data.nodes[picked.key] : null}
         tierSeries={
-          picked
+          picked && picked.key !== "client"
             ? {
                 throughput: data.series.throughput[picked.key],
                 latencyMs: data.series.latencyMs[picked.key],
@@ -425,9 +426,13 @@ export const ArchitectureMap = () => {
               }
             : null
         }
-        clientUpstream={picked?.key === "client" ? data.clientUpstream : null}
+        clientUpstream={null}
         onClose={() => setPicked(null)}
         onDrill={(path, focus) => goToTab(path, { focus: focus as FocusParam })}
+      />
+      <UpstreamServicesModal
+        open={picked?.key === "client"}
+        onClose={() => setPicked(null)}
       />
       <DetailModal detail={detail} onClose={() => setDetail(null)} onDrill={onDrill} />
     </Surface>
