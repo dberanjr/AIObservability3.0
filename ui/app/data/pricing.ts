@@ -367,10 +367,6 @@ export const platformKey = (platform: PricingPlatform, modelKey: string): string
  *  Bedrock is intentionally ABSENT here so it falls back to the Direct Claude
  *  rate (at parity today). Keys are normalizeModelKey() outputs. */
 export const PRICING_BEDROCK: Record<string, ModelPricing> = {
-  "titan-embed-text": {
-    inputPerMTok: 0.02, outputPerMTok: 0, contextWindow: 8192,
-    provider: "Amazon", tier: "low",
-  },
   "nova-lite": {
     inputPerMTok: 0.06, outputPerMTok: 0.24, contextWindow: 300_000,
     provider: "Amazon", tier: "low",
@@ -483,20 +479,35 @@ export const subscribePricingOverrides = (cb: () => void): (() => void) => {
   return () => PRICING_OVERRIDE_LISTENERS.delete(cb);
 };
 
-export const getPricing = (model: string | undefined | null): ModelPricing => {
+export const getPricing = (
+  model: string | undefined | null,
+  platform: PricingPlatform = "direct",
+): ModelPricing => {
   if (!model) return UNKNOWN_PRICE;
   const key = normalizeModelKey(model);
-  return PRICING_OVERRIDES.get(key) ?? PRICING[key] ?? UNKNOWN_PRICE;
+  return (
+    PRICING_OVERRIDES.get(platformKey(platform, key)) ??
+    PLATFORM_PRICING[platform]?.[key] ??
+    (platform !== "direct"
+      ? (PRICING_OVERRIDES.get(key) ?? PRICING[key])
+      : undefined) ??
+    UNKNOWN_PRICE
+  );
 };
 
 /**
  * Snapshot of the merged pricing table (built-ins + overrides). Used by
  * the config panel to display the current effective rates.
  */
-export const getEffectivePricing = (): Record<string, ModelPricing> => {
-  const merged: Record<string, ModelPricing> = { ...PRICING };
+export const getEffectivePricing = (
+  platform: PricingPlatform = "direct",
+): Record<string, ModelPricing> => {
+  const merged: Record<string, ModelPricing> = { ...(PLATFORM_PRICING[platform] ?? {}) };
+  const prefix = platform === "direct" ? "" : `${platform}::`;
   for (const [key, val] of PRICING_OVERRIDES.entries()) {
-    merged[key] = val;
+    if (platform === "direct" && key.includes("::")) continue;
+    if (platform !== "direct" && !key.startsWith(prefix)) continue;
+    merged[key.slice(prefix.length)] = val;
   }
   return merged;
 };
@@ -565,11 +576,20 @@ export const getBlendedPricing = (): ModelPricing => {
  */
 export const resolveModelPricing = (
   model: string | null | undefined,
+  platform: PricingPlatform = "direct",
 ): ModelPricing => {
   if (model) {
     const key = normalizeModelKey(model);
-    const found = PRICING_OVERRIDES.get(key) ?? PRICING[key];
-    if (found) return found;
+    // 1. platform-specific override, then platform-specific built-in
+    const platHit =
+      PRICING_OVERRIDES.get(platformKey(platform, key)) ??
+      PLATFORM_PRICING[platform]?.[key];
+    if (platHit) return platHit;
+    // 2. fall back to Direct (override then built-in) — Claude-on-Bedrock path
+    if (platform !== "direct") {
+      const directHit = PRICING_OVERRIDES.get(key) ?? PRICING[key];
+      if (directHit) return directHit;
+    }
   }
   return getBlendedPricing();
 };
@@ -634,8 +654,9 @@ export const emptyTokens = (): NormalizedTokens => ({
 export const computeCost = (
   tokens: NormalizedTokens,
   model: string | null | undefined,
+  platform: PricingPlatform = "direct",
 ): CostBreakdown => {
-  const pricing = resolveModelPricing(model);
+  const pricing = resolveModelPricing(model, platform);
   const { read, write } = cacheRates(pricing);
   const effectiveCost =
     (tokens.inputTokens * pricing.inputPerMTok +
@@ -664,6 +685,7 @@ export const costOf = (
   outputTokens: number,
   model: string | null | undefined,
   cache?: { read?: number; write?: number },
+  platform: PricingPlatform = "direct",
 ): number =>
   computeCost(
     {
@@ -673,4 +695,5 @@ export const costOf = (
       cacheWriteTokens: cache?.write ?? 0,
     },
     model,
+    platform,
   ).effectiveCost;
