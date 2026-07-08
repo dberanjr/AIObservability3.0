@@ -168,14 +168,16 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           actionLabel="Open Error rate details"
         />
         <StatTile
-          label="TPM headroom"
+          label="Peak TPM"
           value={fmtPercent(tpmPeakPct)}
-          sub="peak usage in scope"
-          info="Peak observed usage of the account's tokens-per-minute Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage) — higher means less headroom before throttling. A single tenant-wide peak; not broken out per model."
+          sub="% of quota (peak)"
+          info="Peak observed usage of the account's tokens-per-minute Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). Higher = closer to the throughput limit and potential throttling. A single tenant-wide peak; not broken out per model."
+          tone={tpmPeakPct > 90 ? "critical" : tpmPeakPct > 75 ? "warn" : "neutral"}
+          cue
           window={win}
           loading={perfInitial}
           onClick={() => setModal("tpm")}
-          actionLabel="Open TPM headroom details"
+          actionLabel="Open Peak TPM details"
         />
         <StatTile
           label="Sessions"
