@@ -6,10 +6,9 @@ import { Sparkline } from "../../components/charts/Sparkline";
 import { EstimatedBadge } from "../../components/DetailModal";
 import { fmtUSD } from "../../data/format";
 import { useBedrockCost, useBedrockPerf } from "../../bedrock/useBedrock";
-import { normalizeBedrockModelId } from "../../bedrock/model";
 import { STATUS_COLOR } from "../../theme/statusColor";
 import type { BedrockScope } from "../../bedrock/types";
-import { computeInsights, type Insight } from "./insights";
+import { computeInsights, buildInsightsInput, type Insight } from "./insights";
 
 export interface BedrockHeroProps {
   scope: BedrockScope;
@@ -46,41 +45,19 @@ const InsightRow = ({ insight }: { insight: Insight }) => (
  * and a spend sparkline) paired with up to three computed insight sentences
  * (cost concentration, latency outlier, cache savings — see insights.ts).
  *
- * `costByModel` is built by summing `daily[].byModel` (keyed by
- * `shortModelName`, case- and date/version-suffix-preserving) and re-keying
- * through `normalizeBedrockModelId` so it lines up with `invocationsByModel`/
- * `perf`'s `model` field, which `useBedrockPerf` already normalizes the same
- * way. Without this re-key, a dated model id (e.g.
- * `anthropic.claude-3-5-sonnet-20241022-v2:0`) would land under two different
- * string keys in the two maps and the cost-concentration insight would never
- * find a matching invocation count.
+ * The insights-input derivation (re-keying `daily[].byModel` through
+ * `normalizeBedrockModelId` so it lines up with `perfRows`' `model` field —
+ * see `buildInsightsInput`'s doc comment for why the re-key matters) is
+ * shared with BedrockFindings (D6), which renders the same insights as
+ * FindingCards.
  */
 export const BedrockHero = ({ scope }: BedrockHeroProps) => {
   const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
   const { rows: perfRows, isLoading: perfLoading } = useBedrockPerf(scope);
 
-  const costByModel = useMemo(() => {
-    const out: Record<string, number> = {};
-    for (const day of daily) {
-      for (const [rawKey, value] of Object.entries(day.byModel)) {
-        const key = normalizeBedrockModelId(rawKey);
-        out[key] = (out[key] ?? 0) + value;
-      }
-    }
-    return out;
-  }, [daily]);
-
-  const invocationsByModel = useMemo(() => {
-    const out: Record<string, number> = {};
-    for (const row of perfRows) {
-      out[row.model] = (out[row.model] ?? 0) + row.invocations;
-    }
-    return out;
-  }, [perfRows]);
-
   const insights = useMemo(
-    () => computeInsights({ summary, costByModel, invocationsByModel, perf: perfRows }),
-    [summary, costByModel, invocationsByModel, perfRows],
+    () => computeInsights(buildInsightsInput({ daily, summary, perfRows })),
+    [daily, summary, perfRows],
   );
 
   // Approximate the scope window's day count from the fold's bucket count

@@ -10,6 +10,10 @@ import { BedrockHero } from "./BedrockHero";
 import { BedrockKpiRow } from "./BedrockKpiRow";
 import { BedrockCostZone } from "./BedrockCostZone";
 import { AgentSessionTable } from "./AgentSessionTable";
+import { BedrockPerfZone } from "./BedrockPerfZone";
+import { BedrockGuardrailsSummary } from "./BedrockGuardrailsSummary";
+import { BedrockFindings } from "./BedrockFindings";
+import { ScopeSelectors } from "./ScopeSelectors";
 
 /**
  * AWS Bedrock page shell (D1). Gates the whole page on a cheap existence
@@ -17,20 +21,15 @@ import { AgentSessionTable } from "./AgentSessionTable";
  * useBedrockAvailable) so a tenant with no Bedrock integration sees an
  * explicit "no-instrumentation" EmptyState — the app's convention for gating
  * an entire view on absent data (see CapabilityGate's default fallback and
- * GuardrailsPanel) — instead of a silently-empty page. Account/model
- * selectors are wired in a later step (D6); scope carries empty arrays
- * (= "all") until then. Zones D2–D7 mount below the header, each receiving
- * `scope`.
+ * GuardrailsPanel) — instead of a silently-empty page. The header's Account/
+ * Model selectors (D6, `ScopeSelectors`) write into `accounts`/`models`,
+ * which flow into every zone below via `scope`. Zones D2–D6 mount below the
+ * header, each receiving `scope`.
  */
 export const BedrockPage = () => {
   const { scope: appScope } = useScope();
-  // Setters are unused until D6 wires the Account/Model selectors that call
-  // them; kept here (rather than plain constants) so that step is a pure
-  // addition with no page-level state to introduce.
-  /* eslint-disable @typescript-eslint/no-unused-vars */
   const [accounts, setAccounts] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
-  /* eslint-enable @typescript-eslint/no-unused-vars */
   const scope: BedrockScope = useMemo(
     () => ({ timeframe: appScope.timeframe, accounts, models }),
     [appScope.timeframe, accounts, models],
@@ -89,13 +88,21 @@ export const BedrockPage = () => {
             {fmtCount(overview.totals.sessions)} sessions · source: Logs + Metrics
           </Text>
         </Flex>
-        {/* Scope selectors (Account, Model) wired in D6 — setAccounts/setModels. */}
+        <ScopeSelectors
+          timeframe={appScope.timeframe}
+          accounts={accounts}
+          models={models}
+          setAccounts={setAccounts}
+          setModels={setModels}
+        />
       </Flex>
       <BedrockHero scope={scope} />
       <BedrockKpiRow scope={scope} />
       <BedrockCostZone scope={scope} />
       <AgentSessionTable scope={scope} />
-      {/* Zones D6–D7 mount here, each receiving `scope`. */}
+      <BedrockPerfZone scope={scope} />
+      <BedrockGuardrailsSummary />
+      <BedrockFindings scope={scope} />
     </Flex>
   );
 };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bedrockLogBase, buildBedrockOverviewQuery, buildBedrockDailyCostQuery,
-  buildAgentSessionsQuery,
+  buildAgentSessionsQuery, buildBedrockFacetsQuery,
 } from "./queries";
 
 const scope = { timeframe: { from: "now()-7d", to: "now()" }, accounts: [] as string[], models: [] as string[] };
@@ -45,6 +45,23 @@ describe("buildAgentSessionsQuery", () => {
     const q = buildAgentSessionsQuery(scope);
     expect(q).toContain("arrayLast(splitString(b[identity][arn]");
     expect(q).toContain("by:");
+  });
+});
+
+describe("buildBedrockFacetsQuery", () => {
+  it("collects distinct accounts and models, unfiltered by any current scope selection", () => {
+    const q = buildBedrockFacetsQuery({ from: "now()-7d", to: "now()" });
+    expect(q).toContain("collectDistinct(b[accountId])");
+    expect(q).toContain("collectDistinct(b[modelId])");
+    // Must NOT filter on accountId/modelId — that would make a picker's own
+    // selection prune its own option list.
+    expect(q).not.toContain("in(b[accountId]");
+    expect(q).not.toContain("in(b[modelId]");
+  });
+
+  it("defaults to: now() when to is undefined", () => {
+    const q = buildBedrockFacetsQuery({ from: "now()-7d" });
+    expect(q).toContain("to: now()");
   });
 });
 

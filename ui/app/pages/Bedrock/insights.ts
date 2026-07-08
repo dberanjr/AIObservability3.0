@@ -9,10 +9,21 @@
 
 import { fmtSecs1, fmtUSD } from "../../data/format";
 import type { BedrockCostSummary } from "../../bedrock/cost";
+import type { BedrockDailyCostPoint } from "../../bedrock/series";
+import { normalizeBedrockModelId } from "../../bedrock/model";
 
 export interface Insight {
   tone: "warn" | "info" | "good";
   text: string;
+  /**
+   * Structured breakdown of the same insight, for callers that render it as a
+   * distinct card (BedrockFindings' FindingCard) rather than inline narrative
+   * prose (BedrockHero, which only reads `text`). Keeping both means neither
+   * consumer has to parse the other's format back apart.
+   */
+  category: string;
+  entity: string;
+  metric: string;
 }
 
 export interface PerfRowLike {
@@ -60,6 +71,9 @@ const costConcentrationInsight = (input: ComputeInsightsInput): Insight | null =
 
   return {
     tone: "warn",
+    category: "Cost concentration",
+    entity: topModel,
+    metric: `${Math.round(costShare * 100)}% of spend`,
     text: `${topModel} drives ${Math.round(costShare * 100)}% of spend on ${Math.round(invShare * 100)}% of calls`,
   };
 };
@@ -82,6 +96,9 @@ const latencyOutlierInsight = (input: ComputeInsightsInput): Insight | null => {
 
   return {
     tone: "info",
+    category: "Latency outlier",
+    entity: slowest.model,
+    metric: `~${Math.round(ratio)}× slower`,
     text: `${slowest.model} is ~${Math.round(ratio)}× slower — latency ${fmtSecs1(slowest.latencyMs)} vs ${fmtSecs1(fastest.latencyMs)}`,
   };
 };
@@ -97,6 +114,9 @@ const cacheSavingsInsight = (input: ComputeInsightsInput): Insight | null => {
 
   return {
     tone: "good",
+    category: "Cache savings",
+    entity: "Prompt caching",
+    metric: fmtUSD(summary.savedByCache),
     text: `Prompt caching saved ~${fmtUSD(summary.savedByCache)} (${Math.round(share * 100)}% of would-be cost)`,
   };
 };
@@ -107,3 +127,44 @@ export const computeInsights = (input: ComputeInsightsInput): Insight[] =>
   [costConcentrationInsight(input), latencyOutlierInsight(input), cacheSavingsInsight(input)].filter(
     (i): i is Insight => i !== null,
   );
+
+export interface InsightsSource {
+  /** `useBedrockCost(scope).daily` — per-day cost by (shortModelName-keyed) model. */
+  daily: BedrockDailyCostPoint[];
+  /** `useBedrockCost(scope).summary`. */
+  summary: BedrockCostSummary;
+  /** `useBedrockPerf(scope).rows`. */
+  perfRows: PerfRowLike[];
+}
+
+/**
+ * Builds `computeInsights`' input from the raw hook outputs
+ * (`useBedrockCost` + `useBedrockPerf`). Originally inlined in BedrockHero
+ * (D2); extracted here so BedrockFindings (D6) can build the identical input
+ * without duplicating the model-key re-normalization.
+ *
+ * `costByModel` is built by summing `daily[].byModel` (keyed by
+ * `shortModelName`, case- and date/version-suffix-preserving) and re-keying
+ * through `normalizeBedrockModelId` so it lines up with `invocationsByModel`/
+ * `perf`'s `model` field, which `useBedrockPerf` already normalizes the same
+ * way. Without this re-key, a dated model id (e.g.
+ * `anthropic.claude-3-5-sonnet-20241022-v2:0`) would land under two different
+ * string keys in the two maps and the cost-concentration insight would never
+ * find a matching invocation count.
+ */
+export const buildInsightsInput = ({ daily, summary, perfRows }: InsightsSource): ComputeInsightsInput => {
+  const costByModel: Record<string, number> = {};
+  for (const day of daily) {
+    for (const [rawKey, value] of Object.entries(day.byModel)) {
+      const key = normalizeBedrockModelId(rawKey);
+      costByModel[key] = (costByModel[key] ?? 0) + value;
+    }
+  }
+
+  const invocationsByModel: Record<string, number> = {};
+  for (const row of perfRows) {
+    invocationsByModel[row.model] = (invocationsByModel[row.model] ?? 0) + row.invocations;
+  }
+
+  return { summary, costByModel, invocationsByModel, perf: perfRows };
+};

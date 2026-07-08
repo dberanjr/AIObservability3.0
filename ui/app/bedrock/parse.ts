@@ -96,3 +96,27 @@ export const parseAccountCost = (records: Record<string, unknown>[]): AccountCos
     .map(([account, v]) => ({ account, cost: v.cost, blended: v.blended }))
     .sort((a, b) => b.cost - a.cost);
 };
+
+export interface BedrockFacets {
+  /** Raw AWS account ids seen in scope over the timeframe. */
+  accounts: string[];
+  /** Raw modelId strings (NOT normalizeBedrockModelId-collapsed) — these are
+   *  what `bedrockLogBase` filters `b[modelId]` against, so a facet value
+   *  must round-trip straight into `BedrockScope.models`. */
+  models: string[];
+}
+
+const strArr = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? v.filter((x): x is string => typeof x === "string" && x.length > 0)
+    : [];
+
+/** Parses the single-row `collectDistinct` result from the D6 facets query
+ *  (see queries.ts) into sorted, deduped account/model lists. */
+export const parseFacets = (records: Record<string, unknown>[]): BedrockFacets => {
+  const r = records[0] ?? {};
+  return {
+    accounts: [...new Set(strArr(r.accounts))].sort(),
+    models: [...new Set(strArr(r.models))].sort(),
+  };
+};

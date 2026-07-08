@@ -1,4 +1,5 @@
 import type { BedrockScope } from "./types";
+import type { Timeframe } from "../scope/types";
 
 const arr = (xs: string[]): string => xs.map((x) => `"${x}"`).join(",");
 const tf = (s: BedrockScope): string => `from: ${s.timeframe.from}, to: ${s.timeframe.to ?? "now()"}`;
@@ -60,3 +61,22 @@ export const buildAccountModelQuery = (s: BedrockScope): string =>
     inTok = sum(inTok), outTok = sum(outTok),
     cacheRead = sum(cacheRead), cacheWrite = sum(cacheWrite)
   }, by: { account, modelId }`;
+
+/**
+ * Distinct accounts + models seen in ANY Bedrock invocation log over the
+ * timeframe — the option source for the D6 scope selectors. Deliberately
+ * does NOT go through `bedrockLogBase(scope)` (which applies the CURRENT
+ * account/model filter): if it did, picking one model would prune every
+ * other model out of its own picker's option list. Values are raw log
+ * fields (`accountId`, `modelId`) — the same shape `bedrockLogBase` filters
+ * against (`in(b[accountId], …)` / `in(b[modelId], …)`), so a selected
+ * option round-trips straight back into `BedrockScope.accounts/models`.
+ */
+export const buildBedrockFacetsQuery = (tf: Timeframe): string =>
+  [
+    `fetch logs, from: ${tf.from}, to: ${tf.to ?? "now()"}`,
+    `| filter contains(dt.da.aws.log_group, "bedrock")`,
+    `| filter contains(content, "ModelInvocationLog")`,
+    `| parse content, "JSON:b"`,
+    `| summarize accounts = collectDistinct(b[accountId]), models = collectDistinct(b[modelId])`,
+  ].join("\n");

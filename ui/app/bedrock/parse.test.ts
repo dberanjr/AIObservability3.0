@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAccountCost, parseAgentSessions, parseOverview, parsePerfByModel } from "./parse";
+import { parseAccountCost, parseAgentSessions, parseFacets, parseOverview, parsePerfByModel } from "./parse";
 
 describe("parseOverview", () => {
   it("maps a summarize-style record to OverviewTotals", () => {
@@ -72,5 +72,28 @@ describe("parseAccountCost", () => {
       { account: "111", modelId: "totally-unpriced-model-xyz", inTok: 1_000, outTok: 0, cacheRead: 0, cacheWrite: 0 },
     ]);
     expect(rows[0].blended).toBe(true);
+  });
+});
+
+describe("parseFacets", () => {
+  it("dedupes and sorts the collectDistinct arrays", () => {
+    const facets = parseFacets([
+      {
+        accounts: ["975049911737", "637423486688", "975049911737"],
+        models: ["us.anthropic.claude-sonnet-4-6", "amazon.titan-text-express-v1"],
+      },
+    ]);
+    expect(facets.accounts).toEqual(["637423486688", "975049911737"]);
+    expect(facets.models).toEqual(["amazon.titan-text-express-v1", "us.anthropic.claude-sonnet-4-6"]);
+  });
+
+  it("returns empty lists for an empty result set", () => {
+    expect(parseFacets([])).toEqual({ accounts: [], models: [] });
+  });
+
+  it("drops non-string / empty entries defensively", () => {
+    const facets = parseFacets([{ accounts: ["111", null, ""], models: [42, "amazon.titan-text-express-v1"] }]);
+    expect(facets.accounts).toEqual(["111"]);
+    expect(facets.models).toEqual(["amazon.titan-text-express-v1"]);
   });
 });

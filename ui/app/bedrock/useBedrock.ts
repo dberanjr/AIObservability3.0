@@ -13,10 +13,11 @@ import type { ResultRecord } from "@dynatrace-sdk/client-query";
 import { useScopedDql } from "../scope/useScopedDql";
 import { useScope } from "../scope/ScopeContext";
 import { toNum } from "../data/format";
+import type { Timeframe } from "../scope/types";
 import type { BedrockScope } from "./types";
-import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery, buildAccountModelQuery } from "./queries";
+import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery, buildAccountModelQuery, buildBedrockFacetsQuery } from "./queries";
 import { buildBedrockPerfByModelQuery, buildBedrockTpmQuery } from "./metricQueries";
-import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, type OverviewTotals, type AgentSessionRow, type PerfByModelRow, type AccountCostRow } from "./parse";
+import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, parseFacets, type OverviewTotals, type AgentSessionRow, type PerfByModelRow, type AccountCostRow, type BedrockFacets } from "./parse";
 import { foldDailyCost, type BedrockDailyCostPoint } from "./series";
 import type { BedrockCostSummary } from "./cost";
 
@@ -95,6 +96,24 @@ export const useBedrockPerf = (
       .filter((n) => Number.isFinite(n));
     return { rows, tpmPeakPct: tpmVals.length ? Math.max(...tpmVals) : 0, isLoading: perf.isLoading || tpm.isLoading };
   }, [perf.data, perf.isLoading, tpm.data, tpm.isLoading]);
+};
+
+/**
+ * Distinct accounts + models for the D6 scope-selector option lists.
+ * Deliberately takes only `timeframe` (not the full `BedrockScope`) and
+ * routes through `buildBedrockFacetsQuery`, which never applies the current
+ * account/model selection — see that query's doc comment for why a
+ * self-scoped facets query would make each picker prune its own options.
+ */
+export const useBedrockFacets = (timeframe: Timeframe): BedrockFacets & { isLoading: boolean } => {
+  const res = useScopedDql<ResultRecord>(buildBedrockFacetsQuery(timeframe), IGNORE);
+  return useMemo(
+    () => ({
+      ...parseFacets((res.data?.records ?? []) as Record<string, unknown>[]),
+      isLoading: res.isLoading,
+    }),
+    [res.data, res.isLoading],
+  );
 };
 
 export { useScope }; // re-export for page convenience
