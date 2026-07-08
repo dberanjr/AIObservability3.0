@@ -70,6 +70,12 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
   const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
   const { rows: perfRows, tpmPeakPct, series: perfSeries, isLoading: perfLoading } = useBedrockPerf(scope);
   const { rows: sessionRows } = useAgentSessions(scope);
+  // Invocations/Tokens headline numbers come from the SCOPED overview logs, but
+  // their sparklines come from the (account/model-unscoped) metric series — so
+  // hide those two sparklines when a scope filter is active, to avoid a scoped
+  // number sitting over an all-models trend. Latency/TTFT/TPM are metric-sourced
+  // for both the number AND the spark, so they stay internally consistent.
+  const scoped = scope.accounts.length > 0 || scope.models.length > 0;
 
   // Skeletons only before each hook's FIRST successful load (not on every
   // scope refetch) — mirrors BedrockHero's initialLoading guard.
@@ -118,7 +124,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           onClick={() => setModal("invocations")}
           actionLabel="Open Invocations details"
           media={
-            hasSignal(perfSeries.invocations) ? (
+            !scoped && hasSignal(perfSeries.invocations) ? (
               <Sparkline
                 values={perfSeries.invocations}
                 color="var(--blue)"
@@ -139,7 +145,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           onClick={() => setModal("tokens")}
           actionLabel="Open Tokens details"
           media={
-            hasSignal(perfSeries.tokens) ? (
+            !scoped && hasSignal(perfSeries.tokens) ? (
               <Sparkline
                 values={perfSeries.tokens}
                 color="var(--blue)"
