@@ -7,6 +7,7 @@ import { useBedrockAvailable, useBedrockOverview } from "../../bedrock/useBedroc
 import type { BedrockScope } from "../../bedrock/types";
 import { fmtCount } from "../../data/format";
 import { BedrockHero } from "./BedrockHero";
+import { BedrockKpiRow } from "./BedrockKpiRow";
 
 /**
  * AWS Bedrock page shell (D1). Gates the whole page on a cheap existence
@@ -89,7 +90,8 @@ export const BedrockPage = () => {
         {/* Scope selectors (Account, Model) wired in D6 — setAccounts/setModels. */}
       </Flex>
       <BedrockHero scope={scope} />
-      {/* Zones D3–D7 mount here, each receiving `scope`. */}
+      <BedrockKpiRow scope={scope} />
+      {/* Zones D4–D7 mount here, each receiving `scope`. */}
     </Flex>
   );
 };
