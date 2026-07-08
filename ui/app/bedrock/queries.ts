@@ -61,9 +61,8 @@ export const bedrockCostIntervalSec = (from: string): number => {
   if (ms <= 6 * HOUR_MS) return 300; // 5m
   if (ms <= 12 * HOUR_MS) return 900; // 15m
   if (ms < DAY_MS) return 1800; // 30m
-  if (ms <= 3 * DAY_MS) return 3600; // 1h
-  if (ms <= 45 * DAY_MS) return 86400; // 1d
-  return 604800; // 1w
+  if (ms < 14 * DAY_MS) return 3600; // 1h — up to 14 days
+  return 86400; // 1d — 14 days or more
 };
 
 export const buildBedrockDailyCostQuery = (s: BedrockScope): string =>

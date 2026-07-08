@@ -46,18 +46,18 @@ const colStyle = (c: Pick<Column, "width" | "grow" | "minWidth">): React.CSSProp
     ? { flex: `1 1 ${c.minWidth ?? 140}px`, minWidth: c.minWidth ?? 140, boxSizing: "border-box" }
     : { flex: "0 0 auto", width: c.width, boxSizing: "border-box" };
 
-const TABLE_MIN_WIDTH = 980;
+const TABLE_MIN_WIDTH = 1110;
 /** Body scroll cap (brief: "~360px") — the leaderboard scrolls internally
  *  instead of clipping to a fixed row count. Header sits outside this
  *  container, so it stays visible without needing position:sticky. */
 const BODY_MAX_HEIGHT = 360;
 
 const COLS: Column[] = [
-  { id: "session", label: "Session", grow: true, minWidth: 150, sortBy: "session" },
+  { id: "session", label: "Session", width: 170, sortBy: "session" },
   { id: "account", label: "Account", width: 120, sortBy: "account" },
-  { id: "models", label: "Models", width: 170 },
+  { id: "models", label: "Models", grow: true, minWidth: 210 },
   { id: "invocations", label: "Invocations", width: 90, align: "right", sortBy: "invocations" },
-  { id: "tokens", label: "Tokens", width: 140, align: "right", sortBy: "tokens" },
+  { id: "tokens", label: "Tokens", width: 180, align: "right", sortBy: "tokens" },
   { id: "cachePct", label: "Cache %", width: 80, align: "right", sortBy: "cachePct" },
   { id: "estCost", label: "Est cost", width: 100, align: "right", sortBy: "estCost" },
   { id: "p95", label: "Latency", width: 80, align: "right", sortBy: "p95" },
@@ -378,19 +378,21 @@ export const AgentSessionTable = ({ scope }: AgentSessionTableProps) => {
                     }}
                     style={{ display: "flex", alignItems: "center", padding: "0 10px", borderTop: "1px solid var(--border)" }}
                   >
-                    <Cell grow minWidth={150} mono>
-                      {r.session || "(unknown session)"}
+                    <Cell width={170} mono>
+                      <span title={r.session || "(unknown session)"}>
+                        {r.session || "(unknown session)"}
+                      </span>
                     </Cell>
                     <Cell width={120} mono>
                       {r.account || "—"}
                     </Cell>
-                    <Cell width={170} style={{ overflow: "visible", whiteSpace: "normal" }}>
+                    <Cell grow minWidth={210} style={{ overflow: "visible", whiteSpace: "normal" }}>
                       <ModelChips models={r.models} />
                     </Cell>
                     <Cell width={90} align="right" mono>
                       {fmtCount(r.invocations)}
                     </Cell>
-                    <Cell width={140} align="right" mono>
+                    <Cell width={180} align="right" mono>
                       {fmtTokens(r.inTok)} in / {fmtTokens(r.outTok)} out
                     </Cell>
                     <Cell width={80} align="right" mono>
