@@ -33,6 +33,12 @@ const numAt = (v: unknown, i: number): number => {
 
 const lenOf = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
 
+/** Safe string coercion — mirrors parse.ts's `str()`. Avoids
+ *  `@typescript-eslint/no-base-to-string` on a `modelId` field that's typed
+ *  `unknown` (a raw DQL result value can be an object, which `String()`
+ *  would stringify as "[object Object]"). */
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
 /** Longest token array on a record — a record's four series should be the
  *  same length, but take the max defensively in case one is short/missing. */
 const recordBucketCount = (r: Record<string, unknown>): number =>
@@ -58,7 +64,7 @@ export const foldDailyCost = (
     let savedByCache = 0;
     for (const r of records) {
       const t: DailyModelTokens = {
-        modelId: String(r.modelId ?? ""),
+        modelId: str(r.modelId),
         inTok: numAt(r.inTok, i),
         outTok: numAt(r.outTok, i),
         cacheRead: numAt(r.cacheRead, i),

@@ -60,7 +60,7 @@ const COLS: Column[] = [
   { id: "tokens", label: "Tokens", width: 140, align: "right", sortBy: "tokens" },
   { id: "cachePct", label: "Cache %", width: 80, align: "right", sortBy: "cachePct" },
   { id: "estCost", label: "Est cost", width: 100, align: "right", sortBy: "estCost" },
-  { id: "p95", label: "P95", width: 80, align: "right", sortBy: "p95" },
+  { id: "p95", label: "Latency", width: 80, align: "right", sortBy: "p95" },
   { id: "errorRate", label: "Errors", width: 80, align: "right", sortBy: "errorRate" },
 ];
 

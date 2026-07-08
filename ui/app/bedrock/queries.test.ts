@@ -41,10 +41,13 @@ describe("buildBedrockDailyCostQuery", () => {
 });
 
 describe("buildAgentSessionsQuery", () => {
-  it("groups by identity session name and account", () => {
+  it("groups by identity session name, account, AND modelId — one row per model per session", () => {
+    // One row per (session, account, modelId) lets parseAgentSessions price
+    // each model at its own rate instead of pricing a whole multi-model
+    // session at a single model's rate.
     const q = buildAgentSessionsQuery(scope);
     expect(q).toContain("arrayLast(splitString(b[identity][arn]");
-    expect(q).toContain("by:");
+    expect(q).toContain("by: { session, account, modelId }");
   });
 });
 

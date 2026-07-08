@@ -46,14 +46,20 @@ export const buildBedrockDailyCostQuery = (s: BedrockScope): string =>
     cacheRead = sum(cacheRead), cacheWrite = sum(cacheWrite)
   }, interval: 1d, by: { modelId }`;
 
+/** One row per (session, account, modelId) — NOT per session — so a
+ *  multi-model agent session (e.g. Opus for planning + Nova for tool calls)
+ *  can be priced model-by-model in `parseAgentSessions` instead of the whole
+ *  session's tokens getting priced at a single model's rate. `sort` +
+ *  `limit` still cap by row volume; a heavy multi-model session now spends
+ *  more than one row of that budget, which is the right trade-off for
+ *  correct per-model pricing. */
 export const buildAgentSessionsQuery = (s: BedrockScope): string =>
   `${bedrockLogBase(s)}\n${FLATTEN}\n| summarize {
     invocations = count(),
     inTok = sum(inTok), outTok = sum(outTok),
     cacheRead = sum(cacheRead), cacheWrite = sum(cacheWrite),
-    errors = sum(hasError),
-    models = collectDistinct(modelId)
-  }, by: { session, account }
+    errors = sum(hasError)
+  }, by: { session, account, modelId }
   | sort invocations desc | limit 200`;
 
 export const buildAccountModelQuery = (s: BedrockScope): string =>

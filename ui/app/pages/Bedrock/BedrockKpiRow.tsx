@@ -138,14 +138,14 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           }
         />
         <StatTile
-          label="P95 latency"
+          label="Latency (avg)"
           value={worstLatencyRow ? fmtMs(worstLatencyRow.latencyMs) : "—"}
           sub={worstLatencyRow?.model}
           info="Highest average per-model invocation latency observed in scope (cloud.aws.bedrock.InvocationLatency). This is per-model and avg-based — NOT a true percentile across individual invocations, and can't be split by user or session."
           window={win}
           loading={perfInitial}
           onClick={() => setModal("latency")}
-          actionLabel="Open P95 latency details"
+          actionLabel="Open Latency (avg) details"
         />
         <StatTile
           label="TTFT"

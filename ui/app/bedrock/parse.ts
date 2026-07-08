@@ -35,24 +35,68 @@ export interface AgentSessionRow {
   invocations: number; inTok: number; outTok: number;
   cachePct: number; estCost: number; blended: boolean; errorRate: number;
 }
-export const parseAgentSessions = (records: Record<string, unknown>[]): AgentSessionRow[] =>
-  (records ?? []).map((r) => {
+
+interface AgentSessionAccumulator {
+  session: string; account: string;
+  invocations: number; inTok: number; outTok: number;
+  cacheRead: number; cacheWrite: number; errors: number;
+  estCost: number; blended: boolean;
+  /** Insertion-ordered so `models[0]` (the perf-join "primary" model — see
+   *  agentSessionPerf.ts) stays the first model this session's rows produced,
+   *  same as the old `collectDistinct` array's first entry. */
+  models: Set<string>;
+}
+
+/** `buildAgentSessionsQuery` now returns one row per (session, account,
+ *  modelId) instead of one row per session, so a multi-model agent session
+ *  (e.g. Opus for planning + Nova for tool calls) can be priced correctly —
+ *  each row at ITS OWN model's rate — instead of the whole session's tokens
+ *  getting priced at a single (arbitrary) model's rate. This groups those
+ *  rows back down to one `AgentSessionRow` per (session, account), summing
+ *  token/invocation/error counts and the already-per-model-priced cost. */
+export const parseAgentSessions = (records: Record<string, unknown>[]): AgentSessionRow[] => {
+  const groups = new Map<string, AgentSessionAccumulator>();
+  for (const r of records ?? []) {
+    const session = str(r.session), account = str(r.account);
+    const key = `${session} ${account}`;
+    const modelId = str(r.modelId);
     const inTok = toNum(r.inTok), outTok = toNum(r.outTok);
     const cacheRead = toNum(r.cacheRead), cacheWrite = toNum(r.cacheWrite);
-    const models = Array.isArray(r.models) ? (r.models as string[]) : [];
-    const primary = models[0] ?? "";
-    const { cost, blended } = bedrockCostOfTokens({ modelId: primary, inTok, outTok, cacheRead, cacheWrite });
-    const inputSide = inTok + cacheRead;
     const invocations = toNum(r.invocations);
+    const errors = toNum(r.errors);
+    const { cost, blended } = bedrockCostOfTokens({ modelId, inTok, outTok, cacheRead, cacheWrite });
+
+    const g =
+      groups.get(key) ??
+      ({
+        session, account,
+        invocations: 0, inTok: 0, outTok: 0, cacheRead: 0, cacheWrite: 0, errors: 0,
+        estCost: 0, blended: false, models: new Set<string>(),
+      } satisfies AgentSessionAccumulator);
+    g.invocations += invocations;
+    g.inTok += inTok;
+    g.outTok += outTok;
+    g.cacheRead += cacheRead;
+    g.cacheWrite += cacheWrite;
+    g.errors += errors;
+    g.estCost += cost;
+    g.blended = g.blended || blended;
+    if (modelId) g.models.add(shortModelName(modelId));
+    groups.set(key, g);
+  }
+
+  return [...groups.values()].map((g) => {
+    const inputSide = g.inTok + g.cacheRead;
     return {
-      session: str(r.session), account: str(r.account),
-      models: models.map(shortModelName),
-      invocations, inTok, outTok,
-      cachePct: inputSide > 0 ? (cacheRead / inputSide) * 100 : 0,
-      estCost: cost, blended,
-      errorRate: invocations > 0 ? toNum(r.errors) / invocations : 0,
+      session: g.session, account: g.account,
+      models: [...g.models],
+      invocations: g.invocations, inTok: g.inTok, outTok: g.outTok,
+      cachePct: inputSide > 0 ? (g.cacheRead / inputSide) * 100 : 0,
+      estCost: g.estCost, blended: g.blended,
+      errorRate: g.invocations > 0 ? g.errors / g.invocations : 0,
     };
   });
+};
 
 export interface PerfByModelRow {
   model: string; latencyMs: number; ttftMs: number; invocations: number;

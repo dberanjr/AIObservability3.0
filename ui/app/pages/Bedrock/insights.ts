@@ -11,6 +11,7 @@ import { fmtSecs1, fmtUSD } from "../../data/format";
 import type { BedrockCostSummary } from "../../bedrock/cost";
 import type { BedrockDailyCostPoint } from "../../bedrock/series";
 import { normalizeBedrockModelId } from "../../bedrock/model";
+import type { PerfByModelRow } from "../../bedrock/parse";
 
 export interface Insight {
   tone: "warn" | "info" | "good";
@@ -26,20 +27,16 @@ export interface Insight {
   metric: string;
 }
 
-export interface PerfRowLike {
-  model: string;
-  latencyMs: number;
-  ttftMs: number;
-  invocations: number;
-}
-
 export interface ComputeInsightsInput {
   summary: BedrockCostSummary;
   /** Total cost per model over the window (already-normalized model keys —
    *  must line up 1:1 with `invocationsByModel`/`perf`'s `model` keys). */
   costByModel: Record<string, number>;
   invocationsByModel: Record<string, number>;
-  perf: PerfRowLike[];
+  /** Structurally identical to `PerfByModelRow` (`parse.ts`) — reused
+   *  directly rather than re-declared, since `useBedrockPerf`'s rows are
+   *  exactly what flows in here via `buildInsightsInput`. */
+  perf: PerfByModelRow[];
 }
 
 /** A model's spend share of total cost at/above this is "concentrated". */
@@ -134,7 +131,7 @@ export interface InsightsSource {
   /** `useBedrockCost(scope).summary`. */
   summary: BedrockCostSummary;
   /** `useBedrockPerf(scope).rows`. */
-  perfRows: PerfRowLike[];
+  perfRows: PerfByModelRow[];
 }
 
 /**

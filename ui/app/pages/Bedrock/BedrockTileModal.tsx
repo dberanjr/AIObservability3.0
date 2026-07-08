@@ -55,7 +55,7 @@ const MODAL_META: Record<BedrockTileKind, { title: string; subtitle: string }> =
     subtitle: "Spend breakdown — over time, by model, by session, and token mix",
   },
   latency: {
-    title: "P95 latency",
+    title: "Latency (avg)",
     subtitle:
       "Highest per-model average invocation latency in scope — metric-derived, not a true percentile",
   },

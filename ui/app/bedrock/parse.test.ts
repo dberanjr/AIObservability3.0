@@ -27,16 +27,66 @@ describe("parseOverview", () => {
 });
 
 describe("parseAgentSessions", () => {
-  it("computes cost, cache% and error rate per session", () => {
+  it("computes cost, cache% and error rate for a single-model session", () => {
+    // buildAgentSessionsQuery now groups by (session, account, modelId), so
+    // even a single-model session arrives as one row carrying `modelId`
+    // (not the old `models` collectDistinct array).
     const rows = parseAgentSessions([
       { session: "apollo-agent-session", account: "975049911737",
         invocations: 100, inTok: 900_000, outTok: 100_000, cacheRead: 100_000, cacheWrite: 0,
-        errors: 1, models: ["us.anthropic.claude-sonnet-4-6"] },
+        errors: 1, modelId: "us.anthropic.claude-sonnet-4-6" },
     ]);
     expect(rows[0].session).toBe("apollo-agent-session");
+    expect(rows[0].models).toEqual(["claude-sonnet-4-6"]);
     expect(rows[0].estCost).toBeGreaterThan(0);
+    expect(rows[0].blended).toBe(false);
     expect(rows[0].errorRate).toBeCloseTo(0.01);
     expect(rows[0].cachePct).toBeCloseTo(10); // 100k / 1M input-side
+  });
+
+  it("prices a multi-model session per-row and rolls it back up to one session row", () => {
+    // A real agent session can span more than one model (e.g. Opus for
+    // planning + an unpriced/experimental model for tool calls). Each row
+    // must be priced at ITS OWN modelId, not the session's first model.
+    const pricedRow = {
+      session: "multi-model-session", account: "975049911737",
+      invocations: 60, inTok: 600_000, outTok: 60_000, cacheRead: 0, cacheWrite: 0,
+      errors: 1, modelId: "us.anthropic.claude-sonnet-4-6",
+    };
+    const unpricedRow = {
+      session: "multi-model-session", account: "975049911737",
+      invocations: 40, inTok: 400_000, outTok: 40_000, cacheRead: 100_000, cacheWrite: 0,
+      errors: 1, modelId: "us.anthropic.claude-unpriced-test-v1",
+    };
+
+    const rows = parseAgentSessions([pricedRow, unpricedRow]);
+    const [pricedOnly] = parseAgentSessions([pricedRow]);
+
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+
+    // estCost is the SUM of both rows priced independently — strictly more
+    // than pricing the priced model's tokens alone would cost.
+    expect(row.estCost).toBeGreaterThan(pricedOnly.estCost);
+
+    // blended is true because ONE of the two model rows fell back to the
+    // blended rate, even though the other was a real rate-card hit.
+    expect(row.blended).toBe(true);
+
+    // both models show up, short-named, in the merged row.
+    expect(row.models).toEqual(
+      expect.arrayContaining(["claude-sonnet-4-6", "claude-unpriced-test-v1"]),
+    );
+    expect(row.models).toHaveLength(2);
+
+    // invocations/tokens/errors are summed across the session's model rows.
+    expect(row.invocations).toBe(100);
+    expect(row.inTok).toBe(1_000_000);
+    expect(row.outTok).toBe(100_000);
+    expect(row.errorRate).toBeCloseTo(2 / 100); // 2 errors / 100 invocations
+
+    // cachePct from SUMMED cacheRead / (summed inTok + summed cacheRead).
+    expect(row.cachePct).toBeCloseTo((100_000 / (1_000_000 + 100_000)) * 100);
   });
 });
 

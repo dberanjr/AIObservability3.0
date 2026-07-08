@@ -51,7 +51,7 @@ export const useBedrockCost = (
 ): { daily: BedrockDailyCostPoint[]; summary: BedrockCostSummary; isLoading: boolean } => {
   const res = useScopedDql<ResultRecord>(buildBedrockDailyCostQuery(scope), IGNORE);
   return useMemo(() => {
-    const { daily, summary } = foldDailyCost((res.data?.records ?? []) as Record<string, unknown>[]);
+    const { daily, summary } = foldDailyCost(res.data?.records ?? []);
     return { daily, summary, isLoading: res.isLoading };
   }, [res.data, res.isLoading]);
 };
@@ -89,7 +89,7 @@ export const useBedrockPerf = (
   const perf = useScopedDql<ResultRecord>(buildBedrockPerfByModelQuery(scope.timeframe), IGNORE);
   const tpm = useScopedDql<ResultRecord>(buildBedrockTpmQuery(scope.timeframe), IGNORE);
   return useMemo(() => {
-    const rows = parsePerfByModel((perf.data?.records ?? []) as Record<string, unknown>[]);
+    const rows = parsePerfByModel(perf.data?.records ?? []);
     const tpmVals = ((tpm.data?.records ?? []) as Record<string, unknown>[])
       .flatMap((r) => (Array.isArray(r.tpm) ? (r.tpm as unknown[]) : []))
       .map((x) => toNum(x))
