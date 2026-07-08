@@ -14,9 +14,9 @@ import { useScopedDql } from "../scope/useScopedDql";
 import { useScope } from "../scope/ScopeContext";
 import { toNum } from "../data/format";
 import type { BedrockScope } from "./types";
-import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery } from "./queries";
+import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery, buildAccountModelQuery } from "./queries";
 import { buildBedrockPerfByModelQuery, buildBedrockTpmQuery } from "./metricQueries";
-import { parseOverview, parseAgentSessions, parsePerfByModel, type OverviewTotals, type AgentSessionRow, type PerfByModelRow } from "./parse";
+import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, type OverviewTotals, type AgentSessionRow, type PerfByModelRow, type AccountCostRow } from "./parse";
 import { foldDailyCost, type BedrockDailyCostPoint } from "./series";
 import type { BedrockCostSummary } from "./cost";
 
@@ -53,6 +53,23 @@ export const useBedrockCost = (
     const { daily, summary } = foldDailyCost((res.data?.records ?? []) as Record<string, unknown>[]);
     return { daily, summary, isLoading: res.isLoading };
   }, [res.data, res.isLoading]);
+};
+
+/** Per-account cost (D4 by-account breakdown). `buildAccountModelQuery`
+ *  returns one scalar `summarize` row per (account, modelId) pair — no time
+ *  axis — so parsing is a flat fold, not the bucketed `foldDailyCost` the
+ *  daily-cost hook uses. */
+export const useBedrockAccountCost = (
+  scope: BedrockScope,
+): { rows: AccountCostRow[]; isLoading: boolean } => {
+  const res = useScopedDql<ResultRecord>(buildAccountModelQuery(scope), IGNORE);
+  return useMemo(
+    () => ({
+      rows: parseAccountCost((res.data?.records ?? []) as Record<string, unknown>[]),
+      isLoading: res.isLoading,
+    }),
+    [res.data, res.isLoading],
+  );
 };
 
 export const useAgentSessions = (

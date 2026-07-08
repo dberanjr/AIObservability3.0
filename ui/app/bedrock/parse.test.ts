@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAgentSessions, parseOverview, parsePerfByModel } from "./parse";
+import { parseAccountCost, parseAgentSessions, parseOverview, parsePerfByModel } from "./parse";
 
 describe("parseOverview", () => {
   it("maps a summarize-style record to OverviewTotals", () => {
@@ -47,5 +47,30 @@ describe("parsePerfByModel", () => {
     ]);
     expect(rows[0].model).toBe("claude-opus-4-8");
     expect(rows[0].latencyMs).toBeGreaterThan(0);
+  });
+});
+
+describe("parseAccountCost", () => {
+  it("sums cost per account across its (account, modelId) rows and sorts desc", () => {
+    const rows = parseAccountCost([
+      { account: "111", modelId: "us.anthropic.claude-sonnet-4-6", inTok: 1_000_000, outTok: 0, cacheRead: 0, cacheWrite: 0 },
+      { account: "111", modelId: "amazon.titan-text-express-v1", inTok: 1_000, outTok: 0, cacheRead: 0, cacheWrite: 0 },
+      { account: "222", modelId: "us.anthropic.claude-sonnet-4-6", inTok: 100_000, outTok: 0, cacheRead: 0, cacheWrite: 0 },
+    ]);
+    expect(rows.map((r) => r.account)).toEqual(["111", "222"]);
+    expect(rows[0].cost).toBeGreaterThan(rows[1].cost);
+    // account "111" rolls up BOTH of its model rows (sonnet + titan), not just one.
+    expect(rows[0].cost).toBeGreaterThan(3); // sonnet alone: 1M input tokens = $3
+  });
+
+  it("returns [] for an empty result set", () => {
+    expect(parseAccountCost([])).toEqual([]);
+  });
+
+  it("flags an account blended when any of its rows used the fallback rate", () => {
+    const rows = parseAccountCost([
+      { account: "111", modelId: "totally-unpriced-model-xyz", inTok: 1_000, outTok: 0, cacheRead: 0, cacheWrite: 0 },
+    ]);
+    expect(rows[0].blended).toBe(true);
   });
 });

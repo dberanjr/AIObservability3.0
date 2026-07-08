@@ -86,9 +86,11 @@ const MODAL_META: Record<BedrockTileKind, { title: string; subtitle: string }> =
  * where a per-model series actually exists in `perfRows`) — deliberately not
  * over-built to match data that's actually available from the D2 hooks.
  *
- * By-account cost breakdown is NOT included here: `buildAccountModelQuery`
- * exists in bedrock/queries.ts but has no hook wired to it yet (D3 is scoped
- * to the 4 hooks in useBedrock.ts) — see the D3 report for this deferral.
+ * By-account cost breakdown is NOT included in THIS modal: it was out of
+ * scope for D3 (scoped to the 4 hooks that existed in useBedrock.ts at the
+ * time — see the D3 report for that deferral). D4 later wired
+ * `useBedrockAccountCost` onto `buildAccountModelQuery` and surfaces a
+ * by-account BarList in the page-level BedrockCostZone instead.
  */
 export const BedrockTileModal = ({
   kind,

@@ -63,3 +63,35 @@ export const parsePerfByModel = (records: Record<string, unknown>[]): PerfByMode
     ttftMs: arrAvg(numArr(r.ttftMs)),
     invocations: numArr(r.invocations).reduce((s, x) => s + x, 0),
   }));
+
+export interface AccountCostRow {
+  account: string;
+  cost: number;
+  /** True if ANY model rolled into this account's total used the blended
+   *  fallback rate (unpriced model) rather than the rate card. */
+  blended: boolean;
+}
+
+/** Folds the (account, modelId) rows from `buildAccountModelQuery` — each a
+ *  scalar `summarize` row, not a timeseries — into one cost total per
+ *  account. Mirrors the per-row `bedrockCostOfTokens` call `parseAgentSessions`
+ *  makes, summed by account instead of kept per-row, and sorted desc so a
+ *  BarList can render it directly. */
+export const parseAccountCost = (records: Record<string, unknown>[]): AccountCostRow[] => {
+  const sums = new Map<string, { cost: number; blended: boolean }>();
+  for (const r of records ?? []) {
+    const account = String(r.account ?? "");
+    const { cost, blended } = bedrockCostOfTokens({
+      modelId: String(r.modelId ?? ""),
+      inTok: toNum(r.inTok),
+      outTok: toNum(r.outTok),
+      cacheRead: toNum(r.cacheRead),
+      cacheWrite: toNum(r.cacheWrite),
+    });
+    const prev = sums.get(account) ?? { cost: 0, blended: false };
+    sums.set(account, { cost: prev.cost + cost, blended: prev.blended || blended });
+  }
+  return [...sums.entries()]
+    .map(([account, v]) => ({ account, cost: v.cost, blended: v.blended }))
+    .sort((a, b) => b.cost - a.cost);
+};
