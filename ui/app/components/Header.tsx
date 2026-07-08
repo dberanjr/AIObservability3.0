@@ -11,7 +11,8 @@ import { ModelPricingButton } from "../pricing/ModelPricingButton";
  * Primary navigation, grouped into four labeled clusters and rendered as a
  * dedicated tab strip beneath the app bar (IA — see Information-1):
  *   OVERVIEW — Summary, Pulse                      (the front-door dashboards)
- *   ANALYZE  — Explorer, Agents, Models, Prompts   (per-entity analytics)
+ *   ANALYZE  — Explorer, Agents, Models, Prompts,   (per-entity analytics)
+ *              AWS Bedrock
  *   AUDIT    — Attributes                          (instrumentation coverage)
  * Field Notes + About are trailing utility items — right-aligned, outside any
  * group label — so low-frequency meta pages no longer compete with the core
@@ -43,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/agents", label: "Agents" },
       { to: "/models", label: "Models" },
       { to: "/prompts", label: "Prompts" },
+      { to: "/bedrock", label: "AWS Bedrock" },
     ],
   },
   {

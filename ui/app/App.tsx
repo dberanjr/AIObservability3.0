@@ -6,6 +6,7 @@ import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
 import { RedirectKeepingSearch } from "./lib/nav";
 import { AgentsPage } from "./pages/Agents/AgentsPage";
+import { BedrockPage } from "./pages/Bedrock/BedrockPage";
 import { ExplorerPage } from "./pages/Explorer/ExplorerPage";
 import { ModelsPage } from "./pages/Models/ModelsPage";
 import { PromptsPage } from "./pages/Prompts/PromptsPage";
@@ -66,6 +67,7 @@ export const App = () => {
                 <Route path="/agents" element={<AgentsPage />} />
                 <Route path="/prompts" element={<PromptsPage />} />
                 <Route path="/models" element={<ModelsPage />} />
+                <Route path="/bedrock" element={<BedrockPage />} />
                 <Route path="/attributes" element={<AttributeAuditPage />} />
                 {/* Folded tabs — redirect old deep-links to their new homes.
                     Tools + Topology → Agents, MCP Health → Pulse, FinOps →
