@@ -18,3 +18,18 @@ describe("buildBedrockTpmQuery", () => {
     expect(buildBedrockTpmQuery(tf)).toContain("`cloud.aws.bedrock.EstimatedTPMQuotaUsage.By.ModelId`");
   });
 });
+
+describe("optional timeframe.to handling", () => {
+  it("buildBedrockPerfByModelQuery defaults to: now() when to is undefined", () => {
+    const noTo = { from: "now()-1h" };
+    const q = buildBedrockPerfByModelQuery(noTo);
+    expect(q).toContain("to: now()");
+    expect(q).not.toContain("to: undefined");
+  });
+  it("buildBedrockTpmQuery defaults to: now() when to is undefined", () => {
+    const noTo = { from: "now()-1h" };
+    const q = buildBedrockTpmQuery(noTo);
+    expect(q).toContain("to: now()");
+    expect(q).not.toContain("to: undefined");
+  });
+});

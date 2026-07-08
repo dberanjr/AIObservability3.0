@@ -12,7 +12,7 @@ export const buildBedrockPerfByModelQuery = (tf: Timeframe): string =>
     invocations = sum(${K("Invocations")}),
     inTok = sum(${K("InputTokenCount")}),
     outTok = sum(${K("OutputTokenCount")})
-  }, from: ${tf.from}, to: ${tf.to}, by: { ModelId }`;
+  }, from: ${tf.from}, to: ${tf.to ?? "now()"}, by: { ModelId }`;
 
 export const buildBedrockTpmQuery = (tf: Timeframe): string =>
-  `timeseries tpm = avg(${K("EstimatedTPMQuotaUsage")}), from: ${tf.from}, to: ${tf.to}, by: { ModelId }`;
+  `timeseries tpm = avg(${K("EstimatedTPMQuotaUsage")}), from: ${tf.from}, to: ${tf.to ?? "now()"}, by: { ModelId }`;

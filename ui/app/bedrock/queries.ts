@@ -1,7 +1,7 @@
 import type { BedrockScope } from "./types";
 
 const arr = (xs: string[]): string => xs.map((x) => `"${x}"`).join(",");
-const tf = (s: BedrockScope): string => `from: ${s.timeframe.from}, to: ${s.timeframe.to}`;
+const tf = (s: BedrockScope): string => `from: ${s.timeframe.from}, to: ${s.timeframe.to ?? "now()"}`;
 
 /** Base pipeline: bedrock log group (indexed prefilter) → ModelInvocationLog →
  *  parse JSON → optional account/model scope. `b` holds the parsed record. */

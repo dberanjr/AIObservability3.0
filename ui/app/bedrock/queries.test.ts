@@ -47,3 +47,12 @@ describe("buildAgentSessionsQuery", () => {
     expect(q).toContain("by:");
   });
 });
+
+describe("optional timeframe.to handling", () => {
+  it("bedrockLogBase defaults to: now() when to is undefined", () => {
+    const noToScope = { timeframe: { from: "now()-7d" }, accounts: [] as string[], models: [] as string[] };
+    const q = bedrockLogBase(noToScope);
+    expect(q).toContain("to: now()");
+    expect(q).not.toContain("to: undefined");
+  });
+});
