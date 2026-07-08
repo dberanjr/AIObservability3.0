@@ -12,9 +12,13 @@ import { useMemo } from "react";
 import type { ResultRecord } from "@dynatrace-sdk/client-query";
 import { useScopedDql } from "../scope/useScopedDql";
 import { useScope } from "../scope/ScopeContext";
+import { toNum } from "../data/format";
 import type { BedrockScope } from "./types";
-import { buildBedrockOverviewQuery } from "./queries";
-import { parseOverview, type OverviewTotals } from "./parse";
+import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery } from "./queries";
+import { buildBedrockPerfByModelQuery, buildBedrockTpmQuery } from "./metricQueries";
+import { parseOverview, parseAgentSessions, parsePerfByModel, type OverviewTotals, type AgentSessionRow, type PerfByModelRow } from "./parse";
+import { foldDailyCost, type BedrockDailyCostPoint } from "./series";
+import type { BedrockCostSummary } from "./cost";
 
 const IGNORE = { ignoreGlobalFilter: true, ignoreBucketFilter: true, ignoreSegments: true, staleTime: 60_000 } as const;
 
@@ -37,6 +41,43 @@ export const useBedrockOverview = (
     }),
     [res.data, res.isLoading, res.error],
   );
+};
+
+/** Daily per-model cost (cache-aware, with the no-cache ghost) for the cost
+ *  trend chart. The bucket fold is pure logic in `series.ts` — see its tests. */
+export const useBedrockCost = (
+  scope: BedrockScope,
+): { daily: BedrockDailyCostPoint[]; summary: BedrockCostSummary; isLoading: boolean } => {
+  const res = useScopedDql<ResultRecord>(buildBedrockDailyCostQuery(scope), IGNORE);
+  return useMemo(() => {
+    const { daily, summary } = foldDailyCost((res.data?.records ?? []) as Record<string, unknown>[]);
+    return { daily, summary, isLoading: res.isLoading };
+  }, [res.data, res.isLoading]);
+};
+
+export const useAgentSessions = (
+  scope: BedrockScope,
+): { rows: AgentSessionRow[]; isLoading: boolean } => {
+  const res = useScopedDql<ResultRecord>(buildAgentSessionsQuery(scope), IGNORE);
+  return useMemo(
+    () => ({ rows: parseAgentSessions((res.data?.records ?? []) as Record<string, unknown>[]), isLoading: res.isLoading }),
+    [res.data, res.isLoading],
+  );
+};
+
+export const useBedrockPerf = (
+  scope: BedrockScope,
+): { rows: PerfByModelRow[]; tpmPeakPct: number; isLoading: boolean } => {
+  const perf = useScopedDql<ResultRecord>(buildBedrockPerfByModelQuery(scope.timeframe), IGNORE);
+  const tpm = useScopedDql<ResultRecord>(buildBedrockTpmQuery(scope.timeframe), IGNORE);
+  return useMemo(() => {
+    const rows = parsePerfByModel((perf.data?.records ?? []) as Record<string, unknown>[]);
+    const tpmVals = ((tpm.data?.records ?? []) as Record<string, unknown>[])
+      .flatMap((r) => (Array.isArray(r.tpm) ? (r.tpm as unknown[]) : []))
+      .map((x) => toNum(x))
+      .filter((n) => Number.isFinite(n));
+    return { rows, tpmPeakPct: tpmVals.length ? Math.max(...tpmVals) : 0, isLoading: perf.isLoading || tpm.isLoading };
+  }, [perf.data, perf.isLoading, tpm.data, tpm.isLoading]);
 };
 
 export { useScope }; // re-export for page convenience
