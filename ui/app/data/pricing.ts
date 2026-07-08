@@ -383,10 +383,6 @@ export const PRICING_BEDROCK: Record<string, ModelPricing> = {
     inputPerMTok: 0.8, outputPerMTok: 3.2, contextWindow: 300_000,
     provider: "Amazon", tier: "mid",
   },
-  "claude-opus-4-6": {
-    inputPerMTok: 3, outputPerMTok: 15, contextWindow: 200_000,
-    provider: "Anthropic", tier: "frontier", blended: true,
-  },
 };
 
 /** Per-platform built-in rate tables. `direct` is the existing PRICING table. */

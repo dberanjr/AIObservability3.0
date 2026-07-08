@@ -19,10 +19,10 @@ describe("bedrockCostSummary", () => {
   it("splits priced vs estimated and totals cache savings", () => {
     const rows = [
       sonnet,
-      { modelId: "us.anthropic.claude-opus-4-6-v1", inTok: 1_000_000, outTok: 0, cacheRead: 0, cacheWrite: 0 }, // unpriced → blended/estimated
+      { modelId: "us.anthropic.claude-unpriced-test-v1", inTok: 1_000_000, outTok: 0, cacheRead: 0, cacheWrite: 0 }, // genuinely unpriced (in neither PRICING nor PRICING_BEDROCK) → blended/estimated
     ];
     const s = bedrockCostSummary(rows);
-    expect(s.estimatedModels).toContain("claude-opus-4-6");
+    expect(s.estimatedModels).toContain("claude-unpriced-test");
     expect(s.savedByCache).toBeCloseTo(2.7); // 6 - 3.3 from the sonnet row
     expect(s.total).toBeCloseTo(s.priced + s.estimated);
   });
