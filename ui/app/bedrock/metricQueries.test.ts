@@ -12,10 +12,19 @@ describe("buildBedrockPerfByModelQuery", () => {
     expect(q).toContain("by: { ModelId }");
     expect(q).toContain("from: now()-24h");
   });
+
+  it("uses a fine chart-granularity interval (pickChartIntervalSec) so per-model sparklines are detailed", () => {
+    // now()-24h → pickChartIntervalSec targets ~240 buckets → 15m (900s).
+    expect(buildBedrockPerfByModelQuery(tf)).toContain("interval: 900s");
+  });
 });
 describe("buildBedrockTpmQuery", () => {
   it("queries EstimatedTPMQuotaUsage", () => {
     expect(buildBedrockTpmQuery(tf)).toContain("`cloud.aws.bedrock.EstimatedTPMQuotaUsage.By.ModelId`");
+  });
+
+  it("uses a fine chart-granularity interval (pickChartIntervalSec) so the TPM sparkline is detailed", () => {
+    expect(buildBedrockTpmQuery(tf)).toContain("interval: 900s");
   });
 });
 

@@ -3,7 +3,6 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { ChevronDownIcon } from "@dynatrace/strato-icons";
 import { useBedrockFacets } from "../../bedrock/useBedrock";
-import { shortModelName } from "../../bedrock/model";
 import type { Timeframe } from "../../scope/types";
 
 export interface ScopeSelectorsProps {
@@ -17,6 +16,9 @@ export interface ScopeSelectorsProps {
 interface PickerOption {
   value: string;
   label: string;
+  /** Hover text — the Model picker uses this to reveal the raw modelIds a
+   *  grouped/deduped option collapses (see `ScopeSelectors` doc comment). */
+  title?: string;
 }
 
 interface PickerProps {
@@ -141,7 +143,7 @@ const Picker = ({ label, options, selected, onChange, isLoading, emptyHint }: Pi
               <Text style={popoverTextStyle}>{emptyHint}</Text>
             ) : (
               filtered.map((o) => (
-                <label key={o.value} style={rowStyle}>
+                <label key={o.value} title={o.title ?? o.value} style={rowStyle}>
                   <input
                     type="checkbox"
                     checked={selected.includes(o.value)}
@@ -149,7 +151,6 @@ const Picker = ({ label, options, selected, onChange, isLoading, emptyHint }: Pi
                     style={{ cursor: "pointer", width: 14, height: 14 }}
                   />
                   <span
-                    title={o.value}
                     style={{
                       fontSize: 11.5,
                       color: "var(--text)",
@@ -198,10 +199,16 @@ const Picker = ({ label, options, selected, onChange, isLoading, emptyHint }: Pi
  * picking one model doesn't prune the other models out of its own picker's
  * option list.
  *
- * Model option LABELS use `shortModelName` for readability, but the VALUE
- * wired back into scope is the raw modelId string `bedrockLogBase` filters
- * `b[modelId]` against — normalizing the value itself would silently zero
- * out the filter (it would never match the raw log field).
+ * The Model picker is deduped by FRIENDLY label (`BedrockFacets.modelGroups`
+ * — see parse.ts): several raw modelIds (an on-demand inference-profile id
+ * plus its account-specific ARN forms) can all render the same
+ * `shortModelName`, e.g. "claude-sonnet-4-6" showing up 3x for one real
+ * model. Each picker option is one GROUP; picking it scopes ALL of that
+ * group's raw ids. `scope.models` therefore always stays a raw-id list (so it
+ * round-trips into `bedrockLogBase`'s `b[modelId]` filter unchanged) — the
+ * grouping/expansion only lives in this component's selected/onChange glue.
+ * The Account picker has no such collision (raw account ids are already
+ * unique), so its value is the raw id directly.
  */
 export const ScopeSelectors = ({
   timeframe,
@@ -210,19 +217,33 @@ export const ScopeSelectors = ({
   setAccounts,
   setModels,
 }: ScopeSelectorsProps) => {
-  const { accounts: accountOpts, models: modelOpts, isLoading } = useBedrockFacets(timeframe);
+  const { accounts: accountOpts, modelGroups, isLoading } = useBedrockFacets(timeframe);
 
   const accountOptions = useMemo<PickerOption[]>(
     () => accountOpts.map((a) => ({ value: a, label: a })),
     [accountOpts],
   );
+
+  // modelGroups is already sorted by label (parseFacets); labels are unique
+  // within it, so `value` doubles as the label. The row's hover `title`
+  // reveals the raw ids a label collapses.
   const modelOptions = useMemo<PickerOption[]>(
-    () =>
-      modelOpts
-        .map((m) => ({ value: m, label: shortModelName(m) }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [modelOpts],
+    () => modelGroups.map((g) => ({ value: g.label, label: g.label, title: g.ids.join(", ") })),
+    [modelGroups],
   );
+
+  // A group reads as "selected" only when ALL of its raw ids are in scope —
+  // avoids a false-positive check mark from a partial/stale overlap (e.g. a
+  // URL-restored selection missing one account-specific ARN form).
+  const selectedModelLabels = useMemo(
+    () => modelGroups.filter((g) => g.ids.every((id) => models.includes(id))).map((g) => g.label),
+    [modelGroups, models],
+  );
+
+  const handleModelChange = (labels: string[]) => {
+    const labelSet = new Set(labels);
+    setModels(modelGroups.filter((g) => labelSet.has(g.label)).flatMap((g) => g.ids));
+  };
 
   return (
     <Flex alignItems="center" gap={8}>
@@ -237,8 +258,8 @@ export const ScopeSelectors = ({
       <Picker
         label="Model"
         options={modelOptions}
-        selected={models}
-        onChange={setModels}
+        selected={selectedModelLabels}
+        onChange={handleModelChange}
         isLoading={isLoading}
         emptyHint="No models found in this timeframe."
       />

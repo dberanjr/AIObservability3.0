@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseAccountCost, parseAgentSessions, parseFacets, parseOverview, parsePerfByModel } from "./parse";
+import {
+  aggregatePerfSeries,
+  parseAccountCost,
+  parseAgentSessions,
+  parseFacets,
+  parseOverview,
+  parsePerfByModel,
+} from "./parse";
 
 describe("parseOverview", () => {
   it("maps a summarize-style record to OverviewTotals", () => {
@@ -126,24 +133,89 @@ describe("parseAccountCost", () => {
 });
 
 describe("parseFacets", () => {
-  it("dedupes and sorts the collectDistinct arrays", () => {
+  it("groups raw modelIds by shortModelName so 3 raw forms of the same friendly model collapse to 1 entry", () => {
+    // Real-world case: one on-demand inference-profile id + two
+    // account-specific ARN forms of the SAME model all render "claude-sonnet-4-6"
+    // via shortModelName — the picker must offer ONE option for all three, plus
+    // a separate group for the unrelated opus model.
     const facets = parseFacets([
       {
         accounts: ["975049911737", "637423486688", "975049911737"],
-        models: ["us.anthropic.claude-sonnet-4-6", "amazon.titan-text-express-v1"],
+        models: [
+          "us.anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:us-east-1:975049911737:inference-profile/us.anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:us-east-1:637423486688:inference-profile/us.anthropic.claude-sonnet-4-6",
+          "us.anthropic.claude-opus-4-8",
+        ],
       },
     ]);
     expect(facets.accounts).toEqual(["637423486688", "975049911737"]);
-    expect(facets.models).toEqual(["amazon.titan-text-express-v1", "us.anthropic.claude-sonnet-4-6"]);
+    expect(facets.modelGroups).toHaveLength(2);
+    // sorted by label
+    expect(facets.modelGroups.map((g) => g.label)).toEqual(["claude-opus-4-8", "claude-sonnet-4-6"]);
+
+    const opus = facets.modelGroups.find((g) => g.label === "claude-opus-4-8");
+    expect(opus?.ids).toEqual(["us.anthropic.claude-opus-4-8"]);
+
+    const sonnet = facets.modelGroups.find((g) => g.label === "claude-sonnet-4-6");
+    expect(sonnet?.ids).toEqual(
+      [
+        "arn:aws:bedrock:us-east-1:637423486688:inference-profile/us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-1:975049911737:inference-profile/us.anthropic.claude-sonnet-4-6",
+        "us.anthropic.claude-sonnet-4-6",
+      ].sort(),
+    );
+    expect(sonnet?.ids).toHaveLength(3);
   });
 
   it("returns empty lists for an empty result set", () => {
-    expect(parseFacets([])).toEqual({ accounts: [], models: [] });
+    expect(parseFacets([])).toEqual({ accounts: [], modelGroups: [] });
   });
 
   it("drops non-string / empty entries defensively", () => {
     const facets = parseFacets([{ accounts: ["111", null, ""], models: [42, "amazon.titan-text-express-v1"] }]);
     expect(facets.accounts).toEqual(["111"]);
-    expect(facets.models).toEqual(["amazon.titan-text-express-v1"]);
+    expect(facets.modelGroups).toEqual([{ label: "titan-text-express-v1", ids: ["amazon.titan-text-express-v1"] }]);
+  });
+});
+
+describe("aggregatePerfSeries", () => {
+  it("sums invocations/tokens, maxes latency/tpm, and averages ttft over non-zero records, with null→0", () => {
+    const perfRecords = [
+      {
+        ModelId: "us.anthropic.claude-sonnet-4-6",
+        invocations: [10, 20, 30],
+        inTok: [100, 200, 300],
+        outTok: [10, 20, 30],
+        latencyMs: [500, 600, 700],
+        ttftMs: [50, 0, 70],
+      },
+      {
+        ModelId: "us.anthropic.claude-opus-4-8",
+        invocations: [5, null, 15],
+        inTok: [50, 60, 70],
+        outTok: [5, 6, 7],
+        latencyMs: [400, 900, 300],
+        ttftMs: [0, 80, 90],
+      },
+    ];
+    const tpmRecords = [
+      { ModelId: "us.anthropic.claude-sonnet-4-6", tpm: [10, 20, 30] },
+      { ModelId: "us.anthropic.claude-opus-4-8", tpm: [40, 10, 5] },
+    ];
+
+    const series = aggregatePerfSeries(perfRecords, tpmRecords);
+
+    expect(series.invocations).toEqual([15, 20, 45]);
+    expect(series.tokens).toEqual([165, 286, 407]);
+    expect(series.latencyMs).toEqual([500, 900, 700]);
+    expect(series.ttftMs).toEqual([50, 80, 80]);
+    expect(series.tpm).toEqual([40, 20, 30]);
+  });
+
+  it("returns empty arrays for no records", () => {
+    expect(aggregatePerfSeries([], [])).toEqual({
+      invocations: [], tokens: [], latencyMs: [], ttftMs: [], tpm: [],
+    });
   });
 });

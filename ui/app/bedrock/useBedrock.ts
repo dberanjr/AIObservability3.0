@@ -17,7 +17,7 @@ import type { Timeframe } from "../scope/types";
 import type { BedrockScope } from "./types";
 import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery, buildAccountModelQuery, buildBedrockFacetsQuery } from "./queries";
 import { buildBedrockPerfByModelQuery, buildBedrockTpmQuery } from "./metricQueries";
-import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, parseFacets, type OverviewTotals, type AgentSessionRow, type PerfByModelRow, type AccountCostRow, type BedrockFacets } from "./parse";
+import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, parseFacets, aggregatePerfSeries, type OverviewTotals, type AgentSessionRow, type PerfByModelRow, type AccountCostRow, type BedrockFacets } from "./parse";
 import { foldDailyCost, type BedrockDailyCostPoint } from "./series";
 import type { BedrockCostSummary } from "./cost";
 
@@ -85,16 +85,28 @@ export const useAgentSessions = (
 
 export const useBedrockPerf = (
   scope: BedrockScope,
-): { rows: PerfByModelRow[]; tpmPeakPct: number; isLoading: boolean } => {
+): {
+  rows: PerfByModelRow[];
+  tpmPeakPct: number;
+  series: ReturnType<typeof aggregatePerfSeries>;
+  isLoading: boolean;
+} => {
   const perf = useScopedDql<ResultRecord>(buildBedrockPerfByModelQuery(scope.timeframe), IGNORE);
   const tpm = useScopedDql<ResultRecord>(buildBedrockTpmQuery(scope.timeframe), IGNORE);
   return useMemo(() => {
-    const rows = parsePerfByModel(perf.data?.records ?? []);
-    const tpmVals = ((tpm.data?.records ?? []) as Record<string, unknown>[])
+    const perfRecords = (perf.data?.records ?? []) as Record<string, unknown>[];
+    const tpmRecords = (tpm.data?.records ?? []) as Record<string, unknown>[];
+    const rows = parsePerfByModel(perfRecords);
+    const tpmVals = tpmRecords
       .flatMap((r) => (Array.isArray(r.tpm) ? (r.tpm as unknown[]) : []))
       .map((x) => toNum(x))
       .filter((n) => Number.isFinite(n));
-    return { rows, tpmPeakPct: tpmVals.length ? Math.max(...tpmVals) : 0, isLoading: perf.isLoading || tpm.isLoading };
+    return {
+      rows,
+      tpmPeakPct: tpmVals.length ? Math.max(...tpmVals) : 0,
+      series: aggregatePerfSeries(perfRecords, tpmRecords),
+      isLoading: perf.isLoading || tpm.isLoading,
+    };
   }, [perf.data, perf.isLoading, tpm.data, tpm.isLoading]);
 };
 

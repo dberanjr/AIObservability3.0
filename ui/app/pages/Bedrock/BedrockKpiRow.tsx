@@ -34,6 +34,11 @@ const GRID: React.CSSProperties = {
   gap: "var(--d-gap)",
 };
 
+/** A sparkline is only worth rendering when the series actually shows a
+ *  trend — an all-zero (or near-empty) array would draw a flat, meaningless
+ *  line, so require at least 2 non-zero buckets. */
+const hasSignal = (values: number[]): boolean => values.filter((v) => v !== 0).length >= 2;
+
 /**
  * Golden-signal KPI row (D3): 8 StatTiles reading from the D2 hooks
  * (useBedrockOverview / useBedrockCost / useBedrockPerf / useAgentSessions),
@@ -41,10 +46,18 @@ const GRID: React.CSSProperties = {
  * and, where the underlying signal is a metric-average rather than a true
  * percentile / error-rate / user-count, the caveat that keeps it from being
  * over-read (P95 latency, TTFT, Error rate, TPM headroom, Sessions all carry
- * one). Only "Est cost" gets a sparkline: it's the only tile whose data
- * arrives as a real daily series from these 4 hooks — the others return
- * scope-aggregated totals with no time axis, so a sparkline there would be
- * fabricated, not honest.
+ * one).
+ *
+ * Sparklines: "Est cost" plots its real daily cost series (`useBedrockCost`).
+ * "Invocations", "Tokens", "Latency (avg)", "TTFT" and "Peak TPM" plot
+ * `useBedrockPerf`'s `series` — a fine-grained (`pickChartIntervalSec`)
+ * cross-model fold of the same metric timeseries each tile's headline number
+ * derives from (see `aggregatePerfSeries` in parse.ts), so the trend is an
+ * honest zoom-in on the same signal, not a fabricated one. "Error rate" has
+ * no metric series (its only signal is the log `errorCode` field, which
+ * arrives as a scope-aggregated total, not a timeseries) and "Sessions"
+ * (a distinct-count) has no meaningful sparkline shape either — both are
+ * deliberately left without one.
  *
  * Modal open-state lives here (not lifted to BedrockPage) since this row is
  * both the only producer and only consumer of which tile is drilled into.
@@ -54,7 +67,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
 
   const { totals, isLoading: overviewLoading } = useBedrockOverview(scope);
   const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
-  const { rows: perfRows, tpmPeakPct, isLoading: perfLoading } = useBedrockPerf(scope);
+  const { rows: perfRows, tpmPeakPct, series: perfSeries, isLoading: perfLoading } = useBedrockPerf(scope);
   const { rows: sessionRows } = useAgentSessions(scope);
 
   // Skeletons only before each hook's FIRST successful load (not on every
@@ -103,6 +116,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={overviewInitial}
           onClick={() => setModal("invocations")}
           actionLabel="Open Invocations details"
+          media={
+            hasSignal(perfSeries.invocations) ? (
+              <Sparkline
+                values={perfSeries.invocations}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtCount(n)}
+                ariaLabel="Invocations trend"
+              />
+            ) : undefined
+          }
         />
         <StatTile
           label="Tokens"
@@ -113,6 +137,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={overviewInitial}
           onClick={() => setModal("tokens")}
           actionLabel="Open Tokens details"
+          media={
+            hasSignal(perfSeries.tokens) ? (
+              <Sparkline
+                values={perfSeries.tokens}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtTokens(n)}
+                ariaLabel="Tokens trend"
+              />
+            ) : undefined
+          }
         />
         <StatTile
           label="Est cost"
@@ -146,6 +181,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={perfInitial}
           onClick={() => setModal("latency")}
           actionLabel="Open Latency (avg) details"
+          media={
+            hasSignal(perfSeries.latencyMs) ? (
+              <Sparkline
+                values={perfSeries.latencyMs}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtMs(n)}
+                ariaLabel="Latency trend"
+              />
+            ) : undefined
+          }
         />
         <StatTile
           label="TTFT"
@@ -156,6 +202,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={perfInitial}
           onClick={() => setModal("ttft")}
           actionLabel="Open TTFT details"
+          media={
+            hasSignal(perfSeries.ttftMs) ? (
+              <Sparkline
+                values={perfSeries.ttftMs}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtMs(n)}
+                ariaLabel="TTFT trend"
+              />
+            ) : undefined
+          }
         />
         <StatTile
           label="Error rate"
@@ -178,6 +235,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={perfInitial}
           onClick={() => setModal("tpm")}
           actionLabel="Open Peak TPM details"
+          media={
+            hasSignal(perfSeries.tpm) ? (
+              <Sparkline
+                values={perfSeries.tpm}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtPercent(n)}
+                ariaLabel="Peak TPM trend"
+              />
+            ) : undefined
+          }
         />
         <StatTile
           label="Sessions"

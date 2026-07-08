@@ -141,13 +141,24 @@ export const parseAccountCost = (records: Record<string, unknown>[]): AccountCos
     .sort((a, b) => b.cost - a.cost);
 };
 
+export interface BedrockModelGroup {
+  /** shortModelName-derived friendly label — unique across `modelGroups`. */
+  label: string;
+  /** All raw modelId strings (NOT normalizeBedrockModelId-collapsed) that
+   *  render as `label` via `shortModelName` — these are what `bedrockLogBase`
+   *  filters `b[modelId]` against, so each must round-trip straight into
+   *  `BedrockScope.models`. Sorted. */
+  ids: string[];
+}
+
 export interface BedrockFacets {
   /** Raw AWS account ids seen in scope over the timeframe. */
   accounts: string[];
-  /** Raw modelId strings (NOT normalizeBedrockModelId-collapsed) — these are
-   *  what `bedrockLogBase` filters `b[modelId]` against, so a facet value
-   *  must round-trip straight into `BedrockScope.models`. */
-  models: string[];
+  /** Distinct raw modelIds grouped by their `shortModelName` label — e.g. an
+   *  on-demand inference-profile id and its account-specific ARN forms all
+   *  collapse into ONE group, since they render identically in the picker.
+   *  Sorted by label; each group's `ids` sorted. */
+  modelGroups: BedrockModelGroup[];
 }
 
 const strArr = (v: unknown): string[] =>
@@ -156,11 +167,110 @@ const strArr = (v: unknown): string[] =>
     : [];
 
 /** Parses the single-row `collectDistinct` result from the D6 facets query
- *  (see queries.ts) into sorted, deduped account/model lists. */
+ *  (see queries.ts) into a sorted, deduped account list and modelIds grouped
+ *  by friendly label (see `BedrockModelGroup`). */
 export const parseFacets = (records: Record<string, unknown>[]): BedrockFacets => {
   const r = records[0] ?? {};
+  const rawModels = [...new Set(strArr(r.models))];
+
+  const byLabel = new Map<string, string[]>();
+  for (const id of rawModels) {
+    const label = shortModelName(id);
+    const ids = byLabel.get(label);
+    if (ids) ids.push(id);
+    else byLabel.set(label, [id]);
+  }
+  const modelGroups = [...byLabel.entries()]
+    .map(([label, ids]) => ({ label, ids: ids.sort() }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   return {
     accounts: [...new Set(strArr(r.accounts))].sort(),
-    models: [...new Set(strArr(r.models))].sort(),
+    modelGroups,
   };
+};
+
+/** Value at bucket `i` of an array field; missing array / null slot /
+ *  non-finite → 0. Mirrors series.ts's `numAt` — kept duplicated rather than
+ *  shared since these fold two independently-shaped, from-different-hooks
+ *  record sets. */
+const numAt = (v: unknown, i: number): number => {
+  const arr = Array.isArray(v) ? (v as unknown[]) : [];
+  const x = arr[i];
+  if (x == null) return 0;
+  const n = toNum(x);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const lenOf = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
+
+export interface BedrockPerfSeries {
+  invocations: number[];
+  tokens: number[];
+  latencyMs: number[];
+  ttftMs: number[];
+  tpm: number[];
+}
+
+/**
+ * Folds the per-model parallel-array timeseries from
+ * `buildBedrockPerfByModelQuery` (`perfRecords`) and `buildBedrockTpmQuery`
+ * (`tpmRecords`) into single cross-model series for the KPI-tile sparklines.
+ * Per bucket `i`:
+ *  - `invocations[i]` = Σ invocations[i] across perf records.
+ *  - `tokens[i]` = Σ (inTok[i] + outTok[i]) across perf records.
+ *  - `latencyMs[i]` = max latencyMs[i] across perf records — mirrors the
+ *    "Latency (avg)" tile's worst-model-wins semantics.
+ *  - `ttftMs[i]` = avg of ttftMs[i] across perf records with a NON-ZERO value
+ *    at that bucket (a model with no traffic in that bucket reads 0, which
+ *    would drag a straight average down).
+ *  - `tpm[i]` = max tpm[i] across tpm records — mirrors the "Peak TPM" tile's
+ *    peak-quota semantics.
+ */
+export const aggregatePerfSeries = (
+  perfRecords: Record<string, unknown>[],
+  tpmRecords: Record<string, unknown>[],
+): BedrockPerfSeries => {
+  const bucketCount = Math.max(
+    0,
+    ...perfRecords.map((r) =>
+      Math.max(lenOf(r.invocations), lenOf(r.inTok), lenOf(r.outTok), lenOf(r.latencyMs), lenOf(r.ttftMs)),
+    ),
+    ...tpmRecords.map((r) => lenOf(r.tpm)),
+  );
+
+  const invocations: number[] = [];
+  const tokens: number[] = [];
+  const latencyMs: number[] = [];
+  const ttftMs: number[] = [];
+  const tpm: number[] = [];
+
+  for (let i = 0; i < bucketCount; i++) {
+    let invSum = 0;
+    let tokSum = 0;
+    let latMax = 0;
+    let ttftSum = 0;
+    let ttftCount = 0;
+    for (const r of perfRecords) {
+      invSum += numAt(r.invocations, i);
+      tokSum += numAt(r.inTok, i) + numAt(r.outTok, i);
+      latMax = Math.max(latMax, numAt(r.latencyMs, i));
+      const t = numAt(r.ttftMs, i);
+      if (t !== 0) {
+        ttftSum += t;
+        ttftCount += 1;
+      }
+    }
+    let tpmMax = 0;
+    for (const r of tpmRecords) {
+      tpmMax = Math.max(tpmMax, numAt(r.tpm, i));
+    }
+    invocations.push(invSum);
+    tokens.push(tokSum);
+    latencyMs.push(latMax);
+    ttftMs.push(ttftCount > 0 ? ttftSum / ttftCount : 0);
+    tpm.push(tpmMax);
+  }
+
+  return { invocations, tokens, latencyMs, ttftMs, tpm };
 };
