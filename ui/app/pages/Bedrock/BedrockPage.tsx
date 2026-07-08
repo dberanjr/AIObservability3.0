@@ -6,6 +6,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { useBedrockAvailable, useBedrockOverview } from "../../bedrock/useBedrock";
 import type { BedrockScope } from "../../bedrock/types";
 import { fmtCount } from "../../data/format";
+import { BedrockHero } from "./BedrockHero";
 
 /**
  * AWS Bedrock page shell (D1). Gates the whole page on a cheap existence
@@ -87,7 +88,8 @@ export const BedrockPage = () => {
         </Flex>
         {/* Scope selectors (Account, Model) wired in D6 — setAccounts/setModels. */}
       </Flex>
-      {/* Zones D2–D7 mount here, each receiving `scope`. */}
+      <BedrockHero scope={scope} />
+      {/* Zones D3–D7 mount here, each receiving `scope`. */}
     </Flex>
   );
 };

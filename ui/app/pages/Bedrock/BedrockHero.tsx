@@ -1,0 +1,195 @@
+import React, { useMemo } from "react";
+import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
+import { Skeleton } from "@dynatrace/strato-components/content";
+import { Sparkline } from "../../components/charts/Sparkline";
+import { EstimatedBadge } from "../../components/DetailModal";
+import { fmtUSD } from "../../data/format";
+import { useBedrockCost, useBedrockPerf } from "../../bedrock/useBedrock";
+import { normalizeBedrockModelId } from "../../bedrock/model";
+import { STATUS_COLOR } from "../../theme/statusColor";
+import type { BedrockScope } from "../../bedrock/types";
+import { computeInsights, type Insight } from "./insights";
+
+export interface BedrockHeroProps {
+  scope: BedrockScope;
+}
+
+const TONE_COLOR: Record<Insight["tone"], string> = {
+  warn: STATUS_COLOR.warning,
+  info: STATUS_COLOR.info,
+  good: STATUS_COLOR.good,
+};
+
+const InsightRow = ({ insight }: { insight: Insight }) => (
+  <Flex alignItems="flex-start" gap={8}>
+    <span
+      aria-hidden
+      style={{
+        marginTop: 5,
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        background: TONE_COLOR[insight.tone],
+        flex: "0 0 auto",
+      }}
+    />
+    <Text style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+      {insight.text}
+    </Text>
+  </Flex>
+);
+
+/**
+ * Narrative hero: the page's cost headline (total, an estimated-rate badge
+ * when any model fell back to blended pricing, a 30-day run-rate projection,
+ * and a spend sparkline) paired with up to three computed insight sentences
+ * (cost concentration, latency outlier, cache savings — see insights.ts).
+ *
+ * `costByModel` is built by summing `daily[].byModel` (keyed by
+ * `shortModelName`, case- and date/version-suffix-preserving) and re-keying
+ * through `normalizeBedrockModelId` so it lines up with `invocationsByModel`/
+ * `perf`'s `model` field, which `useBedrockPerf` already normalizes the same
+ * way. Without this re-key, a dated model id (e.g.
+ * `anthropic.claude-3-5-sonnet-20241022-v2:0`) would land under two different
+ * string keys in the two maps and the cost-concentration insight would never
+ * find a matching invocation count.
+ */
+export const BedrockHero = ({ scope }: BedrockHeroProps) => {
+  const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
+  const { rows: perfRows, isLoading: perfLoading } = useBedrockPerf(scope);
+
+  const costByModel = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const day of daily) {
+      for (const [rawKey, value] of Object.entries(day.byModel)) {
+        const key = normalizeBedrockModelId(rawKey);
+        out[key] = (out[key] ?? 0) + value;
+      }
+    }
+    return out;
+  }, [daily]);
+
+  const invocationsByModel = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const row of perfRows) {
+      out[row.model] = (out[row.model] ?? 0) + row.invocations;
+    }
+    return out;
+  }, [perfRows]);
+
+  const insights = useMemo(
+    () => computeInsights({ summary, costByModel, invocationsByModel, perf: perfRows }),
+    [summary, costByModel, invocationsByModel, perfRows],
+  );
+
+  // Approximate the scope window's day count from the fold's bucket count
+  // (one bucket = one day — see foldDailyCost) rather than re-parsing
+  // scope.timeframe, so the projection always matches what the sparkline
+  // actually plots.
+  const dayCount = Math.max(1, daily.length);
+  const projected = (summary.total * 30) / dayCount;
+
+  const initialLoading = (costLoading && daily.length === 0) || (perfLoading && perfRows.length === 0);
+  const sparkValues = daily.map((d) => d.actual);
+
+  return (
+    <Surface elevation="raised" padding={0}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: 24,
+          padding: "18px 20px",
+        }}
+      >
+        <Flex
+          flexDirection="column"
+          gap={8}
+          style={{
+            borderRight: "1px solid var(--border)",
+            paddingRight: 24,
+            minWidth: 0,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: "var(--eyebrow-size, 11px)",
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+            }}
+          >
+            Total spend
+          </Text>
+          {initialLoading ? (
+            <Skeleton style={{ height: 34, width: "60%", borderRadius: 6 }} />
+          ) : (
+            <Flex alignItems="baseline" gap={8} style={{ flexWrap: "wrap" }}>
+              <Text
+                style={{
+                  fontSize: 30,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: "var(--text)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {summary.total > 0 ? fmtUSD(summary.total) : "$0"}
+              </Text>
+              {summary.estimated > 0 && <EstimatedBadge />}
+            </Flex>
+          )}
+          {!initialLoading && (
+            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+              ≈ {projected > 0 ? fmtUSD(projected) : "$0"} projected over 30 days
+            </Text>
+          )}
+          {initialLoading ? (
+            <Skeleton style={{ height: 32, borderRadius: 6 }} />
+          ) : (
+            <Sparkline
+              values={sparkValues}
+              labels={daily.map((d) => d.day)}
+              color="var(--blue)"
+              height={32}
+              valueFormatter={(n) => fmtUSD(n)}
+              ariaLabel="Daily Bedrock spend"
+            />
+          )}
+        </Flex>
+
+        <Flex flexDirection="column" gap={8} style={{ minWidth: 0, justifyContent: "center" }}>
+          <Text
+            style={{
+              fontSize: "var(--eyebrow-size, 11px)",
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+            }}
+          >
+            Signals in this scope
+          </Text>
+          {initialLoading ? (
+            <Flex flexDirection="column" gap={8}>
+              <Skeleton style={{ height: 14, width: "90%", borderRadius: 4 }} />
+              <Skeleton style={{ height: 14, width: "75%", borderRadius: 4 }} />
+            </Flex>
+          ) : insights.length > 0 ? (
+            <Flex flexDirection="column" gap={8}>
+              {insights.map((insight) => (
+                <InsightRow key={insight.text} insight={insight} />
+              ))}
+            </Flex>
+          ) : (
+            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+              No concentrated cost or latency signals in this scope.
+            </Text>
+          )}
+        </Flex>
+      </div>
+    </Surface>
+  );
+};
