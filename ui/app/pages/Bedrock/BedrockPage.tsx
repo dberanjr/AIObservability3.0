@@ -9,6 +9,7 @@ import { fmtCount } from "../../data/format";
 import { BedrockHero } from "./BedrockHero";
 import { BedrockKpiRow } from "./BedrockKpiRow";
 import { BedrockCostZone } from "./BedrockCostZone";
+import { AgentSessionTable } from "./AgentSessionTable";
 
 /**
  * AWS Bedrock page shell (D1). Gates the whole page on a cheap existence
@@ -93,7 +94,8 @@ export const BedrockPage = () => {
       <BedrockHero scope={scope} />
       <BedrockKpiRow scope={scope} />
       <BedrockCostZone scope={scope} />
-      {/* Zones D5–D7 mount here, each receiving `scope`. */}
+      <AgentSessionTable scope={scope} />
+      {/* Zones D6–D7 mount here, each receiving `scope`. */}
     </Flex>
   );
 };
