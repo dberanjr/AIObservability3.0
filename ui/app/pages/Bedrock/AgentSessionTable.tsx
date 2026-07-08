@@ -426,7 +426,7 @@ export const AgentSessionTable = ({ scope }: AgentSessionTableProps) => {
 
             <Flex style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
               <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-                P95 is the session's primary model's highest observed average latency
+                Latency shown is the session's primary model's highest observed average latency
                 (metric-derived, not a true per-session percentile) — "—" means no perf data matched
                 that model in scope.
               </Text>
