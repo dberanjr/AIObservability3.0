@@ -7,7 +7,7 @@
  * NaN or Infinity in a sentence.
  */
 
-import { fmtSecs1, fmtUSD } from "../../data/format";
+import { fmtSecs1, fmtUSDPrecise } from "../../data/format";
 import type { BedrockCostSummary } from "../../bedrock/cost";
 import type { BedrockDailyCostPoint } from "../../bedrock/series";
 import { normalizeBedrockModelId } from "../../bedrock/model";
@@ -113,8 +113,8 @@ const cacheSavingsInsight = (input: ComputeInsightsInput): Insight | null => {
     tone: "good",
     category: "Cache savings",
     entity: "Prompt caching",
-    metric: fmtUSD(summary.savedByCache),
-    text: `Prompt caching saved ~${fmtUSD(summary.savedByCache)} (${Math.round(share * 100)}% of would-be cost)`,
+    metric: fmtUSDPrecise(summary.savedByCache),
+    text: `Prompt caching saved ~${fmtUSDPrecise(summary.savedByCache)} (${Math.round(share * 100)}% of would-be cost)`,
   };
 };
 

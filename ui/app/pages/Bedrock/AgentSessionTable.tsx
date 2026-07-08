@@ -11,7 +11,7 @@ import {
   StatGrid,
 } from "../../components/DetailModal";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
-import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
+import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
 import { useAgentSessions, useBedrockPerf } from "../../bedrock/useBedrock";
 import type { AgentSessionRow } from "../../bedrock/parse";
 import type { BedrockScope } from "../../bedrock/types";
@@ -192,7 +192,7 @@ const SessionDetailModal = ({
         <StatGrid cols={3}>
           <Stat
             label="Est cost"
-            value={fmtUSD(row.estCost)}
+            value={fmtUSDPrecise(row.estCost)}
             sub={row.blended ? undefined : "priced from the rate card"}
             emphasize
           />
@@ -412,7 +412,7 @@ export const AgentSessionTable = ({ scope }: AgentSessionTableProps) => {
                             ≈
                           </span>
                         )}
-                        {fmtUSD(r.estCost)}
+                        {fmtUSDPrecise(r.estCost)}
                       </span>
                     </Cell>
                     <Cell width={80} align="right" mono>

@@ -45,7 +45,7 @@ describe("computeInsights", () => {
     expect(cache?.text).toContain("20%");
     expect(cache?.category).toBe("Cache savings");
     expect(cache?.entity).toBe("Prompt caching");
-    expect(cache?.metric).toBe("$20.0");
+    expect(cache?.metric).toBe("$20.00");
   });
 
   it("does not flag concentration or cache savings below their thresholds", () => {

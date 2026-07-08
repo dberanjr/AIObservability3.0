@@ -4,7 +4,7 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../../components/charts/Sparkline";
 import { EstimatedBadge } from "../../components/DetailModal";
-import { fmtUSD } from "../../data/format";
+import { fmtUSDPrecise } from "../../data/format";
 import { useBedrockCost, useBedrockPerf } from "../../bedrock/useBedrock";
 import { STATUS_COLOR } from "../../theme/statusColor";
 import type { BedrockScope } from "../../bedrock/types";
@@ -113,14 +113,14 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {summary.total > 0 ? fmtUSD(summary.total) : "$0"}
+                {summary.total > 0 ? fmtUSDPrecise(summary.total) : "$0"}
               </Text>
               {summary.estimated > 0 && <EstimatedBadge />}
             </Flex>
           )}
           {!initialLoading && (
             <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              ≈ {projected > 0 ? fmtUSD(projected) : "$0"} projected over 30 days
+              ≈ {projected > 0 ? fmtUSDPrecise(projected) : "$0"} projected over 30 days
             </Text>
           )}
           {initialLoading ? (
@@ -131,7 +131,7 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
               labels={daily.map((d) => d.day)}
               color="var(--blue)"
               height={32}
-              valueFormatter={(n) => fmtUSD(n)}
+              valueFormatter={(n) => fmtUSDPrecise(n)}
               ariaLabel="Daily Bedrock spend"
             />
           )}

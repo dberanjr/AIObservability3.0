@@ -6,7 +6,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { SR_ONLY } from "../../components/charts/AreaChart";
 import { CATEGORICAL } from "../../theme/palette";
 import { STATUS_COLOR } from "../../theme/statusColor";
-import { fmtUSD, fmtUSDCompact } from "../../data/format";
+import { fmtUSDPrecise, fmtUSDCompact } from "../../data/format";
 import type { BedrockDailyCostPoint } from "../../bedrock/series";
 import { toGhostBars } from "./geometry";
 
@@ -147,12 +147,12 @@ export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: Bedrock
   const readoutFor = (idx: number): string => {
     const d = daily[idx];
     if (!d) return "";
-    const parts = [`${shortDay(d.day)}, actual ${fmtUSD(d.actual)}`];
+    const parts = [`${shortDay(d.day)}, actual ${fmtUSDPrecise(d.actual)}`];
     Object.entries(d.byModel)
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
-      .forEach(([model, v]) => parts.push(`${model} ${fmtUSD(v)}`));
-    if (showGhost && d.savedByCache > 0) parts.push(`saved by caching ${fmtUSD(d.savedByCache)}`);
+      .forEach(([model, v]) => parts.push(`${model} ${fmtUSDPrecise(v)}`));
+    if (showGhost && d.savedByCache > 0) parts.push(`saved by caching ${fmtUSDPrecise(d.savedByCache)}`);
     return parts.join(", ");
   };
 
@@ -180,6 +180,12 @@ export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: Bedrock
   };
 
   const hovered = hoverIdx != null ? daily[hoverIdx] : null;
+  // Anchor the hover tooltip OVER the hovered column (previously pinned to the
+  // right edge): centre it on the column's x, clamped to the chart edges so it
+  // never overflows (left quarter → left-align, right quarter → right-align).
+  const tipCenterPct =
+    hoverIdx != null && daily.length > 0 ? ((hoverIdx + 0.5) / daily.length) * 100 : 50;
+  const tipTx = tipCenterPct < 25 ? "0%" : tipCenterPct > 75 ? "-100%" : "-50%";
 
   // Thin the x-axis labels to ~10-12 so they don't overlap once a short
   // scope's finer interval produces 30-120+ buckets — every bucket still
@@ -192,7 +198,7 @@ export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: Bedrock
         role="img"
         aria-label={`Bedrock cost by model over time${
           showGhost ? " with cache-savings ghost" : ""
-        }, ${daily.length} time buckets, ${fmtUSD(
+        }, ${daily.length} time buckets, ${fmtUSDPrecise(
           daily.reduce((s, d) => s + d.actual, 0),
         )} total. Use arrow keys to move between time buckets.`}
         tabIndex={0}
@@ -279,7 +285,8 @@ export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: Bedrock
                 style={{
                   position: "absolute",
                   top: 4,
-                  right: 4,
+                  left: `${tipCenterPct}%`,
+                  transform: `translateX(${tipTx})`,
                   minWidth: 180,
                   padding: "8px 10px",
                   background: "var(--surface)",
@@ -293,7 +300,7 @@ export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: Bedrock
                 <Flex flexDirection="column" gap={4}>
                   <Text style={{ fontSize: 11.5, fontWeight: 600 }}>{shortDay(hovered.day)}</Text>
                   <Text style={{ fontSize: 11, color: "var(--text-2)" }}>
-                    Actual {fmtUSD(hovered.actual)}
+                    Actual {fmtUSDPrecise(hovered.actual)}
                   </Text>
                   {Object.entries(hovered.byModel)
                     .filter(([, v]) => v > 0)
@@ -323,13 +330,13 @@ export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: Bedrock
                           {model}
                         </Text>
                         <Text style={{ fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
-                          {fmtUSD(v)}
+                          {fmtUSDPrecise(v)}
                         </Text>
                       </Flex>
                     ))}
                   {showGhost && hovered.savedByCache > 0 && (
                     <Text style={{ fontSize: 11, color: STATUS_COLOR.good, fontWeight: 600 }}>
-                      − {fmtUSD(hovered.savedByCache)} saved by caching
+                      − {fmtUSDPrecise(hovered.savedByCache)} saved by caching
                     </Text>
                   )}
                 </Flex>

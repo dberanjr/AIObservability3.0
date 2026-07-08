@@ -11,7 +11,7 @@ import {
 import type { BedrockScope } from "../../bedrock/types";
 import type { Timeframe } from "../../scope/types";
 import type { PerfByModelRow } from "../../bedrock/parse";
-import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
+import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
 import { BedrockTileModal, type BedrockTileKind } from "./BedrockTileModal";
 import { windowDays } from "../../scope/chartInterval";
 
@@ -100,7 +100,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
 
   const costSub =
     summary.estimated > 0
-      ? `${fmtUSD(summary.priced)} priced · ${fmtUSD(summary.estimated)} est.`
+      ? `${fmtUSDPrecise(summary.priced)} priced · ${fmtUSDPrecise(summary.estimated)} est.`
       : summary.total > 0
         ? "fully priced"
         : undefined;
@@ -152,7 +152,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
         />
         <StatTile
           label="Est cost"
-          value={fmtUSD(summary.total)}
+          value={fmtUSDPrecise(summary.total)}
           sub={costSub}
           info="USD spend for Bedrock calls in scope. Cost = Σ(input×in-rate + output×out-rate + cache-read×cache-rate) per model, using the Models rate card (platform: AWS Bedrock). Unpriced models fall back to a blended rate, flagged 'est'."
           headerRight={summary.estimated > 0 ? <EstimatedBadge /> : undefined}
@@ -167,7 +167,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
                 labels={daily.map((d) => d.day)}
                 color="var(--blue)"
                 height={28}
-                valueFormatter={(n) => fmtUSD(n)}
+                valueFormatter={(n) => fmtUSDPrecise(n)}
                 ariaLabel="Daily Bedrock spend"
               />
             ) : undefined

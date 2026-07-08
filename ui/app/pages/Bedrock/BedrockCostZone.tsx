@@ -4,7 +4,7 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { Donut, type DonutSlice } from "../../components/charts/Donut";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
-import { fmtUSD, fmtUSDCompact } from "../../data/format";
+import { fmtUSDPrecise, fmtUSDCompact } from "../../data/format";
 import { useBedrockCost, useBedrockAccountCost } from "../../bedrock/useBedrock";
 import { bedrockCostIntervalSec } from "../../bedrock/queries";
 import { intervalPhrase } from "../../scope/chartInterval";
@@ -67,7 +67,7 @@ export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
           key: r.account || "(unknown account)",
           label: r.account || "(unknown account)",
           value: r.cost,
-          displayValue: fmtUSD(r.cost),
+          displayValue: fmtUSDPrecise(r.cost),
           secondary: r.blended ? "includes an estimated-rate model" : undefined,
         })),
     [accountRows],
@@ -178,7 +178,7 @@ export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
                 slices={modelSlices}
                 centerValue={fmtUSDCompact(modelTotal)}
                 centerLabel="total"
-                valueFormatter={(n) => fmtUSD(n)}
+                valueFormatter={(n) => fmtUSDPrecise(n)}
               />
             )}
           </Flex>

@@ -13,7 +13,7 @@ import {
   fmtMs,
   fmtPercent,
   fmtTokens,
-  fmtUSD,
+  fmtUSDPrecise,
   fmtUSDCents,
 } from "../../data/format";
 import type { OverviewTotals, PerfByModelRow, AgentSessionRow } from "../../bedrock/parse";
@@ -135,7 +135,7 @@ export const BedrockTileModal = ({
         key: model,
         label: model,
         value,
-        displayValue: fmtUSD(value),
+        displayValue: fmtUSDPrecise(value),
       }));
   }, [daily]);
 
@@ -148,7 +148,7 @@ export const BedrockTileModal = ({
           key: r.session || `${r.account}-unknown`,
           label: r.session || "(unknown session)",
           value: r.estCost,
-          displayValue: fmtUSD(r.estCost),
+          displayValue: fmtUSDPrecise(r.estCost),
           secondary: `${fmtCount(r.invocations)} inv · ${r.account || "unknown account"}${r.blended ? " · est. rate" : ""}`,
         })),
     [sessionRows],
@@ -219,10 +219,10 @@ export const BedrockTileModal = ({
           <>
             <Section title="Summary">
               <StatGrid cols={3}>
-                <Stat label="Priced (rate card)" value={fmtUSD(costSummary.priced)} emphasize />
+                <Stat label="Priced (rate card)" value={fmtUSDPrecise(costSummary.priced)} emphasize />
                 <Stat
                   label="Estimated (fallback rate)"
-                  value={fmtUSD(costSummary.estimated)}
+                  value={fmtUSDPrecise(costSummary.estimated)}
                   sub={
                     costSummary.estimatedModels.length > 0
                       ? costSummary.estimatedModels.slice(0, 3).join(", ") +
@@ -230,10 +230,10 @@ export const BedrockTileModal = ({
                       : undefined
                   }
                 />
-                <Stat label="Saved by cache" value={fmtUSD(costSummary.savedByCache)} />
+                <Stat label="Saved by cache" value={fmtUSDPrecise(costSummary.savedByCache)} />
                 <Stat
                   label="30-day projection"
-                  value={fmtUSD(projected30d)}
+                  value={fmtUSDPrecise(projected30d)}
                   sub={`linear from ${Math.round(windowDays)}-day scope`}
                 />
                 <Stat label="Avg / invocation" value={fmtUSDCents(avgPerInvocationCents)} />
@@ -249,7 +249,7 @@ export const BedrockTileModal = ({
                   ]}
                   xLabels={daily.map((d) => d.day)}
                   axisTicks={dailyAxisTicks}
-                  formatLeft={(n) => fmtUSD(n)}
+                  formatLeft={(n) => fmtUSDPrecise(n)}
                   ariaLabel="Daily Bedrock spend"
                 />
               ) : (
