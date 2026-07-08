@@ -6,6 +6,7 @@ import { Switch } from "@dynatrace/strato-components/forms";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtPercent, fmtTokens } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState } from "../../components/EmptyState";
 import type { AgentEvalSnapshot } from "./useAgentEval";
 import { QUALITY_EVAL_SETUP_GUIDE } from "../Pulse/types";
 
@@ -119,37 +120,53 @@ export const EvaluationBanner = ({
       bodyPadding={16}
     >
     <Flex flexDirection="column" gap={8}>
-      <Flex
-        alignItems="center"
-        gap={12}
-        style={{
-          padding: "10px 14px",
-          borderRadius: 8,
-          background: snapshot.hasAnyEval
-            ? "var(--surface-2)"
-            : "color-mix(in oklab, var(--amber) 12%, var(--surface))",
-          border: snapshot.hasAnyEval
-            ? "1px solid var(--border)"
-            : "1px solid color-mix(in oklab, var(--amber) 50%, transparent)",
-        }}
-      >
-        <Text style={{ fontSize: 12.5, color: "var(--text)", flex: 1 }}>
-          {snapshot.hasAnyEval ? (
-            <>
-              <strong>Evaluation data detected.</strong>{" "}
-              {snapshot.coverage.correctness}/{snapshot.coverage.total} spans carry
-              gen_ai.evaluation.* attributes.
-            </>
-          ) : (
-            <>
-              <strong>No evaluation data yet.</strong> Wire up{" "}
-              <code>gen_ai.evaluation.*</code> on LLM spans, run an LLM-as-judge
-              workflow, or push offline evals as business events.
-            </>
-          )}
-        </Text>
-        {!snapshot.hasAnyEval && (
-          <Flex alignItems="center" gap={6}>
+      {snapshot.hasAnyEval ? (
+        <Flex
+          alignItems="center"
+          gap={12}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <Text style={{ fontSize: 12.5, color: "var(--text)", flex: 1 }}>
+            <strong>Evaluation data detected.</strong>{" "}
+            {snapshot.coverage.correctness}/{snapshot.coverage.total} spans carry
+            gen_ai.evaluation.* attributes.
+          </Text>
+          <Button
+            as="a"
+            href={QUALITY_EVAL_SETUP_GUIDE}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="default"
+          >
+            Setup guide
+          </Button>
+        </Flex>
+      ) : (
+        // Shared empty-state (bare) for the "no evaluation data" case; the
+        // preview toggle stays beneath it so reviewers can still see the future
+        // state (CONS-7).
+        <Flex flexDirection="column" gap={8}>
+          <EmptyState
+            bare
+            cause="no-instrumentation"
+            title="No evaluation data yet"
+            description={
+              <>
+                Wire up <code>gen_ai.evaluation.*</code> on LLM spans, run an
+                LLM-as-judge workflow, or push offline evals as business events.
+              </>
+            }
+            hint="gen_ai.evaluation.*"
+            actions={[
+              { label: "Setup guide", href: QUALITY_EVAL_SETUP_GUIDE },
+            ]}
+          />
+          <Flex alignItems="center" justifyContent="center" gap={6}>
             <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
               Preview with data
             </Text>
@@ -159,24 +176,15 @@ export const EvaluationBanner = ({
               onChange={onPreviewToggle}
             />
           </Flex>
-        )}
-        <Button
-          as="a"
-          href={QUALITY_EVAL_SETUP_GUIDE}
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="default"
-        >
-          Setup guide
-        </Button>
-      </Flex>
+        </Flex>
+      )}
 
       {snapshot.isLoading && !snapshot.hasAnyEval ? (
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 10,
+            gap: "var(--d-gap)",
           }}
         >
           {Array.from({ length: 4 }).map((_, i) => (
@@ -188,7 +196,7 @@ export const EvaluationBanner = ({
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 10,
+            gap: "var(--d-gap)",
           }}
         >
           <EvalTile

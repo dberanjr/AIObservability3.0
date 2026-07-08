@@ -8,6 +8,12 @@ import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import {
+  ChartModal,
+  useChartExpander,
+} from "../../components/charts/ChartExpander";
+import { SamplingBadge } from "../../components/SamplingBadge";
+import { useSampling } from "../../scope/SamplingContext";
 import { useDailySpend } from "./useDailySpend";
 import { fmtUSD, fmtUSDCompact } from "../../data/format";
 
@@ -16,14 +22,17 @@ const DailyBars = ({
   data,
   labels,
   color,
+  height = 66,
 }: {
   data: number[];
   labels: string[];
   color: string;
+  /** Bar-column height in px. Default 66 (tile); the modal renders taller. */
+  height?: number;
 }) => {
   const max = Math.max(...data, 1);
   return (
-    <Flex alignItems="stretch" gap={6} style={{ height: 66, width: "100%" }}>
+    <Flex alignItems="stretch" gap={6} style={{ height, width: "100%" }}>
       {data.map((v, i) => (
         <Flex
           key={i}
@@ -92,11 +101,38 @@ const Cell = ({
   </Flex>
 );
 
-const SpendGlanceBody = () => {
-  const { spend24h, spend7d, projected30d, delta24h, bars, barLabels } = useDailySpend();
+const barsCaptionStyle: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
+  color: "var(--text-3)",
+};
+
+const SpendGlanceBody = ({
+  expander,
+}: {
+  expander: ReturnType<typeof useChartExpander>;
+}) => {
+  const { spend24h, spend7d, projected30d, delta24h, bars, barLabels, samplingRatio } =
+    useDailySpend();
+  const { samplingRatio: toolbarRatio } = useSampling();
+  // scan-6: these per-day scans force their own sampling floor, so when it's
+  // coarser than the toolbar the numbers are a rougher estimate than the global
+  // control implies — disclose the actual ratio used on this tile.
+  const overrideRatio = samplingRatio > toolbarRatio ? samplingRatio : undefined;
+
+  const deltaSub =
+    delta24h != null && Number.isFinite(delta24h)
+      ? `${delta24h >= 0 ? "▲" : "▼"} ${Math.abs(delta24h).toFixed(0)}% vs prior day`
+      : undefined;
 
   return (
+    <>
       <Flex flexDirection="column" gap={12} style={{ padding: "14px 18px" }}>
+        {overrideRatio != null && (
+          <SamplingBadge variant="full" ratio={overrideRatio} />
+        )}
         <Flex gap={20}>
           <Cell label="Last 24h" value={fmtUSD(spend24h)} delta={delta24h} />
           <Cell label="Last 7d" value={fmtUSD(spend7d)} />
@@ -104,26 +140,56 @@ const SpendGlanceBody = () => {
         </Flex>
         {bars.length > 1 && (
           <Flex flexDirection="column" gap={4}>
-            <Text
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-              }}
-            >
+            <Text style={barsCaptionStyle}>
               Daily spend · last {bars.length} days
             </Text>
             <DailyBars data={bars} labels={barLabels} color="var(--green-2)" />
           </Flex>
         )}
       </Flex>
+
+      <ChartModal
+        open={expander.open}
+        onClose={() => expander.setOpen(false)}
+        title="Spend glance"
+        subtitle="Effective model spend — last 24h, last 7d, and projected 30d, with per-day spend broken out below."
+        stats={[
+          { label: "Last 24h", value: fmtUSD(spend24h), sub: deltaSub },
+          { label: "Last 7d", value: fmtUSD(spend7d) },
+          { label: "Projected 30d", value: fmtUSD(projected30d) },
+        ]}
+      >
+        {bars.length > 1 ? (
+          <Flex flexDirection="column" gap={8}>
+            <Text style={barsCaptionStyle}>
+              Daily spend · last {bars.length} days
+            </Text>
+            <DailyBars
+              data={bars}
+              labels={barLabels}
+              color="var(--green-2)"
+              height={320}
+            />
+          </Flex>
+        ) : (
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+            No daily spend data in the current scope.
+          </Text>
+        )}
+      </ChartModal>
+    </>
   );
 };
 
-export const SpendGlance = () => (
-  <CollapsibleCard title="Spend glance" defaultOpen>
-    <SpendGlanceBody />
-  </CollapsibleCard>
-);
+export const SpendGlance = () => {
+  const expander = useChartExpander();
+  return (
+    <CollapsibleCard
+      title="Spend glance"
+      defaultOpen
+      headerRight={expander.expandButton("Expand spend glance")}
+    >
+      <SpendGlanceBody expander={expander} />
+    </CollapsibleCard>
+  );
+};

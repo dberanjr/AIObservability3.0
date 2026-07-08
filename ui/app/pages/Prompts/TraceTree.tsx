@@ -1,20 +1,68 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
   SettingIcon,
   MaximizeIcon,
   MinimizeIcon,
+  CriticalIcon,
+  WarningIcon,
 } from "@dynatrace/strato-icons";
 import { fmtMs, fmtTokens } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { MCP_LIFECYCLE_METHODS } from "../../scope/queries";
 import type { TraceSpan } from "./useTraceSpans";
+import {
+  AI_ATTR_GROUPS,
+  buildAiAttrSections,
+  buildOtherAttrSection,
+  type Attr,
+  type AttrType,
+  type AttrSectionData,
+} from "./spanAttributes";
 
 interface TraceNode {
   span: TraceSpan;
   children: TraceNode[];
 }
+
+/** A TraceNode annotated with error state for the waterfall. */
+export interface TreeNode {
+  span: TraceSpan;
+  children: TreeNode[];
+  /** This span's own error flag. */
+  isError: boolean;
+  /** Any descendant (not self) is errored — flags ancestors of an error. */
+  hasErrorDescendant: boolean;
+}
+
+/**
+ * Annotate a {span, children} tree with `isError` (the span's own flag) and
+ * `hasErrorDescendant` (bottom-up: any descendant is errored). Pure — returns a
+ * new tree, mutates nothing — so it's unit-testable without a React render.
+ */
+interface SpanNode {
+  span: TraceSpan;
+  children: SpanNode[];
+}
+export const markErrors = (roots: SpanNode[]): TreeNode[] => {
+  const visit = (node: SpanNode): TreeNode => {
+    const children = node.children.map(visit);
+    const hasErrorDescendant = children.some(
+      (c) => c.isError || c.hasErrorDescendant,
+    );
+    return {
+      span: node.span,
+      children,
+      isError: !!node.span.isError,
+      hasErrorDescendant,
+    };
+  };
+  return roots.map(visit);
+};
 
 export type SpanCategory = "agent" | "llm" | "tool" | "other";
 
@@ -22,7 +70,17 @@ export type SpanCategory = "agent" | "llm" | "tool" | "other";
 export const spanCategory = (s: TraceSpan): SpanCategory => {
   if (s.provider) return "llm";
   if (s.agentName || s.tlKind === "workflow") return "agent";
-  if (s.toolName || s.tlKind === "task" || s.name.endsWith(".task")) return "tool";
+  // MCP protocol lifecycle is never a tool call. Derived from the shared
+  // single-source-of-truth list (mirrors the DQL tool classifiers).
+  const isLifecycle =
+    !!s.mcpMethod &&
+    (MCP_LIFECYCLE_METHODS as readonly string[]).includes(s.mcpMethod);
+  // Authoritative tool signals only — LangGraph `task` spans and `.task`
+  // names are orchestration, not tool calls, so they're deliberately excluded.
+  const isTool =
+    !isLifecycle &&
+    (s.tlKind === "tool" || !!s.toolName || s.mcpMethod === "tools/call");
+  if (isTool) return "tool";
   return "other";
 };
 
@@ -75,17 +133,17 @@ export const spanMatchesTerm = (span: TraceSpan, term: string): boolean => {
 };
 
 interface FlatRow {
-  node: TraceNode;
+  node: TreeNode;
   depth: number;
 }
 
 /** DFS flatten, skipping children of collapsed nodes. Order = waterfall order. */
 const flattenTree = (
-  roots: TraceNode[],
+  roots: TreeNode[],
   collapsed: Set<string>,
 ): FlatRow[] => {
   const out: FlatRow[] = [];
-  const walk = (node: TraceNode, depth: number) => {
+  const walk = (node: TreeNode, depth: number) => {
     out.push({ node, depth });
     if (!collapsed.has(node.span.spanId)) {
       node.children.forEach((c) => walk(c, depth + 1));
@@ -153,6 +211,11 @@ const buildFilteredTree = (
 
 // Width of the left Name column within the waterfall (% of the tree column).
 const NAME_FLEX = "0 0 44%";
+// Token columns: header ("In Tok"/"Out Tok") and per-span value cells share
+// these exact width + right-padding constants so the values always sit directly
+// under their headers (previously header/row used separate literals → drift).
+const TOKEN_COL_WIDTH = 56;
+const TOKEN_COL_PR = 8;
 
 /** One waterfall row: indented name on the left, a positioned timing bar on a
  *  shared timeline axis on the right. */
@@ -182,10 +245,21 @@ const WaterfallRow = ({
   const { node, depth } = row;
   const span = node.span;
   const cat = spanCategory(span);
-  const color = CAT_COLOR[cat];
+  const catColor = CAT_COLOR[cat];
+  // Errored spans override the category color (bar + accent) with critical red.
+  // Ancestors of an error keep their category color but get a subtle marker.
+  const isError = node.isError;
+  const hasErrorDescendant = node.hasErrorDescendant;
+  const color = isError ? "var(--red)" : catColor;
+  // For "other" spans show the span kind (e.g. "client" for HTTP calls,
+  // "internal" for wrappers) so client/internal spans never render a blank
+  // prefix; otherwise the category label.
   const prefix = cat === "other" ? span.spanKind : CAT_LABEL[cat];
   const isMatch = !!highlight && spanMatchesTerm(span, highlight);
   const dimmed = !!highlight && !isMatch;
+  const errorTitle = isError
+    ? `Span errored${span.statusMessage ? `: ${span.statusMessage}` : span.statusCode ? `: ${span.statusCode}` : ""}`
+    : undefined;
 
   const leftPct = Math.max(0, Math.min(100, ((span.timestampMs - t0) / total) * 100));
   const widthPct = Math.max(
@@ -222,16 +296,22 @@ const WaterfallRow = ({
         alignItems: "center",
         minHeight: 26,
         cursor: "pointer",
+        // Selection/match borders take priority; otherwise an errored span
+        // gets a critical red left accent.
         borderLeft: isSelected
           ? "2px solid var(--blue)"
           : isMatch
             ? "2px solid var(--amber)"
-            : "2px solid transparent",
+            : isError
+              ? "2px solid var(--red)"
+              : "2px solid transparent",
         background: isSelected
           ? "color-mix(in oklab, var(--blue) 12%, transparent)"
           : isMatch
             ? "color-mix(in oklab, var(--amber) 16%, transparent)"
-            : undefined,
+            : isError
+              ? "color-mix(in oklab, var(--red) 8%, transparent)"
+              : undefined,
         opacity: dimmed ? 0.5 : 1,
       }}
     >
@@ -293,6 +373,23 @@ const WaterfallRow = ({
             {prefix}
           </Text>
         )}
+        {isError ? (
+          <span
+            title={errorTitle}
+            aria-label={errorTitle}
+            style={{ display: "flex", alignItems: "center", flex: "0 0 auto", color: "var(--red)" }}
+          >
+            <CriticalIcon size={12} />
+          </span>
+        ) : hasErrorDescendant ? (
+          <span
+            title="Contains an errored span"
+            aria-label="Contains an errored span"
+            style={{ display: "flex", alignItems: "center", flex: "0 0 auto", color: "var(--text-3)" }}
+          >
+            <WarningIcon size={12} />
+          </span>
+        ) : null}
         <Text
           style={{
             fontSize: 12,
@@ -313,9 +410,9 @@ const WaterfallRow = ({
         <>
           <div
             style={{
-              flex: "0 0 50px",
+              flex: `0 0 ${TOKEN_COL_WIDTH}px`,
               textAlign: "right",
-              paddingRight: 8,
+              paddingRight: TOKEN_COL_PR,
               fontSize: 11,
               fontVariantNumeric: "tabular-nums",
               color: "var(--text-2)",
@@ -325,9 +422,9 @@ const WaterfallRow = ({
           </div>
           <div
             style={{
-              flex: "0 0 50px",
+              flex: `0 0 ${TOKEN_COL_WIDTH}px`,
               textAlign: "right",
-              paddingRight: 8,
+              paddingRight: TOKEN_COL_PR,
               fontSize: 11,
               fontVariantNumeric: "tabular-nums",
               color: "var(--text-2)",
@@ -387,17 +484,6 @@ interface SpanAttributesPanelProps {
   onToggleMaximize?: () => void;
 }
 
-type AttrType = "string" | "number" | "bool" | "time" | "duration" | "id";
-interface Attr {
-  label: string;
-  value: string | number | boolean | null;
-  type: AttrType;
-}
-interface AttrSectionData {
-  title: string;
-  rows: Attr[];
-}
-
 // Value colors mirror the Distributed Tracing app: strings teal, numerics
 // (numbers / durations / timestamps) purple, booleans amber.
 const STRING_COLOR = "#0E8A8A";
@@ -432,86 +518,90 @@ const fmtAttr = (a: Attr): string => {
 const present = (rows: Attr[]): Attr[] =>
   rows.filter((a) => a.value !== null && a.value !== "");
 
+// Raw attribute keys surfaced in the curated Core/Error/Identifiers sections —
+// excluded from the catch-all "Other attributes" group so nothing shows twice.
+const CURATED_RAW_KEYS = new Set<string>([
+  // Core
+  "endpoint.name",
+  "span.kind",
+  "span.name",
+  "service.name",
+  "dt.service.name",
+  "duration",
+  "span.status_code",
+  "http.response.status_code",
+  "request.is_root_span",
+  "start_time",
+  "end_time",
+  // Error
+  "span.status_message",
+  "exception.type",
+  "exception.message",
+  // Identifiers
+  "span.id",
+  "span.parent_id",
+  "trace.id",
+  "dt.rum.session.id",
+]);
+
+/**
+ * Build the attribute sections for a span, in display order:
+ *   1. AI / OpenLLMetry namespace groups (gen_ai.*, llm.*, traceloop.*, …),
+ *      every raw key in each, humanized (see spanAttributes.ts).
+ *   2. Curated Core / Error / Identifiers, from the typed span fields.
+ *   3. "Other attributes" — every remaining raw attribute (infra, code, …).
+ */
 const buildSections = (span: TraceSpan): AttrSectionData[] => {
-  const sections: AttrSectionData[] = [
-    {
-      title: "Core",
-      rows: present([
-        { label: "Endpoint", value: span.endpoint, type: "string" },
-        { label: "Span kind", value: span.spanKind, type: "string" },
-        { label: "Span name", value: span.name, type: "string" },
-        { label: "Service", value: span.service, type: "string" },
-        { label: "Duration", value: span.durationMs, type: "duration" },
-        { label: "Status", value: span.statusCode, type: "string" },
-        {
-          label: "Request is root span",
-          value: span.isRoot,
-          type: "bool",
-        },
-        { label: "Start time", value: span.timestampMs, type: "time" },
-        { label: "End time", value: span.endTimeMs, type: "time" },
-      ]),
-    },
-    {
-      title: "Gen AI",
-      rows: present([
-        { label: "Provider", value: span.provider, type: "string" },
-        { label: "Model", value: span.model, type: "string" },
-        { label: "Operation", value: span.operation, type: "string" },
-        { label: "Agent", value: span.agentName, type: "string" },
-        { label: "Tool", value: span.toolName, type: "string" },
-        {
-          label: "Input tokens",
-          value: span.inTokens > 0 ? span.inTokens : null,
-          type: "number",
-        },
-        {
-          label: "Output tokens",
-          value: span.outTokens > 0 ? span.outTokens : null,
-          type: "number",
-        },
-      ]),
-    },
-    {
-      title: "Langchain",
-      rows: present([
-        { label: "Workflow", value: span.workflow, type: "string" },
-        { label: "Entity name", value: span.tlEntity, type: "string" },
-        { label: "Entity path", value: span.tlEntityPath, type: "string" },
-        { label: "Span kind", value: span.tlKind, type: "string" },
-      ]),
-    },
-    {
-      title: "Code attributes",
-      rows: present([
-        { label: "CPU self time", value: span.cpuSelfMs, type: "duration" },
-        { label: "CPU time", value: span.cpuMs, type: "duration" },
-        { label: "Code function", value: span.codeFunction, type: "string" },
-        { label: "Code namespace", value: span.codeNamespace, type: "string" },
-      ]),
-    },
-    {
-      title: "Error",
-      rows: present([
-        { label: "Exception type", value: span.exceptionType, type: "string" },
-        { label: "Exception message", value: span.exceptionMsg, type: "string" },
-      ]),
-    },
-    {
-      title: "Identifiers",
-      rows: present([
-        { label: "Span ID", value: span.spanId, type: "id" },
-        { label: "Parent span ID", value: span.parentSpanId, type: "id" },
-        { label: "Session ID", value: span.sessionId, type: "id" },
-      ]),
-    },
-  ];
-  return sections.filter((s) => s.rows.length > 0);
+  const ai = buildAiAttrSections(span.attributes);
+
+  const core: AttrSectionData = {
+    title: "Core",
+    rows: present([
+      { label: "Endpoint", value: span.endpoint, type: "string" },
+      { label: "Span kind", value: span.spanKind, type: "string" },
+      { label: "Span name", value: span.name, type: "string" },
+      { label: "Service", value: span.service, type: "string" },
+      { label: "Duration", value: span.durationMs, type: "duration" },
+      { label: "Status", value: span.statusCode, type: "string" },
+      { label: "HTTP status", value: span.httpStatus, type: "number" },
+      { label: "Request is root span", value: span.isRoot, type: "bool" },
+      { label: "Start time", value: span.timestampMs, type: "time" },
+      { label: "End time", value: span.endTimeMs, type: "time" },
+    ]),
+  };
+  const error: AttrSectionData = {
+    title: "Error",
+    rows: present([
+      { label: "Status message", value: span.statusMessage, type: "string" },
+      { label: "Exception type", value: span.exceptionType, type: "string" },
+      { label: "Exception message", value: span.exceptionMsg, type: "string" },
+    ]),
+  };
+  const identifiers: AttrSectionData = {
+    title: "Identifiers",
+    rows: present([
+      { label: "Span ID", value: span.spanId, type: "id" },
+      { label: "Parent span ID", value: span.parentSpanId, type: "id" },
+      { label: "Session ID", value: span.sessionId, type: "id" },
+    ]),
+  };
+  const other = buildOtherAttrSection(span.attributes, CURATED_RAW_KEYS);
+
+  return [...ai, core, error, identifiers, ...(other ? [other] : [])].filter(
+    (s) => s.rows.length > 0,
+  );
 };
 
-// Sections expanded by default; the rest (Code attributes, Error, Identifiers)
-// start collapsed.
-const OPEN_BY_DEFAULT = new Set(["Core", "Gen AI", "Langchain"]);
+// Sections expanded by default: every AI namespace group and Core are open; the
+// Error section opens too when the span is errored so the failure detail is
+// visible without hunting. Identifiers + "Other attributes" stay collapsed.
+// Pure — unit-testable without a React render.
+export const defaultOpenSections = (span: TraceSpan): Set<string> => {
+  const open = new Set<string>(AI_ATTR_GROUPS.map((g) => g.title));
+  open.add("Core");
+  if (span.isError) open.add("Error");
+  return open;
+};
 
 const AttrSection = ({
   section,
@@ -597,6 +687,7 @@ const SpanAttributesPanel = ({
 }: SpanAttributesPanelProps) => {
   const [q, setQ] = useState("");
   const term = q.trim().toLowerCase();
+  const openByDefault = useMemo(() => defaultOpenSections(span), [span]);
   const sections = useMemo(() => {
     const all = buildSections(span);
     if (!term) return all;
@@ -604,11 +695,54 @@ const SpanAttributesPanel = ({
       .map((s) => ({
         ...s,
         rows: s.rows.filter((a) =>
-          `${a.label} ${fmtAttr(a)}`.toLowerCase().includes(term),
+          `${a.key ?? ""} ${a.label} ${fmtAttr(a)}`
+            .toLowerCase()
+            .includes(term),
         ),
       }))
       .filter((s) => s.rows.length > 0);
   }, [span, term]);
+
+  // Maximized: the panel is the modal's only content, so the section list must
+  // be the single scroll region sized to the ACTUAL space between its top and
+  // the modal's bottom (a fixed viewport fraction overshoots the modal body and
+  // hides the lower sections behind the footer). Measure it and re-measure on
+  // resize / span change / next frame so it always fits and scrolls fully.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [measuredMax, setMeasuredMax] = useState<number | null>(null);
+  useEffect(() => {
+    if (!maximized) {
+      setMeasuredMax(null);
+      return;
+    }
+    const compute = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      // Bottom boundary = the trace modal's footer (its top edge). Strato's Modal
+      // exposes no role="dialog"/aria-modal, so we locate the footer button
+      // directly; this keeps the scroll region above the footer instead of
+      // overshooting the viewport.
+      let boundary = window.innerHeight - 24;
+      const footerBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => /Open in Distributed Tracing/i.test(b.textContent || ""),
+      );
+      if (footerBtn) {
+        const fb = footerBtn.getBoundingClientRect();
+        if (fb.top > top) boundary = fb.top - 12;
+      }
+      setMeasuredMax(Math.max(180, Math.round(boundary - top)));
+    };
+    compute();
+    const raf = requestAnimationFrame(compute);
+    const t = window.setTimeout(compute, 120);
+    window.addEventListener("resize", compute);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+      window.removeEventListener("resize", compute);
+    };
+  }, [maximized, span]);
 
   return (
     <Flex flexDirection="column" gap={8}>
@@ -651,7 +785,7 @@ const SpanAttributesPanel = ({
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search attributes"
+        placeholder="Filter attribute keys & values…"
         style={{
           width: "100%",
           boxSizing: "border-box",
@@ -664,11 +798,23 @@ const SpanAttributesPanel = ({
         }}
       />
       <div
+        ref={scrollRef}
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          maxHeight: maxHeight ?? 360,
+          // When maximized the panel is the modal's only content, so this list
+          // is the single scroll region, sized to the measured space above the
+          // modal footer (header + search stay pinned above it). Non-maximized
+          // uses the caller's px cap. Both scroll internally so every section —
+          // and every row within a section — is reachable.
+          maxHeight: maximized ? measuredMax ?? 400 : maxHeight ?? 360,
+          // CRITICAL: this div is itself a flex column AND a flex item of the
+          // panel's Flex, so its default min-height:auto resolves to content
+          // height and would override max-height (min wins over max) — leaving it
+          // un-clamped and unscrollable. min-height:0 lets max-height clamp so
+          // overflow scrolling actually engages.
+          minHeight: 0,
           overflowY: "auto",
           overflowX: "hidden",
           paddingRight: 4,
@@ -685,7 +831,7 @@ const SpanAttributesPanel = ({
             <AttrSection
               key={`${s.title}:${term ? "q" : ""}`}
               section={s}
-              defaultOpen={!!term || OPEN_BY_DEFAULT.has(s.title)}
+              defaultOpen={!!term || openByDefault.has(s.title)}
             />
           ))
         )}
@@ -760,6 +906,8 @@ const IndicatorsMenu = ({
       </button>
       {open && (
         <div
+          role="group"
+          aria-label="Indicators"
           style={{
             position: "absolute",
             right: 0,
@@ -815,6 +963,57 @@ const IndicatorsMenu = ({
   );
 };
 
+/**
+ * Labeled toggle (left of the gear) for the "All other service spans" indicator
+ * — the most-used filter, promoted out of the gear popover. Toggles the same
+ * `indicators.other` state. Filled (green-tinted) when on, outlined when off;
+ * aria-pressed + keyboard-activatable like a native button.
+ */
+const OtherSpansToggle = ({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    aria-pressed={active}
+    title="Show all other (non-AI / other-service) spans in the waterfall"
+    style={{
+      all: "unset",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
+      padding: "3px 8px",
+      borderRadius: 6,
+      fontSize: 11,
+      fontWeight: 600,
+      lineHeight: 1,
+      whiteSpace: "nowrap",
+      border: `1px solid ${active ? CAT_COLOR.other : "var(--border)"}`,
+      background: active
+        ? "color-mix(in oklab, var(--text-3) 16%, transparent)"
+        : "transparent",
+      color: active ? "var(--text)" : "var(--text-3)",
+    }}
+  >
+    <span
+      aria-hidden
+      style={{
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        background: CAT_COLOR.other,
+        flex: "0 0 auto",
+      }}
+    />
+    Other spans
+  </button>
+);
+
 export const TraceTree = ({
   spans,
   isLoading,
@@ -848,7 +1047,7 @@ export const TraceTree = ({
 
   const { t0, total } = useMemo(() => traceWindow(spans), [spans]);
   const roots = useMemo(
-    () => buildFilteredTree(spans, indicators),
+    () => markErrors(buildFilteredTree(spans, indicators)),
     [spans, indicators],
   );
   const rows = useMemo(() => flattenTree(roots, collapsed), [roots, collapsed]);
@@ -866,17 +1065,21 @@ export const TraceTree = ({
 
   if (isLoading) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading trace...</Text>
-      </div>
+      <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} style={{ height: 22 }} />
+        ))}
+      </Flex>
     );
   }
 
   if (spans.length === 0) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>No spans found in trace</Text>
-      </div>
+      <EmptyState
+        bare
+        title="No spans found in trace"
+        description="This trace returned no spans in the current scope."
+      />
     );
   }
 
@@ -910,15 +1113,23 @@ export const TraceTree = ({
             }}
           >
             <Text style={eyebrow}>Name</Text>
-            <IndicatorsMenu value={indicators} onChange={setIndicators} />
+            <Flex alignItems="center" gap={6}>
+              <OtherSpansToggle
+                active={indicators.other}
+                onToggle={() =>
+                  setIndicators((p) => ({ ...p, other: !p.other }))
+                }
+              />
+              <IndicatorsMenu value={indicators} onChange={setIndicators} />
+            </Flex>
           </div>
           {showTokens && (
             <>
-              <div style={{ flex: "0 0 50px", textAlign: "right", paddingRight: 8 }}>
-                <Text style={eyebrow}>In</Text>
+              <div style={{ flex: `0 0 ${TOKEN_COL_WIDTH}px`, textAlign: "right", paddingRight: TOKEN_COL_PR }}>
+                <Text style={eyebrow}>In Tok</Text>
               </div>
-              <div style={{ flex: "0 0 50px", textAlign: "right", paddingRight: 8 }}>
-                <Text style={eyebrow}>Out</Text>
+              <div style={{ flex: `0 0 ${TOKEN_COL_WIDTH}px`, textAlign: "right", paddingRight: TOKEN_COL_PR }}>
+                <Text style={eyebrow}>Out Tok</Text>
               </div>
             </>
           )}
@@ -939,13 +1150,45 @@ export const TraceTree = ({
           </div>
         </div>
 
+        {/* Always-visible category key so the waterfall colours are decodable
+            without opening the Indicators popover (Prompts-13). */}
+        <Flex
+          alignItems="center"
+          gap={12}
+          flexWrap="wrap"
+          style={{ padding: "5px 0 7px" }}
+        >
+          {(
+            [
+              ["agent", "Agent"],
+              ["llm", "LLM"],
+              ["tool", "Tool"],
+              ["other", "Other"],
+            ] as [SpanCategory, string][]
+          ).map(([cat, label]) => (
+            <Flex key={cat} alignItems="center" gap={6} style={{ flex: "0 0 auto" }}>
+              <span
+                aria-hidden
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  background: CAT_COLOR[cat],
+                  flex: "0 0 auto",
+                }}
+              />
+              <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>{label}</Text>
+            </Flex>
+          ))}
+        </Flex>
+
         <div style={{ maxHeight, overflowY: "auto" }}>
           {rows.length === 0 ? (
-            <div style={{ padding: 12, textAlign: "center" }}>
-              <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                No spans match the selected indicators.
-              </Text>
-            </div>
+            <EmptyState
+              bare
+              title="No spans match the selected indicators"
+              description="Enable more categories in the Indicators menu to reveal spans."
+            />
           ) : (
             rows.map(({ node, depth }) => (
               <WaterfallRow
@@ -977,8 +1220,8 @@ export const TraceTree = ({
         {selectedSpan ? (
           <SpanAttributesPanel
             span={selectedSpan}
-            maxHeight={maxed ? Math.round(maxHeight * 1.8) : maxHeight}
-            maximized={attrsMaximized}
+            maxHeight={maxHeight}
+            maximized={maxed}
             onToggleMaximize={() => setAttrsMaximized((m) => !m)}
           />
         ) : (

@@ -1,7 +1,14 @@
-import { dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
+import { dqlTimeArg, dqlEscape, dqlIdArray, scopeFilterClause, globalFilterClauses, logicalErrorField, LOGICAL_ERROR_EXPR, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
+
+/**
+ * Row cap on the AI-services catalog query. Exported so the table can tell when
+ * the result was truncated (services.length >= this) and show a "top N — narrow
+ * the scope" footer rather than implying the fleet is exactly this size.
+ */
+export const AI_SERVICES_LIMIT = 200;
 
 /**
  * AI services catalog: per-service aggregates used by the AIServicesTable and
@@ -36,6 +43,8 @@ ${globalFilterClauses(filters)}
 | summarize
     requests = count(),
     tokens = sum(in_tok + out_tok),
+    in_tokens = sum(in_tok),
+    out_tokens = sum(out_tok),
     errors = sum(is_error),
     logical_errors = sum(has_gen_ai_error + has_guardrail + has_refusal + has_truncation + has_content_filter),
     agents = countDistinct(gen_ai.agent.name),
@@ -47,7 +56,7 @@ ${globalFilterClauses(filters)}
     tok_per_req = if(requests > 0, toDouble(tokens) / toDouble(requests), else: 0),
     error_rate_pct = if(requests > 0, toDouble(errors) / toDouble(requests) * 100, else: 0)
 | sort tokens desc
-| limit 200
+| limit ${AI_SERVICES_LIMIT}
 `.trim();
 
 /**
@@ -77,4 +86,63 @@ ${globalFilterClauses(filters)}
     }
 | sort tokens desc
 | limit 1000
+`.trim();
+
+/**
+ * OTel-flavoured logical-error markers, mirroring the `has_*` fields summed in
+ * buildAIServicesQuery (gen_ai.error.type, guardrail/moderation, refusal,
+ * truncation, content_filter). Folded into a single boolean for `countIf` so
+ * the detail query reports the same logical-error population the services
+ * catalog does. These markers are often zero on this tenant; finish_reasons
+ * does the load-bearing work.
+ */
+const OTEL_LOGICAL_ERROR_EXPR = `(
+    isNotNull(gen_ai.error.type)
+    or isNotNull(gen_ai.guardrail.action)
+    or isNotNull(gen_ai.moderation.action)
+    or isNotNull(gen_ai.response.refusal_reason)
+    or contains(toString(gen_ai.response.finish_reasons), "refusal")
+    or contains(toString(gen_ai.response.finish_reasons), "max_tokens")
+    or contains(toString(gen_ai.response.finish_reasons), "content_filter")
+  )`;
+
+/**
+ * Golden-signal + token metrics for ONE service×model pair, powering the
+ * heatmap-cell detail modal. The pair is identified by the SAME fields the
+ * heatmap groups by — `entityName(dt.entity.service)` and
+ * `gen_ai.request.model`. A heatmap column folds every RAW `gen_ai.request.model`
+ * variant that canonicalizes to one label (`models`), so we match the FULL list
+ * with `in(gen_ai.request.model, array(...))` — matching the cell's aggregate
+ * exactly rather than undercounting to one variant. Values are escaped via
+ * dqlEscape / dqlIdArray. The summarize has no `by:`, so all matched variants
+ * fold into one row. `errors` counts the load-bearing logical-error rule
+ * (shared with buildAIServicesQuery's `is_error`); `logical_errors` counts the
+ * OTel-marker population.
+ */
+export const buildServiceModelDetailQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  service: string,
+  models: string[],
+  filters?: GlobalFilters,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+${globalFilterClauses(filters)}
+| filter isNotNull(gen_ai.request.model)
+| filter in(gen_ai.request.model, array(${dqlIdArray(models)}))
+| filter entityName(dt.entity.service) == "${dqlEscape(service)}"
+| dedup {span.id}
+| fieldsAdd
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
+| summarize
+    requests = count(),
+    in_tok = sum(in_tok),
+    out_tok = sum(out_tok),
+    errors = countIf(${LOGICAL_ERROR_EXPR}),
+    logical_errors = countIf(${OTEL_LOGICAL_ERROR_EXPR}),
+    p50_ns = percentile(duration, 50),
+    p90_ns = percentile(duration, 90),
+    p95_ns = percentile(duration, 95)
 `.trim();

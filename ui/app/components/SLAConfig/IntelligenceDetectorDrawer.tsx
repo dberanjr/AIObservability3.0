@@ -97,10 +97,10 @@ const DEFAULT_SUGGESTIONS: DetectorSuggestion[] = [
     name: "TTFT degradation",
     type: "metric-anomaly",
     signal: "Streaming time-to-first-token",
-    filter: "gen_ai.usage.time_to_first_token set (capability-gated)",
+    filter: "gen_ai.response.ttft set (capability-gated)",
     sensitivity: "Medium · learn 7d",
     baselineHint: "Latest hour vs rolling avg · alerts on 1.5× regression",
-    dql: `timeseries ttft = avg(toDouble(gen_ai.usage.time_to_first_token)), interval: 1h`,
+    dql: `timeseries ttft = avg(toDouble(coalesce(gen_ai.response.ttft, gen_ai.usage.time_to_first_token, gen_ai.response.time_to_first_chunk))), interval: 1h`,
   },
   {
     name: "Tool-output → token spike (I.2)",

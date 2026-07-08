@@ -4,23 +4,35 @@ import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
+import { useScanGroup, useScanScope } from "../../scope/ScanReportContext";
+import { TIER_COLORS } from "./constants";
 import {
   useLatencyDecomposition,
   type LatencyTier,
 } from "./useLatencyDecomposition";
 
+// Shared hue-per-concept map so the LLM/Tool/Retrieval/Orchestration tiers are
+// colored identically here and in the row-level StageBreakdownBar above.
 const TIER_COLOR: Record<LatencyTier, string> = {
-  LLM: "var(--purple-2)",
-  "Retrieval/DB": "var(--cyan)",
-  Tool: "var(--amber)",
-  Orchestration: "var(--text-4)",
+  LLM: TIER_COLORS.llm,
+  "Retrieval/DB": TIER_COLORS.retrieval,
+  Tool: TIER_COLORS.tool,
+  Orchestration: TIER_COLORS.orchestration,
 };
 
 // Body is a separate component so the query (useLatencyDecomposition) only runs
 // when the section is expanded — CollapsibleCard renders children solely while
 // open, so a collapsed section issues no DQL.
 const LatencyTierBody = () => {
-  const { tiers, totalMs, dominant, isLoading } = useLatencyDecomposition();
+  const { tiers, totalMs, dominant, isLoading, error } =
+    useLatencyDecomposition();
+  // Classify the empty honestly: a query error must read as an error, and a
+  // scan capped at its budget as "truncated", not a false "no AI spans"
+  // (STATE-2 / STATE-4). limitHit is this tile's own scan-group truncation —
+  // the "Latency by tier" scope holds exactly this one query, so it's precise.
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
+  const emptyKind = emptyCause({ error, limitHit });
 
   return (
       <Flex flexDirection="column" gap={0}>
@@ -39,11 +51,15 @@ const LatencyTierBody = () => {
             <Skeleton style={{ height: 80 }} />
           </Flex>
         ) : tiers.length === 0 ? (
-          <Flex style={{ padding: "28px 16px" }}>
-            <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-              No AI spans in the current scope.
-            </Text>
-          </Flex>
+          <EmptyState
+            bare
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No AI spans in the current scope."
+                : undefined
+            }
+          />
         ) : (
           <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
             {/* Stacked share-of-total-time bar */}
@@ -61,7 +77,9 @@ const LatencyTierBody = () => {
                 t.sharePct > 0 ? (
                   <div
                     key={t.tier}
-                    title={`${t.tier} · ${fmtPercent(t.sharePct, 1)} of total time`}
+                    title={`${t.tier} · ${fmtPercent(t.sharePct, 1)} of total time · ${fmtCount(
+                      t.spans,
+                    )} spans · avg ${fmtMs(t.avgMs)} · P95 ${fmtMs(t.p95Ms)}`}
                     style={{
                       width: `${t.sharePct}%`,
                       background: TIER_COLOR[t.tier],

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -14,8 +14,24 @@ import {
 } from "../../components/charts/ChartExpander";
 import { ForecastToggle } from "../../components/charts/ForecastToggle";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import {
+  EmptyState,
+  emptyCause,
+  type EmptyStateAction,
+} from "../../components/EmptyState";
 import { fmtTokens, fmtUSDCompact } from "../../data/format";
 import { useScope } from "../../scope/ScopeContext";
+import { TIME_PRESETS } from "../../scope/types";
+import {
+  SCAN_LIMITS_GB,
+  SCAN_LIMIT_LABELS,
+  useScanLimit,
+} from "../../scope/ScanLimitContext";
+import {
+  ScanScope,
+  useScanGroup,
+  useScanScope,
+} from "../../scope/ScanReportContext";
 import { intervalPhraseFromMs } from "../../scope/chartInterval";
 import { costOf } from "../../data/pricing";
 import { usePersistedState } from "../../state/usePersistedState";
@@ -86,17 +102,54 @@ const buildAxisTicks = (
 
 const TokenConsumptionBody = () => {
   const result = useTokenConsumption();
+  // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
+  // so a truncated scan surfaces the amber "Scan budget reached" empty rather
+  // than a misleading "no activity" (STATE-4).
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
+  const emptyKind = emptyCause({ error: result.error, limitHit });
   const [forecastEnabled, onToggleForecast] = usePersistedState<boolean>(
     "ai-obs.pulse.forecast-enabled",
     false,
   );
   const forecast = useTokenForecast(forecastEnabled);
-  const { setTimeframe } = useScope();
+  const { scope, setTimeframe } = useScope();
   const spend = useSpendBreakdown();
+  // Empty-state remedies wired to the real scope / scan-limit setters, so a
+  // scope-driven empty offers one-click widen / raise instead of inert prose
+  // (STATE-6). A truncated scan skips "widen" (that scans MORE); an error offers
+  // neither. Buttons disable themselves at the widest preset / max scan budget.
+  const { scanLimitGb, setScanLimit } = useScanLimit();
+  const tfOrder = TIME_PRESETS.map((p) => p.value);
+  const tfIdx = tfOrder.indexOf(scope.timeframe.from);
+  const nextTf =
+    tfIdx === -1 ? "now()-24h" : tfIdx < tfOrder.length - 1 ? tfOrder[tfIdx + 1] : null;
+  const widenTimeframe = nextTf ? () => setTimeframe({ from: nextTf }) : undefined;
+  const scanIdx = SCAN_LIMITS_GB.indexOf(scanLimitGb);
+  const nextScan =
+    scanIdx >= 0 && scanIdx < SCAN_LIMITS_GB.length - 1 ? SCAN_LIMITS_GB[scanIdx + 1] : null;
+  const raiseScanLimit = nextScan != null ? () => setScanLimit(nextScan) : undefined;
+  const raiseScanLabel =
+    nextScan != null ? `Raise scan limit to ${SCAN_LIMIT_LABELS[nextScan]}` : "Scan limit at max";
+  const remedyActions: EmptyStateAction[] =
+    emptyKind === "error"
+      ? []
+      : emptyKind === "truncated"
+        ? [{ label: raiseScanLabel, onClick: raiseScanLimit }]
+        : [
+            { label: "Widen timeframe", onClick: widenTimeframe },
+            { label: raiseScanLabel, onClick: raiseScanLimit },
+          ];
   const spendTotal = !spend.isLoading && spend.total > 0 ? spend.total : result.totalCost;
+  // Reconcile the per-bucket cost to the ACTUAL fleet spend. The raw per-bucket
+  // estCost is a blended estimate; scale it so the dashed cost line's total
+  // matches the accurate (per-model) spend figure shown beside the chart,
+  // distributed across intervals by token share. (True per-model-per-bucket cost
+  // would need a per-model time query.)
+  const costScale =
+    result.totalCost > 0 && spendTotal > 0 ? spendTotal / result.totalCost : 1;
   const intervalPhrase = intervalPhraseFromMs(result.intervalMs);
   const historicalTokens = result.points.map((p) => p.tokens);
-  const historicalCosts = result.points.map((p) => p.estCost);
+  const historicalCosts = result.points.map((p) => p.estCost * costScale);
   const histLen = historicalTokens.length;
   const fc = forecast.forecast;
   const forecastLen = forecastEnabled && fc ? fc.values.length : 0;
@@ -130,12 +183,13 @@ const TokenConsumptionBody = () => {
     [histLen, result.intervalMs, forecastLen],
   );
 
-  // Per-bucket cost is derived from per-bucket tokens via the same blended
-  // pricing as the historical Est. cost line, so the forecasted cost band
-  // tracks the forecasted token band 1:1.
-  // Fleet-aggregate buckets priced at the blended rate (model: null) through
-  // the cache-aware cost model.
-  const tokensToCost = (n: number) => costOf(n / 2, n / 2, null);
+  // Forecasted per-bucket cost, reconciled to the actual spend rate (costScale)
+  // exactly like the historical Est. cost line, so the forecast cost band tracks
+  // the forecast token band on the same scale.
+  const tokensToCost = useCallback(
+    (n: number) => costOf(n / 2, n / 2, null) * costScale,
+    [costScale],
+  );
 
   const forecastBands: ForecastBand[] = useMemo(() => {
     if (!forecastEnabled || !fc || histLen === 0) return [];
@@ -163,7 +217,7 @@ const TokenConsumptionBody = () => {
         axis: "right",
       },
     ];
-  }, [forecastEnabled, fc, histLen]);
+  }, [forecastEnabled, fc, histLen, tokensToCost]);
 
   // Time domain spans `now - histLen*intervalMs` (historical start) through
   // the last forecast bucket if present, otherwise `now`. Brush emits ISO
@@ -201,6 +255,7 @@ const TokenConsumptionBody = () => {
   const chart = (chartHeight: number) => (
     <AreaChart
       height={chartHeight}
+      ariaLabel={`Token consumption per ${intervalPhrase}, with estimated cost (reconciled to actual spend) on the right axis`}
       formatLeft={(n) => fmtTokens(n)}
       formatRight={(n) => fmtUSDCompact(n)}
       xLabels={xLabels}
@@ -256,35 +311,25 @@ const TokenConsumptionBody = () => {
         {result.isLoading ? (
           <Skeleton style={{ height: 220 }} />
         ) : result.points.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No data in the current scope.
-          </Text>
-        ) : (
-          <AreaChart
-            height={220}
-            formatLeft={(n) => fmtTokens(n)}
-            formatRight={(n) => fmtUSDCompact(n)}
-            xLabels={xLabels}
-            axisTicks={axisTicks}
-            forecasts={forecastBands}
-            xDomain={xDomain}
-            onBrushSelect={(range) => setTimeframe(range)}
-            series={[
-              {
-                label: "Tokens",
-                color: "var(--blue)",
-                values: tokensCombined,
-                axis: "left",
-              },
-              {
-                label: "Est. cost",
-                color: "var(--purple)",
-                values: costsCombined,
-                axis: "right",
-                dashed: true,
-              },
-            ]}
+          <EmptyState
+            bare
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No data in the current scope."
+                : undefined
+            }
+            hint="gen_ai.usage.input_tokens · gen_ai.usage.output_tokens"
+            actions={remedyActions}
           />
+        ) : (
+          // Render the inline chart through the SAME builder as the expanded
+          // modal so the two can't drift. (Previously the inline copy passed
+          // rightAxisFromLeftMax={tokensToCost}, which inflated the right-axis
+          // max to a blended null-model cost far above the actual per-bucket
+          // estCost, squashing the dashed cost line flat onto the x-axis so it
+          // appeared to vanish inline while rendering fine when expanded.)
+          chart(220)
         )}
 
         {forecastEnabled && forecast.error && (
@@ -308,9 +353,11 @@ const TokenConsumptionBody = () => {
 export const TokenConsumptionChart = () => (
   <CollapsibleCard
     title="Token consumption"
-    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; dashed line is estimated cost (per interval, from token usage) on the right axis. The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range."
+    info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; the dashed line is estimated cost on the right axis, reconciled to the actual fleet spend (distributed across intervals by token share, since exact per-model cost per interval needs a per-model time query). The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range; focus the chart and use arrow keys to read values."
     defaultOpen
   >
-    <TokenConsumptionBody />
+    <ScanScope name="Token consumption">
+      <TokenConsumptionBody />
+    </ScanScope>
   </CollapsibleCard>
 );

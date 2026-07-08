@@ -2,19 +2,27 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import {
-  EMPTY_PRICING_CONFIG,
-  useModelPricing,
-  type PricingConfig,
-} from "./ModelPricingContext";
+import { useModelPricing, type PricingConfig } from "./ModelPricingContext";
 import {
   getEffectivePricing,
   normalizeModelKey,
   type ModelPricing,
 } from "../data/pricing";
+import { useModalA11y } from "../components/useModalA11y";
 
 type Tier = ModelPricing["tier"];
 const TIERS: Tier[] = ["low", "mid", "high", "frontier"];
+
+/** Read a `notes` string off a built-in pricing entry. ModelPricing has no
+ *  `notes` in its type (it's stashed at runtime), so narrow with `in` rather
+ *  than an assertion the linter false-positives on. */
+const pricingNotes = (p: unknown): string => {
+  if (p && typeof p === "object" && "notes" in p) {
+    const n = (p as { notes?: unknown }).notes;
+    return typeof n === "string" ? n : "";
+  }
+  return "";
+};
 
 interface Draft extends ModelPricing {
   key: string;
@@ -552,6 +560,22 @@ export const ModelPricingPanel = () => {
   const [confirmRevert, setConfirmRevert] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const closeBtnRef = React.useRef<HTMLButtonElement>(null);
+
+  // Esc closes the panel — but not while the revert confirmation is showing
+  // (there it should only dismiss that inner prompt, preserved from the prior
+  // hand-rolled handler).
+  const handleEscClose = React.useCallback(() => {
+    if (!confirmRevert) t.closePanel();
+  }, [confirmRevert, t]);
+
+  // Focus management (move focus in, trap Tab, Esc-to-close, restore on close).
+  useModalA11y(dialogRef, handleEscClose, {
+    initialFocusRef: closeBtnRef,
+    active: t.isPanelOpen,
+  });
+
   // Re-seed drafts whenever the panel opens or the remote config changes
   // (e.g., another tab/user saved an update).
   useEffect(() => {
@@ -563,14 +587,6 @@ export const ModelPricingPanel = () => {
     }
   }, [t.isPanelOpen, t.config]);
 
-  useEffect(() => {
-    if (!t.isPanelOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !confirmRevert) t.closePanel();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [t, confirmRevert]);
 
   const grouped = useMemo(() => groupByProvider(drafts), [drafts]);
   const providers = Object.keys(grouped).sort();
@@ -619,8 +635,7 @@ export const ModelPricingPanel = () => {
         built.contextWindow !== d.contextWindow ||
         built.provider !== d.provider ||
         built.tier !== d.tier ||
-        ((d.notes ?? "") !==
-          ((built as ModelPricing & { notes?: string }).notes ?? ""));
+        (d.notes ?? "") !== pricingNotes(built);
       if (differs) {
         overrides[d.key] = {
           inputPerMTok: d.inputPerMTok,
@@ -631,7 +646,7 @@ export const ModelPricingPanel = () => {
           // Stash notes alongside the pricing fields; getPricing() ignores
           // unknown properties.
           ...(d.notes ? { notes: d.notes } : {}),
-        } as ModelPricing;
+        };
       }
     }
     t.saveConfig({ overrides });
@@ -659,6 +674,8 @@ export const ModelPricingPanel = () => {
         }}
       >
         <div
+          ref={dialogRef}
+          tabIndex={-1}
           onClick={(e) => e.stopPropagation()}
           style={{
             background: "var(--surface)",
@@ -683,13 +700,14 @@ export const ModelPricingPanel = () => {
               </Text>
             </Flex>
             <button
+              ref={closeBtnRef}
               type="button"
               aria-label="Close"
+              className="aiobs-icon-btn"
               onClick={t.closePanel}
               style={{
-                all: "unset",
-                cursor: "pointer",
                 padding: "2px 8px",
+                borderRadius: 6,
                 fontSize: 18,
                 color: "var(--text-3)",
               }}

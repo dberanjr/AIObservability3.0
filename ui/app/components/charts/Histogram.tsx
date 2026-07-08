@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { BrushRange, ChartTimeDomain } from "./AreaChart";
+import { SR_ONLY, type BrushRange, type ChartTimeDomain } from "./AreaChart";
 
 export interface HistogramBar {
   label: string;
@@ -19,7 +19,24 @@ export interface HistogramProps {
   xDomain?: ChartTimeDomain;
   /** Fires on mouse-up after a click-and-drag brush. */
   onBrushSelect?: (range: BrushRange) => void;
+  /** Draw a minimal left Y-axis (faint gridlines + a couple of tick labels). */
+  showYAxis?: boolean;
+  /** Compact formatter for the Y-axis tick labels (kept short to fit PAD_L). */
+  yAxisFormatter?: (n: number) => string;
+  /**
+   * Accessible name for the chart. Callers pass the real content (e.g.
+   * "Requests per hour, last 24 hours") so a screen reader announces this
+   * chart rather than a fixed shared string (UX report Chart-5). Falls back to
+   * a generic name.
+   */
+  ariaLabel?: string;
 }
+
+// Show the tooltip after a short, deliberate delay: long enough that it doesn't
+// flicker as the cursor crosses the chart, short enough to feel instant. A true
+// 0ms reveal races the pointer and strobes; ~150ms reads as immediate.
+const TOOLTIP_DELAY_MS = 150;
+const Y_TICKS = 2;
 
 // Fallback width used before the ResizeObserver fires; real rendering uses
 // the observed container width so SVG text isn't aspect-stretched.
@@ -39,14 +56,34 @@ export const Histogram = ({
   valueFormatter = (n) => String(Math.round(n)),
   xDomain,
   onBrushSelect,
+  showYAxis = false,
+  yAxisFormatter = (n) => String(Math.round(n)),
+  ariaLabel,
 }: HistogramProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [tipReady, setTipReady] = useState(false);
+  // Screen-reader readout for the keyboard cursor; only set on key nav so a
+  // pointer sweep never spams the aria-live region.
+  const [srText, setSrText] = useState("");
+  const tipTimer = useRef<number | undefined>(undefined);
   const [tipPx, setTipPx] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(FALLBACK_VIEW_W);
   const [brush, setBrush] = useState<{ startPx: number; endPx: number } | null>(
     null,
   );
+
+  // Arm the reveal timer on first hover; clear it whenever the cursor leaves.
+  useEffect(() => {
+    if (hoverIdx == null) {
+      window.clearTimeout(tipTimer.current);
+      setTipReady(false);
+      return;
+    }
+    if (tipReady) return;
+    tipTimer.current = window.setTimeout(() => setTipReady(true), TOOLTIP_DELAY_MS);
+    return () => window.clearTimeout(tipTimer.current);
+  }, [hoverIdx, tipReady]);
 
   useEffect(() => {
     if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
@@ -131,9 +168,44 @@ export const Histogram = ({
     if (from && to && from !== to) onBrushSelect({ from, to });
   };
 
+  // Keyboard cursor: arrow keys walk the bars, Home/End jump to the ends,
+  // Escape clears — mirrors the pointer tooltip so keyboard users reach the
+  // same values (UX report Chart-5).
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (bars.length === 0) return;
+    const last = bars.length - 1;
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = Math.min(last, (hoverIdx ?? -1) + 1);
+    else if (e.key === "ArrowLeft") next = Math.max(0, (hoverIdx ?? bars.length) - 1);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    else if (e.key === "Escape") {
+      setHoverIdx(null);
+      setSrText("");
+      return;
+    } else return;
+    e.preventDefault();
+    setHoverIdx(next);
+    setTipPx(PAD_L + next * slot + slot / 2);
+    const b = bars[next];
+    setSrText(`${b.label}, ${valueFormatter(b.value)}`);
+  };
+
+  const handleBlur = () => {
+    setHoverIdx(null);
+    setSrText("");
+    setBrush(null);
+  };
+
+  const accessibleLabel = ariaLabel ?? "Activity histogram";
+
   return (
+    <>
     <div
       ref={wrapRef}
+      role="img"
+      aria-label={accessibleLabel}
+      tabIndex={0}
       style={{
         position: "relative",
         width: "100%",
@@ -145,13 +217,14 @@ export const Histogram = ({
       onMouseLeave={handleLeave}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
     >
       <svg
         width={VIEW_W}
         height={height}
         viewBox={`0 0 ${VIEW_W} ${height}`}
-        role="img"
-        aria-label="24h activity histogram"
+        aria-hidden
       >
         <line
           x1={PAD_L}
@@ -161,6 +234,39 @@ export const Histogram = ({
           stroke="var(--border)"
           vectorEffect="non-scaling-stroke"
         />
+
+        {/* Minimal Y-axis: a couple of faint gridlines with compact labels, so
+            the bars have a scale without cluttering the tile. */}
+        {showYAxis &&
+          Array.from({ length: Y_TICKS + 1 }, (_, i) => i / Y_TICKS).map((t) => {
+            const y = PAD_T + innerH - t * innerH;
+            return (
+              <g key={`y${t}`}>
+                {t > 0 && (
+                  <line
+                    x1={PAD_L}
+                    x2={VIEW_W - PAD_R}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                    opacity={0.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                <text
+                  x={PAD_L - 5}
+                  y={y + 3}
+                  fontSize={9}
+                  textAnchor="end"
+                  fill="var(--text-3)"
+                  fontFamily="var(--mono, monospace)"
+                >
+                  {yAxisFormatter(max * t)}
+                </text>
+              </g>
+            );
+          })}
 
         {bars.map((b, i) => {
           const h = (b.value / max) * innerH;
@@ -231,7 +337,7 @@ export const Histogram = ({
           })()}
       </svg>
 
-      {hoverIdx != null && (
+      {hoverIdx != null && tipReady && (
         <div
           role="tooltip"
           style={{
@@ -260,5 +366,11 @@ export const Histogram = ({
         </div>
       )}
     </div>
+    {/* Keyboard-cursor readout. Sibling of the role="img" chart (an img is a
+        leaf, so a nested live region would be ignored); only set on key nav. */}
+    <div aria-live="polite" style={SR_ONLY}>
+      {srText}
+    </div>
+    </>
   );
 };

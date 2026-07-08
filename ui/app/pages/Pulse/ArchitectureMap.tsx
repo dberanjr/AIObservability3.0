@@ -12,23 +12,52 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Surface } from "@dynatrace/strato-components/layouts";
 import { useTabNav, type FocusParam } from "../../lib/nav";
+import { ErrorBanner } from "../../components/ErrorState";
+import { EmptyState } from "../../components/EmptyState";
+import { useScope } from "../../scope/ScopeContext";
+import { TIME_PRESETS } from "../../scope/types";
+import {
+  SCAN_LIMITS_GB,
+  SCAN_LIMIT_LABELS,
+  useScanLimit,
+} from "../../scope/ScanLimitContext";
 import { NodeMap } from "./archMap/NodeMap";
 import { NodeDrawer } from "./archMap/NodeDrawer";
 import { DetailModal } from "./archMap/DetailModal";
+import { UpstreamServicesModal } from "./archMap/UpstreamServicesModal";
 import { useArchitectureData } from "./archMap/useArchitectureData";
+import { useFrameworkNodes } from "./archMap/useFrameworkNodes";
 import { resolveDetail, type DetailDrill, type ModalDetail } from "./archMap/getDetail";
-import { USE_CASE_LENSES, type ArchNodeMeta, type DetailSpec, type LensId } from "./archMap/model";
+import {
+  ARCH_NODES,
+  USE_CASE_LENSES,
+  type ArchNodeMeta,
+  type DetailSpec,
+  type LensId,
+  type NodeStatus,
+} from "./archMap/model";
+import type { LayerKey } from "../../data/ai-layer-patterns";
 import { SEVERITY_RANK } from "./anomalies/types";
 import { ARCH_MAP_CSS } from "./archMap/mapCss";
 import { AM_ROOT_VARS, statusColor } from "./archMap/tokens";
 import { useSpendBreakdown } from "./useSpendBreakdown";
 import type { ArchData } from "./archMap/useArchitectureData";
 
+type BannerStatus = "critical" | "warning" | "healthy" | "muted" | "info";
+
 interface BannerView {
-  status: "critical" | "warning" | "healthy" | "muted";
+  status: BannerStatus;
   headline: string;
   detail: string;
+  /** The top finding on the path — clicking the banner opens its DetailModal. */
+  findingId?: string;
+  /** How many more findings sit on the lens path beyond the one shown. */
+  moreCount?: number;
 }
+
+/** Info findings render in an indigo/info tone, not the amber warning tone. */
+const bannerDotColor = (status: BannerStatus): string =>
+  status === "info" ? "#474fcf" : statusColor(status);
 
 /** Summarise the lens from real findings on its contributing tiers. */
 const computeBanner = (lensId: string | null, data: ArchData): BannerView | null => {
@@ -38,12 +67,60 @@ const computeBanner = (lensId: string | null, data: ArchData): BannerView | null
   const top = [...onPath].sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])[0];
   if (top) {
     return {
-      status: top.severity === "info" ? "warning" : top.severity,
+      // Keep 'info' at info severity — mapping it to 'warning' overstated it.
+      status: top.severity,
       headline: `${top.category} · ${top.entity}`,
       detail: top.context,
+      findingId: top.id,
+      moreCount: Math.max(0, onPath.length - 1),
     };
   }
   return { status: "muted", headline: lens.label, detail: lens.hint };
+};
+
+const NODE_STATUS_ORDER: Record<NodeStatus, number> = {
+  muted: 0,
+  healthy: 1,
+  warning: 2,
+  critical: 3,
+};
+
+interface Verdict {
+  status: "critical" | "warning" | "healthy";
+  worst: NodeStatus;
+  worstTier: string | null;
+  findingsText: string;
+}
+
+/** Roll the per-tier statuses + finding breakdown into one at-rest health line. */
+const computeVerdict = (data: ArchData): Verdict => {
+  let worst: NodeStatus = "healthy";
+  let worstTier: string | null = null;
+  for (const k of Object.keys(data.nodes) as LayerKey[]) {
+    const st: NodeStatus = data.nodes[k].status;
+    if (st === "muted") continue;
+    if (NODE_STATUS_ORDER[st] > NODE_STATUS_ORDER[worst]) {
+      worst = st;
+      worstTier = ARCH_NODES[k].name;
+    }
+  }
+  const { critical, warning, info } = data.breakdown;
+  const worstIsCritical = worst === "critical";
+  const worstIsWarning = worst === "warning";
+  const status: Verdict["status"] =
+    worstIsCritical || critical > 0
+      ? "critical"
+      : worstIsWarning || warning > 0
+        ? "warning"
+        : "healthy";
+  const total = critical + warning + info;
+  const parts: string[] = [];
+  if (critical) parts.push(`${critical} critical`);
+  if (warning) parts.push(`${warning} warning`);
+  if (info) parts.push(`${info} info`);
+  const findingsText =
+    total > 0 ? `${parts.join(" · ")} finding${total === 1 ? "" : "s"}` : "no active findings";
+  return { status, worst, worstTier, findingsText };
 };
 
 /**
@@ -74,8 +151,11 @@ const Chip = ({ n, label, onClick }: { n: number | null; label: string; onClick:
 
 export const ArchitectureMap = () => {
   const data = useArchitectureData();
+  const { frameworks } = useFrameworkNodes();
   const spend = useSpendBreakdown();
   const goToTab = useTabNav();
+  const { scope, setTimeframe } = useScope();
+  const { scanLimitGb, setScanLimit } = useScanLimit();
   const [lensId, setLensId] = useState<LensId | null>(null);
   const [picked, setPicked] = useState<ArchNodeMeta | null>(null);
   const [detail, setDetail] = useState<ModalDetail | null>(null);
@@ -106,6 +186,7 @@ export const ArchitectureMap = () => {
       loopEntity: data.loopEntity,
       series: data.series,
       edgeSignals: data.edgeSignals,
+      frameworks,
     });
     if (resolved) setDetail(resolved);
   };
@@ -115,6 +196,25 @@ export const ArchitectureMap = () => {
 
   const banner = useMemo(() => computeBanner(lensId, data), [lensId, data]);
   const findingCount = data.findings.length;
+  const verdict = useMemo(() => computeVerdict(data), [data]);
+
+  // Live-freshness: green + ping within ~1 refresh interval, amber when stale,
+  // grey while the first refresh timestamp is still null. The DQL is scoped and
+  // polls on a ~60s staleTime, so this reflects cadence, not real-time streaming.
+  const ageMs = data.refreshedMs == null ? null : now - data.refreshedMs;
+  const liveState = ageMs == null ? "pending" : ageMs <= 90_000 ? "fresh" : "stale";
+
+  // Empty-state remedies wired to the real scope / scan-limit setters.
+  const tfOrder = TIME_PRESETS.map((p) => p.value);
+  const tfIdx = tfOrder.indexOf(scope.timeframe.from);
+  const nextTf =
+    tfIdx === -1 ? "now()-24h" : tfIdx < tfOrder.length - 1 ? tfOrder[tfIdx + 1] : null;
+  const widenTimeframe = nextTf ? () => setTimeframe({ from: nextTf }) : undefined;
+  const scanIdx = SCAN_LIMITS_GB.indexOf(scanLimitGb);
+  const nextScan = scanIdx >= 0 && scanIdx < SCAN_LIMITS_GB.length - 1 ? SCAN_LIMITS_GB[scanIdx + 1] : null;
+  const raiseScanLimit = nextScan != null ? () => setScanLimit(nextScan) : undefined;
+  const raiseScanLabel =
+    nextScan != null ? `Raise scan limit to ${SCAN_LIMIT_LABELS[nextScan]}` : "Scan limit at max";
 
   return (
     <Surface elevation="raised" padding={0}>
@@ -133,18 +233,27 @@ export const ArchitectureMap = () => {
             </div>
           </div>
           <div className="am-head-right">
-            <span className="am-live">
+            <span className="am-live" data-state={liveState}>
               <span className="am-live-dot" />
-              <b>Live</b> · {relTime(data.refreshedMs, now)}
+              <b>{liveState === "fresh" ? "Live" : "Auto-refresh"}</b> · {relTime(data.refreshedMs, now)}
             </span>
             <span className="am-lens-label">Lens</span>
             <div className="am-lens-group">
+              {/* Explicit Overview (default) pill so the reset path is discoverable
+                  rather than "click the active pill again". */}
+              <button
+                type="button"
+                className={`am-lens-pill${lensId === null ? " active" : ""}`}
+                onClick={() => setLensId(null)}
+              >
+                Overview
+              </button>
               {USE_CASE_LENSES.map((l) => (
                 <button
                   key={l.id}
                   type="button"
                   className={`am-lens-pill${lensId === l.id ? " active" : ""}`}
-                  onClick={() => setLensId((cur) => (cur === l.id ? null : l.id))}
+                  onClick={() => setLensId(l.id)}
                 >
                   {l.label}
                 </button>
@@ -153,32 +262,114 @@ export const ArchitectureMap = () => {
           </div>
         </div>
 
-        {/* lens banner */}
-        {banner && (
+        {/* lens banner (lens active) — else the at-rest health verdict */}
+        {banner ? (
           <div className="am-banner" data-status={banner.status} style={{ marginTop: 14 }}>
-            <span className="am-banner-dot" style={{ background: statusColor(banner.status) }} />
+            <span className="am-banner-dot" style={{ background: bannerDotColor(banner.status) }} />
             <div className="am-banner-body">
-              <div className="am-banner-head">{banner.headline}</div>
+              <div className="am-banner-head">
+                {banner.findingId ? (
+                  <button
+                    type="button"
+                    className="am-banner-headbtn"
+                    onClick={() => banner.findingId && openSpec({ kind: "finding", id: banner.findingId })}
+                  >
+                    {banner.headline}
+                  </button>
+                ) : (
+                  banner.headline
+                )}
+              </div>
               <div className="am-banner-detail">{banner.detail}</div>
+              {banner.findingId && (
+                <div className="am-banner-action">
+                  <button
+                    type="button"
+                    className="am-banner-cta"
+                    onClick={() => banner.findingId && openSpec({ kind: "finding", id: banner.findingId })}
+                  >
+                    View finding →
+                  </button>
+                  {banner.moreCount ? (
+                    <span className="am-banner-more">
+                      +{banner.moreCount} more finding{banner.moreCount === 1 ? "" : "s"} on this path
+                    </span>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
+        ) : (
+          !data.error &&
+          !data.empty && (
+            <button
+              type="button"
+              className="am-verdict"
+              data-status={data.isLoading ? "muted" : verdict.status}
+              onClick={() => openSpec({ kind: "scope", which: "findings" })}
+              style={{ marginTop: 14 }}
+              aria-label="Overall AI fleet health — open findings"
+            >
+              <span
+                className="am-verdict-dot"
+                style={{ background: data.isLoading ? "var(--am-muted)" : statusColor(verdict.status) }}
+              />
+              <span className="am-verdict-text">
+                {data.isLoading ? (
+                  <b>Assessing fleet health…</b>
+                ) : (
+                  <>
+                    <b>
+                      {verdict.status === "healthy"
+                        ? "Healthy"
+                        : `${verdict.status === "critical" ? "Degraded" : "Needs attention"}${
+                            verdict.worstTier ? ` — ${verdict.worstTier} tier ${verdict.worst}` : ""
+                          }`}
+                    </b>
+                    <span className="am-verdict-sub"> · {verdict.findingsText}</span>
+                  </>
+                )}
+              </span>
+              <span className="am-verdict-cta" aria-hidden>
+                View findings →
+              </span>
+            </button>
+          )
         )}
 
         {/* map — structure paints immediately; per-tier metrics fill in
             (gradual load) as the summarize returns, so there's no full-page wait. */}
-        <div style={{ marginTop: 16 }}>
-          {data.empty && !data.isLoading ? (
-            <div style={{ fontSize: 12, color: "var(--text-3)", padding: "24px 0", textAlign: "center" }}>
-              No AI spans in the current scope / scan budget — widen the timeframe or raise the scan limit.
-            </div>
+        <div style={{ marginTop: 16, position: "relative" }}>
+          {data.error ? (
+            // Surface the map's own load failure instead of shimmering forever.
+            <ErrorBanner error={data.error} onRetry={data.refetch} />
           ) : (
-            <NodeMap
-              data={data}
-              lensId={lensId}
-              loading={data.isLoading}
-              onPick={setPicked}
-              onOpenSpec={openSpec}
-            />
+            <>
+              <NodeMap
+                data={data}
+                lensId={lensId}
+                loading={data.isLoading}
+                onPick={setPicked}
+                onOpenSpec={openSpec}
+              />
+              {data.empty && !data.isLoading && (
+                // Keep the (ghosted) diagram behind a compact card that teaches the
+                // model and offers one-click remedies wired to the real setters.
+                <div className="am-map-empty">
+                  <div className="am-map-empty-card">
+                    <EmptyState
+                      bare
+                      title="No AI spans in scope"
+                      description="No gen_ai.* spans matched the current scope or scan budget. Widen the timeframe or raise the scan limit to capture more of the fleet."
+                      actions={[
+                        { label: "Widen timeframe", onClick: widenTimeframe },
+                        { label: raiseScanLabel, onClick: raiseScanLimit },
+                      ]}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -193,7 +384,11 @@ export const ArchitectureMap = () => {
             health
           </span>
           <span className="am-leg">
-            <span className="am-leg-line" /> edge = call volume
+            <span className="am-leg-scale">
+              <span className="am-leg-line-thin" />
+              <span className="am-leg-line" />
+            </span>
+            edge width = call volume
           </span>
           <span className="am-leg">
             <span className="am-leg-loop" /> reasoning loop
@@ -212,10 +407,10 @@ export const ArchitectureMap = () => {
       </div>
 
       <NodeDrawer
-        meta={picked}
-        view={picked ? data.nodes[picked.key] : null}
+        meta={picked && picked.key !== "client" ? picked : null}
+        view={picked && picked.key !== "client" ? data.nodes[picked.key] : null}
         tierSeries={
-          picked
+          picked && picked.key !== "client"
             ? {
                 throughput: data.series.throughput[picked.key],
                 latencyMs: data.series.latencyMs[picked.key],
@@ -231,8 +426,13 @@ export const ArchitectureMap = () => {
               }
             : null
         }
+        clientUpstream={null}
         onClose={() => setPicked(null)}
         onDrill={(path, focus) => goToTab(path, { focus: focus as FocusParam })}
+      />
+      <UpstreamServicesModal
+        open={picked?.key === "client"}
+        onClose={() => setPicked(null)}
       />
       <DetailModal detail={detail} onClose={() => setDetail(null)} onDrill={onDrill} />
     </Surface>

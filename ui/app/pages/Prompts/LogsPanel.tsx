@@ -2,18 +2,27 @@ import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import { ChevronDownIcon, ChevronRightIcon } from "@dynatrace/strato-icons";
+import { statusColor, type SemanticStatus } from "../../theme/statusColor";
 import type { TraceLogLine } from "./useTraceLogs";
 
 const PAGE_SIZE = 10;
 
-const statusColor = (status: string): string => {
+// Map a raw log-severity string to a shared semantic status so the color comes
+// from the single statusColor vocabulary instead of a local red/amber/blue
+// ternary (CONSISTENCY). The level word is rendered beside it, so color stays
+// redundant to text — never color-only.
+const logSeverity = (status: string): SemanticStatus => {
   const s = status.toUpperCase();
-  if (s === "ERROR" || s === "SEVERE" || s === "FATAL") return "var(--red)";
-  if (s === "WARN" || s === "WARNING") return "var(--amber)";
-  if (s === "INFO") return "var(--blue)";
-  return "var(--text-3)";
+  if (s === "ERROR" || s === "SEVERE" || s === "FATAL") return "critical";
+  if (s === "WARN" || s === "WARNING") return "warning";
+  if (s === "INFO") return "info";
+  return "neutral";
 };
+
+const logStatusColor = (status: string): string =>
+  statusColor(logSeverity(status));
 
 const logMatches = (log: TraceLogLine, term: string): boolean => {
   if (!term) return true;
@@ -70,7 +79,7 @@ const LogRow = ({ log }: { log: TraceLogLine }) => {
             fontSize: 10,
             fontWeight: 700,
             letterSpacing: "0.03em",
-            color: statusColor(log.status),
+            color: logStatusColor(log.status),
             flex: "0 0 auto",
             width: 52,
           }}
@@ -176,9 +185,11 @@ export const LogsPanel = ({ logs, isLoading, highlight }: LogsPanelProps) => {
 
   if (isLoading) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading logs…</Text>
-      </div>
+      <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} style={{ height: 28 }} />
+        ))}
+      </Flex>
     );
   }
 

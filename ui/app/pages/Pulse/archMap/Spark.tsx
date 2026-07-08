@@ -17,6 +17,8 @@ interface Props {
   format?: (v: number) => string;
   /** Optional per-point labels (e.g. bucket times) shown in the hover readout. */
   labels?: string[];
+  /** Render the latest point's value as a static end-label (visible at rest). */
+  showEnd?: boolean;
 }
 
 const defaultFmt = (v: number): string => Math.round(v).toLocaleString("en-US");
@@ -30,6 +32,7 @@ export const Spark = ({
   fluid = false,
   format = defaultFmt,
   labels,
+  showEnd = false,
 }: Props) => {
   const [hi, setHi] = useState<number | null>(null);
   if (!data || data.length < 2) return null;
@@ -52,6 +55,11 @@ export const Spark = ({
 
   const xPct = hi != null ? (hi / (safe.length - 1)) * 100 : 0;
   const yPct = hi != null ? (y(safe[hi]) / height) * 100 : 0;
+
+  // Static end-label: the latest bucket's value, shown at rest so tier volumes
+  // are comparable without hovering. Hidden while hovering (the readout wins).
+  const lastIdx = safe.length - 1;
+  const endYPct = (y(safe[lastIdx]) / height) * 100;
 
   return (
     <div
@@ -79,6 +87,17 @@ export const Spark = ({
           strokeLinecap="round"
         />
       </svg>
+      {showEnd && hi == null && (
+        <>
+          <span
+            className="am-spark-dot am-spark-dot-end"
+            style={{ left: "100%", top: `${endYPct}%`, background: color }}
+          />
+          <span className="am-spark-val am-spark-val-end" style={{ left: "100%", top: `${endYPct}%` }}>
+            {format(safe[lastIdx])}
+          </span>
+        </>
+      )}
       {hi != null && (
         <>
           <span className="am-spark-guide" style={{ left: `${xPct}%` }} />

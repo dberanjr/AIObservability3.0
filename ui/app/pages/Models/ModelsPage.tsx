@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { ErrorBanner } from "../../components/ErrorState";
-import { DataGapNote } from "../../components/DataGapNote";
+import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
@@ -18,7 +19,7 @@ import { ModelsFinOpsSections } from "./ModelsFinOpsSections";
 import { useModels } from "./useModels";
 
 export const ModelsPage = () => {
-  const { models, isLoading, error } = useModels();
+  const { models, isLoading, error, limitHit } = useModels();
   const [typeFilter, setTypeFilter] = useState<ModelTypeFilter>("all");
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
 
@@ -47,6 +48,17 @@ export const ModelsPage = () => {
         gap={16}
         style={{ padding: "18px 20px 80px" }}
       >
+        {/* Page title + one-line purpose (IA): a consistent anchor at the top
+            of the page so it reads the same as the other tabs. */}
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={1} style={{ fontSize: 18, fontWeight: 700 }}>
+            Models
+          </Heading>
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.4 }}>
+            Every model in scope — compare cost, tokens, latency and reliability,
+            and drill into spend, efficiency and A/B trade-offs across the fleet.
+          </Text>
+        </Flex>
         {error && <ErrorBanner error={error} />}
         <ModelTypeSegmented
           value={typeFilter}
@@ -54,7 +66,8 @@ export const ModelsPage = () => {
           onChange={setTypeFilter}
         />
         <ModelsTilesRow models={filtered} isLoading={isLoading} />
-        <DataGapNote
+        <CollapsibleDataGapNote
+          summary="Data caveat: quality columns unavailable · models compare on cost & latency only"
           message="Quality columns (eval score, faithfulness, hallucination) and 'cheapest model meeting a quality SLO' aren't shown: no evaluation scores are emitted, so models can only be compared on cost and latency today."
           attributes={["gen_ai.evaluation.score", "gen_ai.evaluation.faithfulness", "gen_ai.evaluation.hallucination"]}
           bestPractice="Run an eval step (LLM-as-judge / Ragas / DeepEval) and write gen_ai.evaluation.* back onto the LLM span. Then quality-per-dollar and quality A/B across model versions become directly queryable. See INSTRUMENTATION-REQUIREMENTS.md P1.2."
@@ -67,7 +80,12 @@ export const ModelsPage = () => {
           defaultOpen
           bodyPadding={16}
         >
-          <ModelsFindings models={filtered} onSelect={setSelectedFinding} />
+          <ModelsFindings
+            models={filtered}
+            onSelect={setSelectedFinding}
+            error={error}
+            limitHit={limitHit}
+          />
         </CollapsibleCard>
         <CollapsibleCard
           title="Tokens, latency & mix"
@@ -83,8 +101,18 @@ export const ModelsPage = () => {
               alignItems: "start",
             }}
           >
-            <ModelBubbleChart models={filtered} isLoading={isLoading} />
-            <ModelsSidePanels models={filtered} isLoading={isLoading} />
+            <ModelBubbleChart
+              models={filtered}
+              isLoading={isLoading}
+              error={error}
+              limitHit={limitHit}
+            />
+            <ModelsSidePanels
+              models={filtered}
+              isLoading={isLoading}
+              error={error}
+              limitHit={limitHit}
+            />
           </div>
         </CollapsibleCard>
         <CollapsibleCard
@@ -96,8 +124,14 @@ export const ModelsPage = () => {
           <ModelsTable models={filtered} isLoading={isLoading} />
         </CollapsibleCard>
         {/* FinOps merged in as collapsible sections below the bubble chart +
-            table. Cost figures flow through the section-G cost model. */}
-        <ModelsFinOpsSections models={models} onSelectFinding={setSelectedFinding} />
+            table. Cost figures flow through the section-G cost model. The FinOps
+            rollups are always fleet-wide (all model types); typeFilter is passed
+            only so the section can flag when the top filter doesn't apply. */}
+        <ModelsFinOpsSections
+          models={models}
+          typeFilter={typeFilter}
+          onSelectFinding={setSelectedFinding}
+        />
       </Flex>
       <FindingDrawer
         finding={selectedFinding}

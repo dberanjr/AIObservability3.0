@@ -10,10 +10,11 @@
  *
  * Canonical flow (matches ai-layer-patterns stackPosition):
  *   client → gateway → orchestrator → agent, then the leaf row tools / llm /
- *   vector / memory. A dashed magenta feedback edge runs llm → orchestrator.
+ *   vector / memory. A dashed magenta feedback edge runs llm → agent.
  */
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import { layerByKey } from "../../../data/ai-layer-patterns";
+import type { FrameworkId } from "../../../detection/attributes";
 import type { FocusParam } from "../../../lib/nav";
 import { USE_CASE_LENSES, type LensId, type UseCaseLens } from "../architectureLenses";
 
@@ -41,6 +42,8 @@ export type DetailSpec =
   | { kind: "enrich"; layer: LayerKey }
   | { kind: "scope"; which: "services" | "agents" | "tools" | "findings" }
   | { kind: "loop" }
+  // One orchestration framework (the split orchestrator tier).
+  | { kind: "framework"; id: FrameworkId | "other" }
   // Inter-tier health signals shown as edge pills.
   | { kind: "n1" } // Agent → Tools: N+1 / high-frequency tool calls
   | { kind: "ctx" } // Agent → LLM: oversized prompts / context exhaustion
@@ -97,9 +100,17 @@ export interface LensCell {
 export const resolveCell = (view: NodeView, lensId: LensId | null): LensCell => {
   if (lensId) {
     const cell = view.cells[lensId];
-    if (cell) return cell;
-    // Lens active but this tier has no reading for it → muted placeholder.
-    return { status: "muted", sub: view.sub, badges: [] };
+    if (cell && cell.headline !== undefined) return cell;
+    // Lens active but this tier has no numeric reading for it. Keep the base
+    // headline (rendered dimmed via the muted status) with the lens caption as
+    // the sub-line, instead of dropping the number and falling to prose — so the
+    // map stays symmetric under a lens rather than turning text-heavy.
+    return {
+      status: "muted",
+      headline: view.headline,
+      sub: cell?.sub ?? view.sub,
+      badges: [],
+    };
   }
   return { status: view.status, headline: view.headline, sub: view.sub, badges: view.badges };
 };
@@ -192,8 +203,12 @@ export const EDGES: ArchEdge[] = [
   { from: "llm", to: "memory", baseW: 0.22 },
 ];
 
-/** The feedback / reasoning-loop edge (dashed, magenta) — llm back to orchestrator. */
-export const LOOP = { from: "llm" as LayerKey, to: "orchestrator" as LayerKey };
+/**
+ * The feedback / reasoning-loop edge (dashed, magenta) — llm back to the agent.
+ * Anchored to the agent tier (the ReAct-style reasoning cycle is the agent
+ * re-invoking the LLM); the agent tile also carries the folded-in workflow spans.
+ */
+export const LOOP = { from: "llm" as LayerKey, to: "agent" as LayerKey };
 
 export const edgeKey = (from: LayerKey, to: LayerKey): string => `${from}-${to}`;
 

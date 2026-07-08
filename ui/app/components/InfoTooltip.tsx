@@ -11,6 +11,8 @@ export interface InfoTooltipProps {
 const POPUP_W = 260;
 const VIEWPORT_MARGIN = 8;
 const GAP = 8;
+/** Global hover-to-show delay for tooltips (ms). */
+export const HOVER_DELAY_MS = 150;
 
 /**
  * Hover-or-focus info icon (circled-i) with a styled popover that's portal'd
@@ -24,6 +26,18 @@ export const InfoTooltip = ({ text, size = 14 }: InfoTooltipProps) => {
   const iconRef = useRef<HTMLSpanElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  // Hover opens after a global 150ms delay so a quick mouse sweep doesn't flash
+  // tooltips; keyboard focus opens immediately (no delay) for accessibility.
+  const openTimer = useRef<number | undefined>(undefined);
+  const openSoon = () => {
+    window.clearTimeout(openTimer.current);
+    openTimer.current = window.setTimeout(() => setOpen(true), HOVER_DELAY_MS);
+  };
+  const closeNow = () => {
+    window.clearTimeout(openTimer.current);
+    setOpen(false);
+  };
+  useEffect(() => () => window.clearTimeout(openTimer.current), []);
 
   // Close on Esc when focused.
   useEffect(() => {
@@ -88,10 +102,10 @@ export const InfoTooltip = ({ text, size = 14 }: InfoTooltipProps) => {
   return (
     <span
       style={{ position: "relative", display: "inline-flex", flex: "0 0 auto" }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={openSoon}
+      onMouseLeave={closeNow}
       onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
+      onBlur={closeNow}
     >
       <span
         ref={iconRef}
@@ -113,7 +127,9 @@ export const InfoTooltip = ({ text, size = 14 }: InfoTooltipProps) => {
           cursor: "help",
           lineHeight: 1,
           background: "var(--surface)",
-          outline: "none",
+          // No inline `outline: none` here: the icon is tabIndex=0, so the global
+          // [tabindex]:focus-visible ring (theme/tokens.ts) must show on keyboard
+          // focus. The inline borderRadius:50% keeps the ring hugging the circle.
         }}
       >
         i

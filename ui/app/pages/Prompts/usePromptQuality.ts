@@ -7,6 +7,8 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildPromptQualityQuery } from "./queries";
+import { toSidebar } from "./filterScope";
+import type { PromptsFilter } from "./usePrompts";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -51,14 +53,25 @@ export interface PromptQuality {
   error?: Error;
 }
 
-export const usePromptQuality = (): PromptQuality => {
+export const usePromptQuality = (
+  filter?: PromptsFilter,
+  focus?: string | null,
+): PromptQuality => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<QualityRecord>(
-    canQuery ? buildPromptQualityQuery(resolution.serviceIds, scope.timeframe, filters) : "",
+    canQuery
+      ? buildPromptQualityQuery(
+          resolution.serviceIds,
+          scope.timeframe,
+          filters,
+          toSidebar(filter),
+          focus,
+        )
+      : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 

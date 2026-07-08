@@ -1,0 +1,3104 @@
+/* ============================================================
+ * Strato Design Tokens — CSS custom properties
+ *
+ * Auto-generated from @dynatrace/strato-design-tokens data.json
+ * Source: @dynatrace/strato-design-tokens v1.3.1
+ * Generated: May 7, 2026
+ *
+ * Light theme is :root, dark theme is [data-theme="dark"].
+ * ============================================================ */
+
+/* ── DT Flow 1.2 ────────────────────────────────────────────── */
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Hairline.otf") format("opentype"); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Thin.otf") format("opentype"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Extralight.otf") format("opentype"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Light.otf") format("opentype"); font-weight: 350; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Medium.otf") format("opentype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Semibold.otf") format("opentype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Bold.otf") format("opentype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Extrabold.otf") format("opentype"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "DT Flow"; src: url("fonts/DTFlow-Heavy.otf") format("opentype"); font-weight: 900; font-style: normal; font-display: swap; }
+
+/* ── Font stacks ──────────────────────────────────────────────── */
+:root {
+  --dt-font-family-sans: "DT Flow", Roboto, Helvetica, sans-serif;
+  --dt-font-family-mono: "Roboto Mono", "JetBrains Mono", "SF Mono", Consolas, monospace;
+}
+
+/* ── Colors (light theme) ─────────────────────────────────────── */
+:root {
+
+  /* Colors.Theme.Foreground */
+  --dt-colors-theme-foreground-10: #2d2e4e;
+  --dt-colors-theme-foreground-20: #fff;
+
+  /* Colors.Theme.Background */
+  --dt-colors-theme-background-10: #f9f9fa;
+  --dt-colors-theme-background-20: #fff;
+
+  /* Colors.Theme.Background.Shell */
+  --dt-colors-theme-background-shell-default: #f2f2f5;
+
+  /* Colors.Theme.Neutral */
+  --dt-colors-theme-neutral-10: #f2f2f5;
+  --dt-colors-theme-neutral-20: #ebecf0;
+  --dt-colors-theme-neutral-30: #e4e5eb;
+  --dt-colors-theme-neutral-40: #dadbe4;
+  --dt-colors-theme-neutral-50: #d0d1dc;
+  --dt-colors-theme-neutral-60: #c6c7d5;
+  --dt-colors-theme-neutral-70: #5b5c81;
+  --dt-colors-theme-neutral-80: #4d4e72;
+  --dt-colors-theme-neutral-90: #404164;
+
+  /* Colors.Theme.Primary */
+  --dt-colors-theme-primary-10: #f1f2f9;
+  --dt-colors-theme-primary-20: #e9ecf8;
+  --dt-colors-theme-primary-30: #e1e5f7;
+  --dt-colors-theme-primary-40: #d5dbf6;
+  --dt-colors-theme-primary-50: #c9d1f4;
+  --dt-colors-theme-primary-60: #bdc7f2;
+  --dt-colors-theme-primary-70: #474fcf;
+  --dt-colors-theme-primary-80: #3b3fbe;
+  --dt-colors-theme-primary-90: #312dad;
+
+  /* Colors.Theme.Success */
+  --dt-colors-theme-success-10: #f1f3f3;
+  --dt-colors-theme-success-20: #e8eded;
+  --dt-colors-theme-success-30: #e0e7e6;
+  --dt-colors-theme-success-40: #d3dedd;
+  --dt-colors-theme-success-50: #c7d5d3;
+  --dt-colors-theme-success-60: #bbccc9;
+  --dt-colors-theme-success-70: #2f6862;
+  --dt-colors-theme-success-80: #1f5a54;
+  --dt-colors-theme-success-90: #0d4c47;
+
+  /* Colors.Theme.Warning */
+  --dt-colors-theme-warning-10: #f9f6f3;
+  --dt-colors-theme-warning-20: #f9f3ec;
+  --dt-colors-theme-warning-30: #f9f0e5;
+  --dt-colors-theme-warning-40: #f9ebdb;
+  --dt-colors-theme-warning-50: #f9e6d0;
+  --dt-colors-theme-warning-60: #f9e1c6;
+  --dt-colors-theme-warning-70: #eea53c;
+  --dt-colors-theme-warning-80: #ffb54f;
+  --dt-colors-theme-warning-90: #ffc76d;
+
+  /* Colors.Theme.Critical */
+  --dt-colors-theme-critical-10: #f9f1f2;
+  --dt-colors-theme-critical-20: #f8e9e9;
+  --dt-colors-theme-critical-30: #f8e1e1;
+  --dt-colors-theme-critical-40: #f6d6d5;
+  --dt-colors-theme-critical-50: #f5cac9;
+  --dt-colors-theme-critical-60: #f3bebd;
+  --dt-colors-theme-critical-70: #c62239;
+  --dt-colors-theme-critical-80: #b4002b;
+  --dt-colors-theme-critical-90: #a2001d;
+
+  /* Colors.Background.Base */
+  --dt-colors-background-base-default: #f9f9fa;
+
+  /* Colors.Background.Surface */
+  --dt-colors-background-surface-backdrop: #f9f9facc;
+  --dt-colors-background-surface-default: #fff;
+
+  /* Colors.Background.Container.Neutral */
+  --dt-colors-background-container-neutral-subdued: #f9f9fa;
+  --dt-colors-background-container-neutral-default: #f2f2f5;
+  --dt-colors-background-container-neutral-emphasized: #ebecf0;
+  --dt-colors-background-container-neutral-accent: #5b5c81;
+
+  /* Colors.Background.Container.Primary */
+  --dt-colors-background-container-primary-default: #f1f2f9;
+  --dt-colors-background-container-primary-emphasized: #e9ecf8;
+  --dt-colors-background-container-primary-accent: #474fcf;
+
+  /* Colors.Background.Container.Success */
+  --dt-colors-background-container-success-default: #f1f3f3;
+  --dt-colors-background-container-success-emphasized: #e8eded;
+  --dt-colors-background-container-success-accent: #2f6862;
+
+  /* Colors.Background.Container.Warning */
+  --dt-colors-background-container-warning-default: #f9f6f3;
+  --dt-colors-background-container-warning-emphasized: #f9f3ec;
+  --dt-colors-background-container-warning-accent: #eea53c;
+
+  /* Colors.Background.Container.Critical */
+  --dt-colors-background-container-critical-default: #f9f1f2;
+  --dt-colors-background-container-critical-emphasized: #f8e9e9;
+  --dt-colors-background-container-critical-accent: #c62239;
+
+  /* Colors.Background.Field.Neutral */
+  --dt-colors-background-field-neutral-disabled: #e4e5eb80;
+  --dt-colors-background-field-neutral-default: #e4e5eb00;
+  --dt-colors-background-field-neutral-default-hover: #dadbe4;
+  --dt-colors-background-field-neutral-default-active: #d0d1dc;
+  --dt-colors-background-field-neutral-emphasized: #e4e5eb;
+  --dt-colors-background-field-neutral-emphasized-hover: #dadbe4;
+  --dt-colors-background-field-neutral-emphasized-active: #d0d1dc;
+  --dt-colors-background-field-neutral-accent: #5b5c81;
+  --dt-colors-background-field-neutral-accent-hover: #4d4e72;
+  --dt-colors-background-field-neutral-accent-active: #404164;
+
+  /* Colors.Background.Field.Primary */
+  --dt-colors-background-field-primary-disabled: #e4e5eb80;
+  --dt-colors-background-field-primary-default: #e1e5f700;
+  --dt-colors-background-field-primary-default-hover: #d5dbf6;
+  --dt-colors-background-field-primary-default-active: #c9d1f4;
+  --dt-colors-background-field-primary-emphasized: #e1e5f7;
+  --dt-colors-background-field-primary-emphasized-hover: #d5dbf6;
+  --dt-colors-background-field-primary-emphasized-active: #c9d1f4;
+  --dt-colors-background-field-primary-accent: #474fcf;
+  --dt-colors-background-field-primary-accent-hover: #3b3fbe;
+  --dt-colors-background-field-primary-accent-active: #312dad;
+
+  /* Colors.Background.Field.Success */
+  --dt-colors-background-field-success-disabled: #e4e5eb80;
+  --dt-colors-background-field-success-default: #e0e7e600;
+  --dt-colors-background-field-success-default-hover: #d3dedd;
+  --dt-colors-background-field-success-default-active: #c7d5d3;
+  --dt-colors-background-field-success-emphasized: #e0e7e6;
+  --dt-colors-background-field-success-emphasized-hover: #d3dedd;
+  --dt-colors-background-field-success-emphasized-active: #c7d5d3;
+  --dt-colors-background-field-success-accent: #2f6862;
+  --dt-colors-background-field-success-accent-hover: #1f5a54;
+  --dt-colors-background-field-success-accent-active: #0d4c47;
+
+  /* Colors.Background.Field.Warning */
+  --dt-colors-background-field-warning-disabled: #e4e5eb80;
+  --dt-colors-background-field-warning-default: #f9f0e500;
+  --dt-colors-background-field-warning-default-hover: #f9ebdb;
+  --dt-colors-background-field-warning-default-active: #f9e6d0;
+  --dt-colors-background-field-warning-emphasized: #f9f0e5;
+  --dt-colors-background-field-warning-emphasized-hover: #f9ebdb;
+  --dt-colors-background-field-warning-emphasized-active: #f9e6d0;
+  --dt-colors-background-field-warning-accent: #eea53c;
+  --dt-colors-background-field-warning-accent-hover: #ffb54f;
+  --dt-colors-background-field-warning-accent-active: #ffc76d;
+
+  /* Colors.Background.Field.Critical */
+  --dt-colors-background-field-critical-disabled: #e4e5eb80;
+  --dt-colors-background-field-critical-default: #f8e1e100;
+  --dt-colors-background-field-critical-default-hover: #f6d6d5;
+  --dt-colors-background-field-critical-default-active: #f5cac9;
+  --dt-colors-background-field-critical-emphasized: #f8e1e1;
+  --dt-colors-background-field-critical-emphasized-hover: #f6d6d5;
+  --dt-colors-background-field-critical-emphasized-active: #f5cac9;
+  --dt-colors-background-field-critical-accent: #c62239;
+  --dt-colors-background-field-critical-accent-hover: #b4002b;
+  --dt-colors-background-field-critical-accent-active: #a2001d;
+
+  /* Colors.Background.Shell */
+  --dt-colors-background-shell-default: #f2f2f5;
+
+  /* Colors.Border.Neutral */
+  --dt-colors-border-neutral-disabled: #dadbe480;
+  --dt-colors-border-neutral-default: #dadbe4;
+  --dt-colors-border-neutral-default-hover: #d0d1dc;
+  --dt-colors-border-neutral-default-active: #c6c7d5;
+  --dt-colors-border-neutral-accent: #595a7d;
+  --dt-colors-border-neutral-accent-hover: #434465;
+  --dt-colors-border-neutral-accent-active: #2f2f4f;
+  --dt-colors-border-neutral-subdued: #ebecf0;
+  --dt-colors-border-neutral-subdued-hover: #dadbe4;
+  --dt-colors-border-neutral-subdued-active: #d0d1dc;
+
+  /* Colors.Border.Neutral.OnAccent */
+  --dt-colors-border-neutral-on-accent-disabled: #f3f3f633;
+  --dt-colors-border-neutral-on-accent-default: #f3f3f6;
+  --dt-colors-border-neutral-on-accent-default-hover: #f3f3f6cc;
+  --dt-colors-border-neutral-on-accent-default-active: #f3f3f699;
+
+  /* Colors.Border.Primary */
+  --dt-colors-border-primary-disabled: #dadbe480;
+  --dt-colors-border-primary-default: #d5dbf6;
+  --dt-colors-border-primary-default-hover: #c9d1f4;
+  --dt-colors-border-primary-default-active: #bdc7f2;
+  --dt-colors-border-primary-accent: #464cce;
+  --dt-colors-border-primary-accent-hover: #3431b3;
+  --dt-colors-border-primary-accent-active: #250f98;
+
+  /* Colors.Border.Primary.OnAccent */
+  --dt-colors-border-primary-on-accent-disabled: #f4f4fb33;
+  --dt-colors-border-primary-on-accent-default: #f4f4fb;
+  --dt-colors-border-primary-on-accent-default-hover: #f4f4fbcc;
+  --dt-colors-border-primary-on-accent-default-active: #f4f4fb99;
+
+  /* Colors.Border.Success */
+  --dt-colors-border-success-disabled: #dadbe480;
+  --dt-colors-border-success-default: #d3dedd;
+  --dt-colors-border-success-default-hover: #c7d5d3;
+  --dt-colors-border-success-default-active: #bbccc9;
+  --dt-colors-border-success-accent: #2d6761;
+  --dt-colors-border-success-accent-hover: #12504b;
+  --dt-colors-border-success-accent-active: #003b36;
+
+  /* Colors.Border.Success.OnAccent */
+  --dt-colors-border-success-on-accent-disabled: #f1f4f433;
+  --dt-colors-border-success-on-accent-default: #f1f4f4;
+  --dt-colors-border-success-on-accent-default-hover: #f1f4f4cc;
+  --dt-colors-border-success-on-accent-default-active: #f1f4f499;
+
+  /* Colors.Border.Warning */
+  --dt-colors-border-warning-disabled: #dadbe480;
+  --dt-colors-border-warning-default: #f9ebdb;
+  --dt-colors-border-warning-default-hover: #f9e6d0;
+  --dt-colors-border-warning-default-active: #f9e1c6;
+  --dt-colors-border-warning-accent: #855400;
+  --dt-colors-border-warning-accent-hover: #6d3d00;
+  --dt-colors-border-warning-accent-active: #512a00;
+
+  /* Colors.Border.Warning.OnAccent */
+  --dt-colors-border-warning-on-accent-disabled: #27202433;
+  --dt-colors-border-warning-on-accent-default: #272024;
+  --dt-colors-border-warning-on-accent-default-hover: #272024cc;
+  --dt-colors-border-warning-on-accent-default-active: #27202499;
+
+  /* Colors.Border.Critical */
+  --dt-colors-border-critical-disabled: #dadbe480;
+  --dt-colors-border-critical-default: #f6d6d5;
+  --dt-colors-border-critical-default-hover: #f5cac9;
+  --dt-colors-border-critical-default-active: #f3bebd;
+  --dt-colors-border-critical-accent: #bb0731;
+  --dt-colors-border-critical-accent-hover: #9b001e;
+  --dt-colors-border-critical-accent-active: #750013;
+
+  /* Colors.Border.Critical.OnAccent */
+  --dt-colors-border-critical-on-accent-disabled: #f9f1f333;
+  --dt-colors-border-critical-on-accent-default: #f9f1f3;
+  --dt-colors-border-critical-on-accent-default-hover: #f9f1f3cc;
+  --dt-colors-border-critical-on-accent-default-active: #f9f1f399;
+
+  /* Colors.Text.Neutral */
+  --dt-colors-text-neutral-disabled: #595a7d80;
+  --dt-colors-text-neutral-subdued: #595a7d;
+  --dt-colors-text-neutral-subdued-hover: #434465;
+  --dt-colors-text-neutral-subdued-active: #2f2f4f;
+  --dt-colors-text-neutral-default: #2f2f4f;
+  --dt-colors-text-neutral-default-hover: #434465;
+  --dt-colors-text-neutral-default-active: #595a7d;
+
+  /* Colors.Text.Neutral.OnAccent */
+  --dt-colors-text-neutral-on-accent-disabled: #f3f3f680;
+  --dt-colors-text-neutral-on-accent-default: #f3f3f6;
+  --dt-colors-text-neutral-on-accent-default-hover: #f3f3f6cc;
+  --dt-colors-text-neutral-on-accent-default-active: #f3f3f699;
+
+  /* Colors.Text.Primary */
+  --dt-colors-text-primary-disabled: #595a7d80;
+  --dt-colors-text-primary-default: #464cce;
+  --dt-colors-text-primary-default-hover: #3431b3;
+  --dt-colors-text-primary-default-active: #250f98;
+
+  /* Colors.Text.Primary.OnAccent */
+  --dt-colors-text-primary-on-accent-disabled: #f4f4fb80;
+  --dt-colors-text-primary-on-accent-default: #f4f4fb;
+  --dt-colors-text-primary-on-accent-default-hover: #f4f4fbcc;
+  --dt-colors-text-primary-on-accent-default-active: #f4f4fb99;
+
+  /* Colors.Text.Success */
+  --dt-colors-text-success-disabled: #595a7d80;
+  --dt-colors-text-success-default: #2d6761;
+  --dt-colors-text-success-default-hover: #12504b;
+  --dt-colors-text-success-default-active: #003b36;
+
+  /* Colors.Text.Success.OnAccent */
+  --dt-colors-text-success-on-accent-disabled: #f1f4f480;
+  --dt-colors-text-success-on-accent-default: #f1f4f4;
+  --dt-colors-text-success-on-accent-default-hover: #f1f4f4cc;
+  --dt-colors-text-success-on-accent-default-active: #f1f4f499;
+
+  /* Colors.Text.Warning */
+  --dt-colors-text-warning-disabled: #595a7d80;
+  --dt-colors-text-warning-default: #855400;
+  --dt-colors-text-warning-default-hover: #6d3d00;
+  --dt-colors-text-warning-default-active: #512a00;
+
+  /* Colors.Text.Warning.OnAccent */
+  --dt-colors-text-warning-on-accent-disabled: #27202480;
+  --dt-colors-text-warning-on-accent-default: #272024;
+  --dt-colors-text-warning-on-accent-default-hover: #272024cc;
+  --dt-colors-text-warning-on-accent-default-active: #27202499;
+
+  /* Colors.Text.Critical */
+  --dt-colors-text-critical-disabled: #595a7d80;
+  --dt-colors-text-critical-default: #bb0731;
+  --dt-colors-text-critical-default-hover: #9b001e;
+  --dt-colors-text-critical-default-active: #750013;
+
+  /* Colors.Text.Critical.OnAccent */
+  --dt-colors-text-critical-on-accent-disabled: #f9f1f380;
+  --dt-colors-text-critical-on-accent-default: #f9f1f3;
+  --dt-colors-text-critical-on-accent-default-hover: #f9f1f3cc;
+  --dt-colors-text-critical-on-accent-default-active: #f9f1f399;
+
+  /* Colors.Icon.Neutral */
+  --dt-colors-icon-neutral-disabled: #595a7d80;
+  --dt-colors-icon-neutral-subdued: #595a7d;
+  --dt-colors-icon-neutral-subdued-hover: #434465;
+  --dt-colors-icon-neutral-subdued-active: #2f2f4f;
+  --dt-colors-icon-neutral-default: #2f2f4f;
+  --dt-colors-icon-neutral-default-hover: #434465;
+  --dt-colors-icon-neutral-default-active: #595a7d;
+
+  /* Colors.Icon.Neutral.OnAccent */
+  --dt-colors-icon-neutral-on-accent-disabled: #f3f3f680;
+  --dt-colors-icon-neutral-on-accent-default: #f3f3f6;
+  --dt-colors-icon-neutral-on-accent-default-hover: #f3f3f6cc;
+  --dt-colors-icon-neutral-on-accent-default-active: #f3f3f699;
+
+  /* Colors.Icon.Primary */
+  --dt-colors-icon-primary-disabled: #595a7d80;
+  --dt-colors-icon-primary-default: #464cce;
+  --dt-colors-icon-primary-default-hover: #3431b3;
+  --dt-colors-icon-primary-default-active: #250f98;
+
+  /* Colors.Icon.Primary.OnAccent */
+  --dt-colors-icon-primary-on-accent-disabled: #f4f4fb80;
+  --dt-colors-icon-primary-on-accent-default: #f4f4fb;
+  --dt-colors-icon-primary-on-accent-default-hover: #f4f4fbcc;
+  --dt-colors-icon-primary-on-accent-default-active: #f4f4fb99;
+
+  /* Colors.Icon.Success */
+  --dt-colors-icon-success-disabled: #595a7d80;
+  --dt-colors-icon-success-default: #2d6761;
+  --dt-colors-icon-success-default-hover: #12504b;
+  --dt-colors-icon-success-default-active: #003b36;
+
+  /* Colors.Icon.Success.OnAccent */
+  --dt-colors-icon-success-on-accent-disabled: #f1f4f480;
+  --dt-colors-icon-success-on-accent-default: #f1f4f4;
+  --dt-colors-icon-success-on-accent-default-hover: #f1f4f4cc;
+  --dt-colors-icon-success-on-accent-default-active: #f1f4f499;
+
+  /* Colors.Icon.Warning */
+  --dt-colors-icon-warning-disabled: #595a7d80;
+  --dt-colors-icon-warning-default: #855400;
+  --dt-colors-icon-warning-default-hover: #6d3d00;
+  --dt-colors-icon-warning-default-active: #512a00;
+
+  /* Colors.Icon.Warning.OnAccent */
+  --dt-colors-icon-warning-on-accent-disabled: #27202480;
+  --dt-colors-icon-warning-on-accent-default: #272024;
+  --dt-colors-icon-warning-on-accent-default-hover: #272024cc;
+  --dt-colors-icon-warning-on-accent-default-active: #27202499;
+
+  /* Colors.Icon.Critical */
+  --dt-colors-icon-critical-disabled: #595a7d80;
+  --dt-colors-icon-critical-default: #bb0731;
+  --dt-colors-icon-critical-default-hover: #9b001e;
+  --dt-colors-icon-critical-default-active: #750013;
+
+  /* Colors.Icon.Critical.OnAccent */
+  --dt-colors-icon-critical-on-accent-disabled: #f9f1f380;
+  --dt-colors-icon-critical-on-accent-default: #f9f1f3;
+  --dt-colors-icon-critical-on-accent-default-hover: #f9f1f3cc;
+  --dt-colors-icon-critical-on-accent-default-active: #f9f1f399;
+
+  /* Colors.Syntax */
+  --dt-colors-syntax-comment: #545586;
+  --dt-colors-syntax-string: #086467;
+  --dt-colors-syntax-variable: #2754b5;
+  --dt-colors-syntax-number: #aa0081;
+  --dt-colors-syntax-punctuation: #8136a9;
+  --dt-colors-syntax-function: #2754b5;
+  --dt-colors-syntax-classname: #2c2d4d;
+  --dt-colors-syntax-tag: #b30926;
+  --dt-colors-syntax-operators: #8136a9;
+  --dt-colors-syntax-boolean: #973f00;
+
+  /* Colors.Charts.Status.Ideal */
+  --dt-colors-charts-status-ideal-default: #2f6862;
+
+  /* Colors.Charts.Status.Good */
+  --dt-colors-charts-status-good-default: #474fcf;
+
+  /* Colors.Charts.Status.Neutral */
+  --dt-colors-charts-status-neutral-default: #5b5c81;
+
+  /* Colors.Charts.Status.Warning */
+  --dt-colors-charts-status-warning-default: #eea53c;
+
+  /* Colors.Charts.Status.Critical */
+  --dt-colors-charts-status-critical-default: #c62239;
+
+  /* Colors.Charts.Categorical.Color01 */
+  --dt-colors-charts-categorical-color-01-default: #134fc9;
+
+  /* Colors.Charts.Categorical.Color02 */
+  --dt-colors-charts-categorical-color-02-default: #2c2f3f;
+
+  /* Colors.Charts.Categorical.Color03 */
+  --dt-colors-charts-categorical-color-03-default: #2a7453;
+
+  /* Colors.Charts.Categorical.Color04 */
+  --dt-colors-charts-categorical-color-04-default: #d85a9f;
+
+  /* Colors.Charts.Categorical.Color05 */
+  --dt-colors-charts-categorical-color-05-default: #84859a;
+
+  /* Colors.Charts.Categorical.Color06 */
+  --dt-colors-charts-categorical-color-06-default: #a9780f;
+
+  /* Colors.Charts.Categorical.Color07 */
+  --dt-colors-charts-categorical-color-07-default: #438fb1;
+
+  /* Colors.Charts.Categorical.Color08 */
+  --dt-colors-charts-categorical-color-08-default: #8b6ecf;
+
+  /* Colors.Charts.Categorical.Color09 */
+  --dt-colors-charts-categorical-color-09-default: #649438;
+
+  /* Colors.Charts.Categorical.Color10 */
+  --dt-colors-charts-categorical-color-10-default: #904523;
+
+  /* Colors.Charts.Categorical.Color11 */
+  --dt-colors-charts-categorical-color-11-default: #627cfe;
+
+  /* Colors.Charts.Categorical.Color12 */
+  --dt-colors-charts-categorical-color-12-default: #cd3741;
+
+  /* Colors.Charts.Categorical.Color13 */
+  --dt-colors-charts-categorical-color-13-default: #1c520a;
+
+  /* Colors.Charts.Categorical.Color14 */
+  --dt-colors-charts-categorical-color-14-default: #d56b1a;
+
+  /* Colors.Charts.Categorical.Color15 */
+  --dt-colors-charts-categorical-color-15-default: #9033a3;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color01 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-01-default: #9033a3;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color02 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-02-default: #a9780f;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color03 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-03-default: #d85a9f;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color04 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-04-default: #8b6ecf;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color05 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-05-default: #904523;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color06 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-06-default: #cd3741;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color01 */
+  --dt-colors-charts-categorical-themed-swamps-color-01-default: #006650;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color02 */
+  --dt-colors-charts-categorical-themed-swamps-color-02-default: #84859a;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color03 */
+  --dt-colors-charts-categorical-themed-swamps-color-03-default: #649438;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color04 */
+  --dt-colors-charts-categorical-themed-swamps-color-04-default: #8f4624;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color05 */
+  --dt-colors-charts-categorical-themed-swamps-color-05-default: #2c2f3f;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color06 */
+  --dt-colors-charts-categorical-themed-swamps-color-06-default: #a9780f;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color01 */
+  --dt-colors-charts-categorical-themed-fireplace-color-01-default: #ae132d;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color02 */
+  --dt-colors-charts-categorical-themed-fireplace-color-02-default: #d85a9f;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color03 */
+  --dt-colors-charts-categorical-themed-fireplace-color-03-default: #d56b1a;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color04 */
+  --dt-colors-charts-categorical-themed-fireplace-color-04-default: #a9780f;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color05 */
+  --dt-colors-charts-categorical-themed-fireplace-color-05-default: #904523;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color06 */
+  --dt-colors-charts-categorical-themed-fireplace-color-06-default: #9033a3;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color01 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-01-default: #438fb1;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color02 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-02-default: #84859a;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color03 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-03-default: #627cfe;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color04 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-04-default: #8b6ecf;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color05 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-05-default: #134fc9;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color06 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-06-default: #2c2f3f;
+
+  /* Colors.Charts.Logstatus.Error */
+  --dt-colors-charts-logstatus-error-default: #cd3741;
+
+  /* Colors.Charts.Logstatus.Warning */
+  --dt-colors-charts-logstatus-warning-default: #a9780f;
+
+  /* Colors.Charts.Logstatus.Info */
+  --dt-colors-charts-logstatus-info-default: #134fc9;
+
+  /* Colors.Charts.Logstatus.None */
+  --dt-colors-charts-logstatus-none-default: #2c2f3f;
+
+  /* Colors.Charts.Loglevel.Emergency */
+  --dt-colors-charts-loglevel-emergency-default: #ae132d;
+
+  /* Colors.Charts.Loglevel.Error */
+  --dt-colors-charts-loglevel-error-default: #cd3741;
+
+  /* Colors.Charts.Loglevel.Alert */
+  --dt-colors-charts-loglevel-alert-default: #c73d84;
+
+  /* Colors.Charts.Loglevel.Critical */
+  --dt-colors-charts-loglevel-critical-default: #d85a9f;
+
+  /* Colors.Charts.Loglevel.Severe */
+  --dt-colors-charts-loglevel-severe-default: #d56b1a;
+
+  /* Colors.Charts.Loglevel.Warning */
+  --dt-colors-charts-loglevel-warning-default: #a9780f;
+
+  /* Colors.Charts.Loglevel.Notice */
+  --dt-colors-charts-loglevel-notice-default: #2a7453;
+
+  /* Colors.Charts.Loglevel.Info */
+  --dt-colors-charts-loglevel-info-default: #134fc9;
+
+  /* Colors.Charts.Loglevel.Debug */
+  --dt-colors-charts-loglevel-debug-default: #8b6ecf;
+
+  /* Colors.Charts.Loglevel.None */
+  --dt-colors-charts-loglevel-none-default: #2c2f3f;
+
+  /* Colors.Charts.Apdex.Excellent */
+  --dt-colors-charts-apdex-excellent-default: #2a7453;
+
+  /* Colors.Charts.Apdex.Good */
+  --dt-colors-charts-apdex-good-default: #1c520a;
+
+  /* Colors.Charts.Apdex.Fair */
+  --dt-colors-charts-apdex-fair-default: #a9780f;
+
+  /* Colors.Charts.Apdex.Poor */
+  --dt-colors-charts-apdex-poor-default: #d56b1a;
+
+  /* Colors.Charts.Apdex.Unacceptable */
+  --dt-colors-charts-apdex-unacceptable-default: #cd3741;
+
+  /* Colors.Charts.SecurityRiskLevel.Muted */
+  --dt-colors-charts-security-risk-level-muted-default: #84859a;
+
+  /* Colors.Charts.SecurityRiskLevel.Critical */
+  --dt-colors-charts-security-risk-level-critical-default: #8a0012;
+
+  /* Colors.Charts.SecurityRiskLevel.High */
+  --dt-colors-charts-security-risk-level-high-default: #cd3741;
+
+  /* Colors.Charts.SecurityRiskLevel.Medium */
+  --dt-colors-charts-security-risk-level-medium-default: #a9780f;
+
+  /* Colors.Charts.SecurityRiskLevel.Low */
+  --dt-colors-charts-security-risk-level-low-default: #134fc9;
+
+  /* Colors.Charts.SecurityRiskLevel.None */
+  --dt-colors-charts-security-risk-level-none-default: #2c2f3f;
+
+  /* Colors.Charts.VulnerabilityStatus.Muted */
+  --dt-colors-charts-vulnerability-status-muted-default: #84859a;
+
+  /* Colors.Charts.VulnerabilityStatus.Resolved */
+  --dt-colors-charts-vulnerability-status-resolved-default: #3e8e6a;
+
+  /* Colors.Charts.VulnerabilityStatus.Affected */
+  --dt-colors-charts-vulnerability-status-affected-default: #cd3741;
+
+  /* Colors.Charts.Threshold.Good */
+  --dt-colors-charts-threshold-good-default: #2a7453;
+
+  /* Colors.Charts.Threshold.Warning */
+  --dt-colors-charts-threshold-warning-default: #a9780f;
+
+  /* Colors.Charts.Threshold.Bad */
+  --dt-colors-charts-threshold-bad-default: #cd3741;
+
+  /* Colors.Charts.Rainbow.Red */
+  --dt-colors-charts-rainbow-red-default: #cd3741;
+
+  /* Colors.Charts.Rainbow.Orange */
+  --dt-colors-charts-rainbow-orange-default: #d56b1a;
+
+  /* Colors.Charts.Rainbow.Yellow */
+  --dt-colors-charts-rainbow-yellow-default: #a9780f;
+
+  /* Colors.Charts.Rainbow.Moss */
+  --dt-colors-charts-rainbow-moss-default: #2a7453;
+
+  /* Colors.Charts.Rainbow.Blue */
+  --dt-colors-charts-rainbow-blue-default: #134fc9;
+
+  /* Colors.Charts.Rainbow.Magenta */
+  --dt-colors-charts-rainbow-magenta-default: #9033a3;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color01 */
+  --dt-colors-charts-sequential-pink-purple-color-01-default: #d85a9f;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color02 */
+  --dt-colors-charts-sequential-pink-purple-color-02-default: #c6539f;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color03 */
+  --dt-colors-charts-sequential-pink-purple-color-03-default: #b450a3;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color04 */
+  --dt-colors-charts-sequential-pink-purple-color-04-default: #9f49a2;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color05 */
+  --dt-colors-charts-sequential-pink-purple-color-05-default: #8d45a5;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color06 */
+  --dt-colors-charts-sequential-pink-purple-color-06-default: #7640a5;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color07 */
+  --dt-colors-charts-sequential-pink-purple-color-07-default: #5d3ba5;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color08 */
+  --dt-colors-charts-sequential-pink-purple-color-08-default: #4038a8;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color09 */
+  --dt-colors-charts-sequential-pink-purple-color-09-default: #0035a8;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color01 */
+  --dt-colors-charts-sequential-blue-turquoise-color-01-default: #0035a8;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color02 */
+  --dt-colors-charts-sequential-blue-turquoise-color-02-default: #1d41a5;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color03 */
+  --dt-colors-charts-sequential-blue-turquoise-color-03-default: #284e9f;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color04 */
+  --dt-colors-charts-sequential-blue-turquoise-color-04-default: #2f5998;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color05 */
+  --dt-colors-charts-sequential-blue-turquoise-color-05-default: #336794;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color06 */
+  --dt-colors-charts-sequential-blue-turquoise-color-06-default: #31708c;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color07 */
+  --dt-colors-charts-sequential-blue-turquoise-color-07-default: #307c88;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color08 */
+  --dt-colors-charts-sequential-blue-turquoise-color-08-default: #2a8981;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color09 */
+  --dt-colors-charts-sequential-blue-turquoise-color-09-default: #1d957b;
+
+  /* Colors.Charts.Sequential.Blue.Color01 */
+  --dt-colors-charts-sequential-blue-color-01-default: #001b85;
+
+  /* Colors.Charts.Sequential.Blue.Color02 */
+  --dt-colors-charts-sequential-blue-color-02-default: #0035a8;
+
+  /* Colors.Charts.Sequential.Blue.Color03 */
+  --dt-colors-charts-sequential-blue-color-03-default: #134fc9;
+
+  /* Colors.Charts.Sequential.Blue.Color04 */
+  --dt-colors-charts-sequential-blue-color-04-default: #3f63e4;
+
+  /* Colors.Charts.Sequential.Blue.Color05 */
+  --dt-colors-charts-sequential-blue-color-05-default: #627cfe;
+
+  /* Colors.Charts.Sequential.Blue.Color06 */
+  --dt-colors-charts-sequential-blue-color-06-default: #8a9bff;
+
+  /* Colors.Charts.Sequential.Blue.Color07 */
+  --dt-colors-charts-sequential-blue-color-07-default: #a8b7ff;
+
+  /* Colors.Charts.Sequential.Blue.Color08 */
+  --dt-colors-charts-sequential-blue-color-08-default: #bdc8ff;
+
+  /* Colors.Charts.Sequential.Blue.Color09 */
+  --dt-colors-charts-sequential-blue-color-09-default: #d6deff;
+
+  /* Colors.Charts.Sequential.Grey.Color01 */
+  --dt-colors-charts-sequential-grey-color-01-default: #111422;
+
+  /* Colors.Charts.Sequential.Grey.Color02 */
+  --dt-colors-charts-sequential-grey-color-02-default: #2c2f3f;
+
+  /* Colors.Charts.Sequential.Grey.Color03 */
+  --dt-colors-charts-sequential-grey-color-03-default: #484a5b;
+
+  /* Colors.Charts.Sequential.Grey.Color04 */
+  --dt-colors-charts-sequential-grey-color-04-default: #66687a;
+
+  /* Colors.Charts.Sequential.Grey.Color05 */
+  --dt-colors-charts-sequential-grey-color-05-default: #84859a;
+
+  /* Colors.Charts.Sequential.Grey.Color06 */
+  --dt-colors-charts-sequential-grey-color-06-default: #a7a9be;
+
+  /* Colors.Charts.Sequential.Grey.Color07 */
+  --dt-colors-charts-sequential-grey-color-07-default: #cacce2;
+
+  /* Colors.Charts.Sequential.Grey.Color08 */
+  --dt-colors-charts-sequential-grey-color-08-default: #d8d9e9;
+
+  /* Colors.Charts.Sequential.Grey.Color09 */
+  --dt-colors-charts-sequential-grey-color-09-default: #e1e3ef;
+
+  /* Colors.Charts.Sequential.Moss.Color01 */
+  --dt-colors-charts-sequential-moss-color-01-default: #084427;
+
+  /* Colors.Charts.Sequential.Moss.Color02 */
+  --dt-colors-charts-sequential-moss-color-02-default: #195c3d;
+
+  /* Colors.Charts.Sequential.Moss.Color03 */
+  --dt-colors-charts-sequential-moss-color-03-default: #2a7453;
+
+  /* Colors.Charts.Sequential.Moss.Color04 */
+  --dt-colors-charts-sequential-moss-color-04-default: #3e8e6a;
+
+  /* Colors.Charts.Sequential.Moss.Color05 */
+  --dt-colors-charts-sequential-moss-color-05-default: #509575;
+
+  /* Colors.Charts.Sequential.Moss.Color06 */
+  --dt-colors-charts-sequential-moss-color-06-default: #75c29d;
+
+  /* Colors.Charts.Sequential.Moss.Color07 */
+  --dt-colors-charts-sequential-moss-color-07-default: #93dcb8;
+
+  /* Colors.Charts.Sequential.Moss.Color08 */
+  --dt-colors-charts-sequential-moss-color-08-default: #b4e4cd;
+
+  /* Colors.Charts.Sequential.Moss.Color09 */
+  --dt-colors-charts-sequential-moss-color-09-default: #d4ece0;
+
+  /* Colors.Charts.Sequential.Turquoise.Color01 */
+  --dt-colors-charts-sequential-turquoise-color-01-default: #004733;
+
+  /* Colors.Charts.Sequential.Turquoise.Color02 */
+  --dt-colors-charts-sequential-turquoise-color-02-default: #00523d;
+
+  /* Colors.Charts.Sequential.Turquoise.Color03 */
+  --dt-colors-charts-sequential-turquoise-color-03-default: #006650;
+
+  /* Colors.Charts.Sequential.Turquoise.Color04 */
+  --dt-colors-charts-sequential-turquoise-color-04-default: #047c64;
+
+  /* Colors.Charts.Sequential.Turquoise.Color05 */
+  --dt-colors-charts-sequential-turquoise-color-05-default: #1d957b;
+
+  /* Colors.Charts.Sequential.Turquoise.Color06 */
+  --dt-colors-charts-sequential-turquoise-color-06-default: #38ad92;
+
+  /* Colors.Charts.Sequential.Turquoise.Color07 */
+  --dt-colors-charts-sequential-turquoise-color-07-default: #52c7aa;
+
+  /* Colors.Charts.Sequential.Turquoise.Color08 */
+  --dt-colors-charts-sequential-turquoise-color-08-default: #78dec1;
+
+  /* Colors.Charts.Sequential.Turquoise.Color09 */
+  --dt-colors-charts-sequential-turquoise-color-09-default: #c0ece0;
+
+  /* Colors.Charts.Sequential.Pink.Color01 */
+  --dt-colors-charts-sequential-pink-color-01-default: #6b1441;
+
+  /* Colors.Charts.Sequential.Pink.Color02 */
+  --dt-colors-charts-sequential-pink-color-02-default: #872256;
+
+  /* Colors.Charts.Sequential.Pink.Color03 */
+  --dt-colors-charts-sequential-pink-color-03-default: #a83470;
+
+  /* Colors.Charts.Sequential.Pink.Color04 */
+  --dt-colors-charts-sequential-pink-color-04-default: #c73d84;
+
+  /* Colors.Charts.Sequential.Pink.Color05 */
+  --dt-colors-charts-sequential-pink-color-05-default: #d85a9f;
+
+  /* Colors.Charts.Sequential.Pink.Color06 */
+  --dt-colors-charts-sequential-pink-color-06-default: #e675b5;
+
+  /* Colors.Charts.Sequential.Pink.Color07 */
+  --dt-colors-charts-sequential-pink-color-07-default: #f291cb;
+
+  /* Colors.Charts.Sequential.Pink.Color08 */
+  --dt-colors-charts-sequential-pink-color-08-default: #fcb5e2;
+
+  /* Colors.Charts.Sequential.Pink.Color09 */
+  --dt-colors-charts-sequential-pink-color-09-default: #fed7f0;
+
+  /* Colors.Charts.Sequential.Yellow.Color01 */
+  --dt-colors-charts-sequential-yellow-color-01-default: #573b00;
+
+  /* Colors.Charts.Sequential.Yellow.Color02 */
+  --dt-colors-charts-sequential-yellow-color-02-default: #614200;
+
+  /* Colors.Charts.Sequential.Yellow.Color03 */
+  --dt-colors-charts-sequential-yellow-color-03-default: #755000;
+
+  /* Colors.Charts.Sequential.Yellow.Color04 */
+  --dt-colors-charts-sequential-yellow-color-04-default: #8f6200;
+
+  /* Colors.Charts.Sequential.Yellow.Color05 */
+  --dt-colors-charts-sequential-yellow-color-05-default: #a9780f;
+
+  /* Colors.Charts.Sequential.Yellow.Color06 */
+  --dt-colors-charts-sequential-yellow-color-06-default: #c79323;
+
+  /* Colors.Charts.Sequential.Yellow.Color07 */
+  --dt-colors-charts-sequential-yellow-color-07-default: #dfb14e;
+
+  /* Colors.Charts.Sequential.Yellow.Color08 */
+  --dt-colors-charts-sequential-yellow-color-08-default: #f1cd7e;
+
+  /* Colors.Charts.Sequential.Yellow.Color09 */
+  --dt-colors-charts-sequential-yellow-color-09-default: #f8e1af;
+
+  /* Colors.Charts.Sequential.Petrol.Color01 */
+  --dt-colors-charts-sequential-petrol-color-01-default: #00304d;
+
+  /* Colors.Charts.Sequential.Petrol.Color02 */
+  --dt-colors-charts-sequential-petrol-color-02-default: #114964;
+
+  /* Colors.Charts.Sequential.Petrol.Color03 */
+  --dt-colors-charts-sequential-petrol-color-03-default: #21607d;
+
+  /* Colors.Charts.Sequential.Petrol.Color04 */
+  --dt-colors-charts-sequential-petrol-color-04-default: #307697;
+
+  /* Colors.Charts.Sequential.Petrol.Color05 */
+  --dt-colors-charts-sequential-petrol-color-05-default: #438fb1;
+
+  /* Colors.Charts.Sequential.Petrol.Color06 */
+  --dt-colors-charts-sequential-petrol-color-06-default: #5ba7cd;
+
+  /* Colors.Charts.Sequential.Petrol.Color07 */
+  --dt-colors-charts-sequential-petrol-color-07-default: #81c8ef;
+
+  /* Colors.Charts.Sequential.Petrol.Color08 */
+  --dt-colors-charts-sequential-petrol-color-08-default: #aaddf9;
+
+  /* Colors.Charts.Sequential.Petrol.Color09 */
+  --dt-colors-charts-sequential-petrol-color-09-default: #cbe7f6;
+
+  /* Colors.Charts.Sequential.Purple.Color01 */
+  --dt-colors-charts-sequential-purple-color-01-default: #32246a;
+
+  /* Colors.Charts.Sequential.Purple.Color02 */
+  --dt-colors-charts-sequential-purple-color-02-default: #453380;
+
+  /* Colors.Charts.Sequential.Purple.Color03 */
+  --dt-colors-charts-sequential-purple-color-03-default: #5e489d;
+
+  /* Colors.Charts.Sequential.Purple.Color04 */
+  --dt-colors-charts-sequential-purple-color-04-default: #755abf;
+
+  /* Colors.Charts.Sequential.Purple.Color05 */
+  --dt-colors-charts-sequential-purple-color-05-default: #8b6ecf;
+
+  /* Colors.Charts.Sequential.Purple.Color06 */
+  --dt-colors-charts-sequential-purple-color-06-default: #a184dc;
+
+  /* Colors.Charts.Sequential.Purple.Color07 */
+  --dt-colors-charts-sequential-purple-color-07-default: #bb9eeb;
+
+  /* Colors.Charts.Sequential.Purple.Color08 */
+  --dt-colors-charts-sequential-purple-color-08-default: #d5b9f8;
+
+  /* Colors.Charts.Sequential.Purple.Color09 */
+  --dt-colors-charts-sequential-purple-color-09-default: #e9d7fe;
+
+  /* Colors.Charts.Sequential.Pear.Color01 */
+  --dt-colors-charts-sequential-pear-color-01-default: #084200;
+
+  /* Colors.Charts.Sequential.Pear.Color02 */
+  --dt-colors-charts-sequential-pear-color-02-default: #1c520a;
+
+  /* Colors.Charts.Sequential.Pear.Color03 */
+  --dt-colors-charts-sequential-pear-color-03-default: #306615;
+
+  /* Colors.Charts.Sequential.Pear.Color04 */
+  --dt-colors-charts-sequential-pear-color-04-default: #457a1f;
+
+  /* Colors.Charts.Sequential.Pear.Color05 */
+  --dt-colors-charts-sequential-pear-color-05-default: #649438;
+
+  /* Colors.Charts.Sequential.Pear.Color06 */
+  --dt-colors-charts-sequential-pear-color-06-default: #83b455;
+
+  /* Colors.Charts.Sequential.Pear.Color07 */
+  --dt-colors-charts-sequential-pear-color-07-default: #9fcb76;
+
+  /* Colors.Charts.Sequential.Pear.Color08 */
+  --dt-colors-charts-sequential-pear-color-08-default: #b5de8c;
+
+  /* Colors.Charts.Sequential.Pear.Color09 */
+  --dt-colors-charts-sequential-pear-color-09-default: #d3e9be;
+
+  /* Colors.Charts.Sequential.Brown.Color01 */
+  --dt-colors-charts-sequential-brown-color-01-default: #5c1d00;
+
+  /* Colors.Charts.Sequential.Brown.Color02 */
+  --dt-colors-charts-sequential-brown-color-02-default: #6f2e11;
+
+  /* Colors.Charts.Sequential.Brown.Color03 */
+  --dt-colors-charts-sequential-brown-color-03-default: #8f4624;
+
+  /* Colors.Charts.Sequential.Brown.Color04 */
+  --dt-colors-charts-sequential-brown-color-04-default: #a95d37;
+
+  /* Colors.Charts.Sequential.Brown.Color05 */
+  --dt-colors-charts-sequential-brown-color-05-default: #bc724e;
+
+  /* Colors.Charts.Sequential.Brown.Color06 */
+  --dt-colors-charts-sequential-brown-color-06-default: #c98769;
+
+  /* Colors.Charts.Sequential.Brown.Color07 */
+  --dt-colors-charts-sequential-brown-color-07-default: #dfa486;
+
+  /* Colors.Charts.Sequential.Brown.Color08 */
+  --dt-colors-charts-sequential-brown-color-08-default: #f2bfa6;
+
+  /* Colors.Charts.Sequential.Brown.Color09 */
+  --dt-colors-charts-sequential-brown-color-09-default: #fddece;
+
+  /* Colors.Charts.Sequential.Red.Color01 */
+  --dt-colors-charts-sequential-red-color-01-default: #610000;
+
+  /* Colors.Charts.Sequential.Red.Color02 */
+  --dt-colors-charts-sequential-red-color-02-default: #8a0012;
+
+  /* Colors.Charts.Sequential.Red.Color03 */
+  --dt-colors-charts-sequential-red-color-03-default: #ae132d;
+
+  /* Colors.Charts.Sequential.Red.Color04 */
+  --dt-colors-charts-sequential-red-color-04-default: #cd3741;
+
+  /* Colors.Charts.Sequential.Red.Color05 */
+  --dt-colors-charts-sequential-red-color-05-default: #eb565b;
+
+  /* Colors.Charts.Sequential.Red.Color06 */
+  --dt-colors-charts-sequential-red-color-06-default: #ff7a7a;
+
+  /* Colors.Charts.Sequential.Red.Color07 */
+  --dt-colors-charts-sequential-red-color-07-default: #ffa6a3;
+
+  /* Colors.Charts.Sequential.Red.Color08 */
+  --dt-colors-charts-sequential-red-color-08-default: #ffb8b3;
+
+  /* Colors.Charts.Sequential.Red.Color09 */
+  --dt-colors-charts-sequential-red-color-09-default: #ffd9d6;
+
+  /* Colors.Charts.Sequential.Magenta.Color01 */
+  --dt-colors-charts-sequential-magenta-color-01-default: #59006b;
+
+  /* Colors.Charts.Sequential.Magenta.Color02 */
+  --dt-colors-charts-sequential-magenta-color-02-default: #761b88;
+
+  /* Colors.Charts.Sequential.Magenta.Color03 */
+  --dt-colors-charts-sequential-magenta-color-03-default: #9033a3;
+
+  /* Colors.Charts.Sequential.Magenta.Color04 */
+  --dt-colors-charts-sequential-magenta-color-04-default: #af4bbe;
+
+  /* Colors.Charts.Sequential.Magenta.Color05 */
+  --dt-colors-charts-sequential-magenta-color-05-default: #ba6bc2;
+
+  /* Colors.Charts.Sequential.Magenta.Color06 */
+  --dt-colors-charts-sequential-magenta-color-06-default: #e183e7;
+
+  /* Colors.Charts.Sequential.Magenta.Color07 */
+  --dt-colors-charts-sequential-magenta-color-07-default: #fca0fd;
+
+  /* Colors.Charts.Sequential.Magenta.Color08 */
+  --dt-colors-charts-sequential-magenta-color-08-default: #fdb4fd;
+
+  /* Colors.Charts.Sequential.Magenta.Color09 */
+  --dt-colors-charts-sequential-magenta-color-09-default: #faccfa;
+
+  /* Colors.Charts.Sequential.Orange.Color01 */
+  --dt-colors-charts-sequential-orange-color-01-default: #662c00;
+
+  /* Colors.Charts.Sequential.Orange.Color02 */
+  --dt-colors-charts-sequential-orange-color-02-default: #87420d;
+
+  /* Colors.Charts.Sequential.Orange.Color03 */
+  --dt-colors-charts-sequential-orange-color-03-default: #ab5412;
+
+  /* Colors.Charts.Sequential.Orange.Color04 */
+  --dt-colors-charts-sequential-orange-color-04-default: #c36218;
+
+  /* Colors.Charts.Sequential.Orange.Color05 */
+  --dt-colors-charts-sequential-orange-color-05-default: #d56b1a;
+
+  /* Colors.Charts.Sequential.Orange.Color06 */
+  --dt-colors-charts-sequential-orange-color-06-default: #e57e2e;
+
+  /* Colors.Charts.Sequential.Orange.Color07 */
+  --dt-colors-charts-sequential-orange-color-07-default: #eb9a5c;
+
+  /* Colors.Charts.Sequential.Orange.Color08 */
+  --dt-colors-charts-sequential-orange-color-08-default: #efb080;
+
+  /* Colors.Charts.Sequential.Orange.Color09 */
+  --dt-colors-charts-sequential-orange-color-09-default: #f4caa9;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color01 */
+  --dt-colors-charts-diverging-orange-blue-color-01-default: #662c00;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color02 */
+  --dt-colors-charts-diverging-orange-blue-color-02-default: #ab5412;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color03 */
+  --dt-colors-charts-diverging-orange-blue-color-03-default: #d56b1a;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color04 */
+  --dt-colors-charts-diverging-orange-blue-color-04-default: #eb9a5c;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color05 */
+  --dt-colors-charts-diverging-orange-blue-color-05-default: #f4caa9;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color06 */
+  --dt-colors-charts-diverging-orange-blue-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color07 */
+  --dt-colors-charts-diverging-orange-blue-color-07-default: #d6deff;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color08 */
+  --dt-colors-charts-diverging-orange-blue-color-08-default: #a8b7ff;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color09 */
+  --dt-colors-charts-diverging-orange-blue-color-09-default: #627cfe;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color10 */
+  --dt-colors-charts-diverging-orange-blue-color-10-default: #134fc9;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color11 */
+  --dt-colors-charts-diverging-orange-blue-color-11-default: #001b85;
+
+  /* Colors.Charts.Diverging.RedBlue.Color01 */
+  --dt-colors-charts-diverging-red-blue-color-01-default: #610000;
+
+  /* Colors.Charts.Diverging.RedBlue.Color02 */
+  --dt-colors-charts-diverging-red-blue-color-02-default: #ae132d;
+
+  /* Colors.Charts.Diverging.RedBlue.Color03 */
+  --dt-colors-charts-diverging-red-blue-color-03-default: #eb565b;
+
+  /* Colors.Charts.Diverging.RedBlue.Color04 */
+  --dt-colors-charts-diverging-red-blue-color-04-default: #ffa6a3;
+
+  /* Colors.Charts.Diverging.RedBlue.Color05 */
+  --dt-colors-charts-diverging-red-blue-color-05-default: #ffd9d6;
+
+  /* Colors.Charts.Diverging.RedBlue.Color06 */
+  --dt-colors-charts-diverging-red-blue-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.RedBlue.Color07 */
+  --dt-colors-charts-diverging-red-blue-color-07-default: #d6deff;
+
+  /* Colors.Charts.Diverging.RedBlue.Color08 */
+  --dt-colors-charts-diverging-red-blue-color-08-default: #a8b7ff;
+
+  /* Colors.Charts.Diverging.RedBlue.Color09 */
+  --dt-colors-charts-diverging-red-blue-color-09-default: #627cfe;
+
+  /* Colors.Charts.Diverging.RedBlue.Color10 */
+  --dt-colors-charts-diverging-red-blue-color-10-default: #134fc9;
+
+  /* Colors.Charts.Diverging.RedBlue.Color11 */
+  --dt-colors-charts-diverging-red-blue-color-11-default: #001b85;
+
+  /* Colors.Charts.Diverging.RedPurple.Color01 */
+  --dt-colors-charts-diverging-red-purple-color-01-default: #610000;
+
+  /* Colors.Charts.Diverging.RedPurple.Color02 */
+  --dt-colors-charts-diverging-red-purple-color-02-default: #ae132d;
+
+  /* Colors.Charts.Diverging.RedPurple.Color03 */
+  --dt-colors-charts-diverging-red-purple-color-03-default: #eb565b;
+
+  /* Colors.Charts.Diverging.RedPurple.Color04 */
+  --dt-colors-charts-diverging-red-purple-color-04-default: #ffa6a3;
+
+  /* Colors.Charts.Diverging.RedPurple.Color05 */
+  --dt-colors-charts-diverging-red-purple-color-05-default: #ffd9d6;
+
+  /* Colors.Charts.Diverging.RedPurple.Color06 */
+  --dt-colors-charts-diverging-red-purple-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.RedPurple.Color07 */
+  --dt-colors-charts-diverging-red-purple-color-07-default: #e9d7fe;
+
+  /* Colors.Charts.Diverging.RedPurple.Color08 */
+  --dt-colors-charts-diverging-red-purple-color-08-default: #bb9eeb;
+
+  /* Colors.Charts.Diverging.RedPurple.Color09 */
+  --dt-colors-charts-diverging-red-purple-color-09-default: #8b6ecf;
+
+  /* Colors.Charts.Diverging.RedPurple.Color10 */
+  --dt-colors-charts-diverging-red-purple-color-10-default: #5e489d;
+
+  /* Colors.Charts.Diverging.RedPurple.Color11 */
+  --dt-colors-charts-diverging-red-purple-color-11-default: #32246a;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color01 */
+  --dt-colors-charts-diverging-blue-moss-color-01-default: #001b85;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color02 */
+  --dt-colors-charts-diverging-blue-moss-color-02-default: #134fc9;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color03 */
+  --dt-colors-charts-diverging-blue-moss-color-03-default: #627cfe;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color04 */
+  --dt-colors-charts-diverging-blue-moss-color-04-default: #a8b7ff;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color05 */
+  --dt-colors-charts-diverging-blue-moss-color-05-default: #d6deff;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color06 */
+  --dt-colors-charts-diverging-blue-moss-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color07 */
+  --dt-colors-charts-diverging-blue-moss-color-07-default: #d4ece0;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color08 */
+  --dt-colors-charts-diverging-blue-moss-color-08-default: #93dcb8;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color09 */
+  --dt-colors-charts-diverging-blue-moss-color-09-default: #509575;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color10 */
+  --dt-colors-charts-diverging-blue-moss-color-10-default: #2a7453;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color11 */
+  --dt-colors-charts-diverging-blue-moss-color-11-default: #084427;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color01 */
+  --dt-colors-charts-diverging-purple-yellow-color-01-default: #32246a;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color02 */
+  --dt-colors-charts-diverging-purple-yellow-color-02-default: #5e489d;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color03 */
+  --dt-colors-charts-diverging-purple-yellow-color-03-default: #8b6ecf;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color04 */
+  --dt-colors-charts-diverging-purple-yellow-color-04-default: #bb9eeb;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color05 */
+  --dt-colors-charts-diverging-purple-yellow-color-05-default: #e9d7fe;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color06 */
+  --dt-colors-charts-diverging-purple-yellow-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color07 */
+  --dt-colors-charts-diverging-purple-yellow-color-07-default: #f8e1af;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color08 */
+  --dt-colors-charts-diverging-purple-yellow-color-08-default: #dfb14e;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color09 */
+  --dt-colors-charts-diverging-purple-yellow-color-09-default: #a9780f;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color10 */
+  --dt-colors-charts-diverging-purple-yellow-color-10-default: #755000;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color11 */
+  --dt-colors-charts-diverging-purple-yellow-color-11-default: #573b00;
+
+  /* Colors.Charts.Diverging.RedGreen.Color01 */
+  --dt-colors-charts-diverging-red-green-color-01-default: #610000;
+
+  /* Colors.Charts.Diverging.RedGreen.Color02 */
+  --dt-colors-charts-diverging-red-green-color-02-default: #ae132d;
+
+  /* Colors.Charts.Diverging.RedGreen.Color03 */
+  --dt-colors-charts-diverging-red-green-color-03-default: #eb565b;
+
+  /* Colors.Charts.Diverging.RedGreen.Color04 */
+  --dt-colors-charts-diverging-red-green-color-04-default: #ffa6a3;
+
+  /* Colors.Charts.Diverging.RedGreen.Color05 */
+  --dt-colors-charts-diverging-red-green-color-05-default: #ffd9d6;
+
+  /* Colors.Charts.Diverging.RedGreen.Color06 */
+  --dt-colors-charts-diverging-red-green-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.RedGreen.Color07 */
+  --dt-colors-charts-diverging-red-green-color-07-default: #d4ece0;
+
+  /* Colors.Charts.Diverging.RedGreen.Color08 */
+  --dt-colors-charts-diverging-red-green-color-08-default: #93dcb8;
+
+  /* Colors.Charts.Diverging.RedGreen.Color09 */
+  --dt-colors-charts-diverging-red-green-color-09-default: #509575;
+
+  /* Colors.Charts.Diverging.RedGreen.Color10 */
+  --dt-colors-charts-diverging-red-green-color-10-default: #2a7453;
+
+  /* Colors.Charts.Diverging.RedGreen.Color11 */
+  --dt-colors-charts-diverging-red-green-color-11-default: #084427;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color01 */
+  --dt-colors-charts-diverging-orange-petrol-color-01-default: #662c00;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color02 */
+  --dt-colors-charts-diverging-orange-petrol-color-02-default: #ab5412;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color03 */
+  --dt-colors-charts-diverging-orange-petrol-color-03-default: #d56b1a;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color04 */
+  --dt-colors-charts-diverging-orange-petrol-color-04-default: #eb9a5c;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color05 */
+  --dt-colors-charts-diverging-orange-petrol-color-05-default: #f4caa9;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color06 */
+  --dt-colors-charts-diverging-orange-petrol-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color07 */
+  --dt-colors-charts-diverging-orange-petrol-color-07-default: #cbe7f6;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color08 */
+  --dt-colors-charts-diverging-orange-petrol-color-08-default: #81c8ef;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color09 */
+  --dt-colors-charts-diverging-orange-petrol-color-09-default: #438fb1;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color10 */
+  --dt-colors-charts-diverging-orange-petrol-color-10-default: #21607d;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color11 */
+  --dt-colors-charts-diverging-orange-petrol-color-11-default: #00304d;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color01 */
+  --dt-colors-charts-diverging-pink-green-color-01-default: #6b1441;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color02 */
+  --dt-colors-charts-diverging-pink-green-color-02-default: #a83470;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color03 */
+  --dt-colors-charts-diverging-pink-green-color-03-default: #d85a9f;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color04 */
+  --dt-colors-charts-diverging-pink-green-color-04-default: #f291cb;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color05 */
+  --dt-colors-charts-diverging-pink-green-color-05-default: #fed7f0;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color06 */
+  --dt-colors-charts-diverging-pink-green-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color07 */
+  --dt-colors-charts-diverging-pink-green-color-07-default: #d4ece0;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color08 */
+  --dt-colors-charts-diverging-pink-green-color-08-default: #93dcb8;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color09 */
+  --dt-colors-charts-diverging-pink-green-color-09-default: #509575;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color10 */
+  --dt-colors-charts-diverging-pink-green-color-10-default: #2a7453;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color11 */
+  --dt-colors-charts-diverging-pink-green-color-11-default: #084427;
+}
+
+/* ── Colors (dark theme overrides) ───────────────────────────── */
+[data-theme="dark"] {
+
+  /* Colors.Theme.Foreground */
+  --dt-colors-theme-foreground-10: #f0f0f5;
+  --dt-colors-theme-foreground-20: #112;
+
+  /* Colors.Theme.Background */
+  --dt-colors-theme-background-10: #19192c;
+  --dt-colors-theme-background-20: #112;
+
+  /* Colors.Theme.Background.Shell */
+  --dt-colors-theme-background-shell-default: #141419;
+
+  /* Colors.Theme.Neutral */
+  --dt-colors-theme-neutral-10: #212135;
+  --dt-colors-theme-neutral-20: #292a3e;
+  --dt-colors-theme-neutral-30: #323248;
+  --dt-colors-theme-neutral-40: #3b3b52;
+  --dt-colors-theme-neutral-50: #44445c;
+  --dt-colors-theme-neutral-60: #4d4e66;
+  --dt-colors-theme-neutral-70: #a0a1c0;
+  --dt-colors-theme-neutral-80: #b0b1d0;
+  --dt-colors-theme-neutral-90: #bfc0e1;
+
+  /* Colors.Theme.Primary */
+  --dt-colors-theme-primary-10: #212138;
+  --dt-colors-theme-primary-20: #292944;
+  --dt-colors-theme-primary-30: #313150;
+  --dt-colors-theme-primary-40: #39395d;
+  --dt-colors-theme-primary-50: #42426a;
+  --dt-colors-theme-primary-60: #4a4b78;
+  --dt-colors-theme-primary-70: #999bed;
+  --dt-colors-theme-primary-80: #a8abfe;
+  --dt-colors-theme-primary-90: #b8bbff;
+
+  /* Colors.Theme.Success */
+  --dt-colors-theme-success-10: #1e2234;
+  --dt-colors-theme-success-20: #222c3c;
+  --dt-colors-theme-success-30: #273644;
+  --dt-colors-theme-success-40: #2b404c;
+  --dt-colors-theme-success-50: #304a54;
+  --dt-colors-theme-success-60: #34545d;
+  --dt-colors-theme-success-70: #5eb1a9;
+  --dt-colors-theme-success-80: #6ec1b9;
+  --dt-colors-theme-success-90: #7ed1c9;
+
+  /* Colors.Theme.Warning */
+  --dt-colors-theme-warning-10: #252230;
+  --dt-colors-theme-warning-20: #332c34;
+  --dt-colors-theme-warning-30: #403537;
+  --dt-colors-theme-warning-40: #4e3e39;
+  --dt-colors-theme-warning-50: #5d483c;
+  --dt-colors-theme-warning-60: #6c523e;
+  --dt-colors-theme-warning-70: #eea746;
+  --dt-colors-theme-warning-80: #ffb758;
+  --dt-colors-theme-warning-90: #ffc974;
+
+  /* Colors.Theme.Critical */
+  --dt-colors-theme-critical-10: #251c2e;
+  --dt-colors-theme-critical-20: #301f2f;
+  --dt-colors-theme-critical-30: #3c2131;
+  --dt-colors-theme-critical-40: #482332;
+  --dt-colors-theme-critical-50: #542433;
+  --dt-colors-theme-critical-60: #602634;
+  --dt-colors-theme-critical-70: #c82d40;
+  --dt-colors-theme-critical-80: #b61532;
+  --dt-colors-theme-critical-90: #a50024;
+
+  /* Colors.Background.Base */
+  --dt-colors-background-base-default: #19192c;
+
+  /* Colors.Background.Surface */
+  --dt-colors-background-surface-backdrop: #19192ccc;
+  --dt-colors-background-surface-default: #112;
+
+  /* Colors.Background.Container.Neutral */
+  --dt-colors-background-container-neutral-subdued: #19192c;
+  --dt-colors-background-container-neutral-default: #212135;
+  --dt-colors-background-container-neutral-emphasized: #292a3e;
+  --dt-colors-background-container-neutral-accent: #a0a1c0;
+
+  /* Colors.Background.Container.Primary */
+  --dt-colors-background-container-primary-default: #212138;
+  --dt-colors-background-container-primary-emphasized: #292944;
+  --dt-colors-background-container-primary-accent: #999bed;
+
+  /* Colors.Background.Container.Success */
+  --dt-colors-background-container-success-default: #1e2234;
+  --dt-colors-background-container-success-emphasized: #222c3c;
+  --dt-colors-background-container-success-accent: #5eb1a9;
+
+  /* Colors.Background.Container.Warning */
+  --dt-colors-background-container-warning-default: #252230;
+  --dt-colors-background-container-warning-emphasized: #332c34;
+  --dt-colors-background-container-warning-accent: #eea746;
+
+  /* Colors.Background.Container.Critical */
+  --dt-colors-background-container-critical-default: #251c2e;
+  --dt-colors-background-container-critical-emphasized: #301f2f;
+  --dt-colors-background-container-critical-accent: #c82d40;
+
+  /* Colors.Background.Field.Neutral */
+  --dt-colors-background-field-neutral-disabled: #32324880;
+  --dt-colors-background-field-neutral-default: #32324800;
+  --dt-colors-background-field-neutral-default-hover: #3b3b52;
+  --dt-colors-background-field-neutral-default-active: #44445c;
+  --dt-colors-background-field-neutral-emphasized: #323248;
+  --dt-colors-background-field-neutral-emphasized-hover: #3b3b52;
+  --dt-colors-background-field-neutral-emphasized-active: #44445c;
+  --dt-colors-background-field-neutral-accent: #a0a1c0;
+  --dt-colors-background-field-neutral-accent-hover: #b0b1d0;
+  --dt-colors-background-field-neutral-accent-active: #bfc0e1;
+
+  /* Colors.Background.Field.Primary */
+  --dt-colors-background-field-primary-disabled: #32324880;
+  --dt-colors-background-field-primary-default: #31315000;
+  --dt-colors-background-field-primary-default-hover: #39395d;
+  --dt-colors-background-field-primary-default-active: #42426a;
+  --dt-colors-background-field-primary-emphasized: #313150;
+  --dt-colors-background-field-primary-emphasized-hover: #39395d;
+  --dt-colors-background-field-primary-emphasized-active: #42426a;
+  --dt-colors-background-field-primary-accent: #999bed;
+  --dt-colors-background-field-primary-accent-hover: #a8abfe;
+  --dt-colors-background-field-primary-accent-active: #b8bbff;
+
+  /* Colors.Background.Field.Success */
+  --dt-colors-background-field-success-disabled: #32324880;
+  --dt-colors-background-field-success-default: #27364400;
+  --dt-colors-background-field-success-default-hover: #2b404c;
+  --dt-colors-background-field-success-default-active: #304a54;
+  --dt-colors-background-field-success-emphasized: #273644;
+  --dt-colors-background-field-success-emphasized-hover: #2b404c;
+  --dt-colors-background-field-success-emphasized-active: #304a54;
+  --dt-colors-background-field-success-accent: #5eb1a9;
+  --dt-colors-background-field-success-accent-hover: #6ec1b9;
+  --dt-colors-background-field-success-accent-active: #7ed1c9;
+
+  /* Colors.Background.Field.Warning */
+  --dt-colors-background-field-warning-disabled: #32324880;
+  --dt-colors-background-field-warning-default: #40353700;
+  --dt-colors-background-field-warning-default-hover: #4e3e39;
+  --dt-colors-background-field-warning-default-active: #5d483c;
+  --dt-colors-background-field-warning-emphasized: #403537;
+  --dt-colors-background-field-warning-emphasized-hover: #4e3e39;
+  --dt-colors-background-field-warning-emphasized-active: #5d483c;
+  --dt-colors-background-field-warning-accent: #eea746;
+  --dt-colors-background-field-warning-accent-hover: #ffb758;
+  --dt-colors-background-field-warning-accent-active: #ffc974;
+
+  /* Colors.Background.Field.Critical */
+  --dt-colors-background-field-critical-disabled: #32324880;
+  --dt-colors-background-field-critical-default: #3c213100;
+  --dt-colors-background-field-critical-default-hover: #482332;
+  --dt-colors-background-field-critical-default-active: #542433;
+  --dt-colors-background-field-critical-emphasized: #3c2131;
+  --dt-colors-background-field-critical-emphasized-hover: #482332;
+  --dt-colors-background-field-critical-emphasized-active: #542433;
+  --dt-colors-background-field-critical-accent: #c82d40;
+  --dt-colors-background-field-critical-accent-hover: #b61532;
+  --dt-colors-background-field-critical-accent-active: #a50024;
+
+  /* Colors.Background.Shell */
+  --dt-colors-background-shell-default: #141419;
+
+  /* Colors.Border.Neutral */
+  --dt-colors-border-neutral-disabled: #3b3b5280;
+  --dt-colors-border-neutral-default: #3b3b52;
+  --dt-colors-border-neutral-default-hover: #44445c;
+  --dt-colors-border-neutral-default-active: #4d4e66;
+  --dt-colors-border-neutral-accent: #b1b2d2;
+  --dt-colors-border-neutral-accent-hover: #cecff0;
+  --dt-colors-border-neutral-accent-active: #ebecff;
+  --dt-colors-border-neutral-subdued: #292a3e;
+  --dt-colors-border-neutral-subdued-hover: #3b3b52;
+  --dt-colors-border-neutral-subdued-active: #44445c;
+
+  /* Colors.Border.Neutral.OnAccent */
+  --dt-colors-border-neutral-on-accent-disabled: #1f203333;
+  --dt-colors-border-neutral-on-accent-default: #1f2033;
+  --dt-colors-border-neutral-on-accent-default-hover: #1f2033cc;
+  --dt-colors-border-neutral-on-accent-default-active: #1f203399;
+
+  /* Colors.Border.Primary */
+  --dt-colors-border-primary-disabled: #3b3b5280;
+  --dt-colors-border-primary-default: #39395d;
+  --dt-colors-border-primary-default-hover: #42426a;
+  --dt-colors-border-primary-default-active: #4a4b78;
+  --dt-colors-border-primary-accent: #adb0ff;
+  --dt-colors-border-primary-accent-hover: #ccd0ff;
+  --dt-colors-border-primary-accent-active: #eef1ff;
+
+  /* Colors.Border.Primary.OnAccent */
+  --dt-colors-border-primary-on-accent-disabled: #1f203733;
+  --dt-colors-border-primary-on-accent-default: #1f2037;
+  --dt-colors-border-primary-on-accent-default-hover: #1f2037cc;
+  --dt-colors-border-primary-on-accent-default-active: #1f203799;
+
+  /* Colors.Border.Success */
+  --dt-colors-border-success-disabled: #3b3b5280;
+  --dt-colors-border-success-default: #2b404c;
+  --dt-colors-border-success-default-hover: #304a54;
+  --dt-colors-border-success-default-active: #34545d;
+  --dt-colors-border-success-accent: #6fc3ba;
+  --dt-colors-border-success-accent-hover: #8ce0d7;
+  --dt-colors-border-success-accent-active: #aafef5;
+
+  /* Colors.Border.Success.OnAccent */
+  --dt-colors-border-success-on-accent-disabled: #1a233233;
+  --dt-colors-border-success-on-accent-default: #1a2332;
+  --dt-colors-border-success-on-accent-default-hover: #1a2332cc;
+  --dt-colors-border-success-on-accent-default-active: #1a233299;
+
+  /* Colors.Border.Warning */
+  --dt-colors-border-warning-disabled: #3b3b5280;
+  --dt-colors-border-warning-default: #4e3e39;
+  --dt-colors-border-warning-default-hover: #5d483c;
+  --dt-colors-border-warning-default-active: #6c523e;
+  --dt-colors-border-warning-accent: #eea83f;
+  --dt-colors-border-warning-accent-hover: #ffc563;
+  --dt-colors-border-warning-accent-active: #ffecc3;
+
+  /* Colors.Border.Warning.OnAccent */
+  --dt-colors-border-warning-on-accent-disabled: #27212633;
+  --dt-colors-border-warning-on-accent-default: #272126;
+  --dt-colors-border-warning-on-accent-default-hover: #272126cc;
+  --dt-colors-border-warning-on-accent-default-active: #27212699;
+
+  /* Colors.Border.Critical */
+  --dt-colors-border-critical-disabled: #3b3b5280;
+  --dt-colors-border-critical-default: #482332;
+  --dt-colors-border-critical-default-hover: #542433;
+  --dt-colors-border-critical-default-active: #602634;
+  --dt-colors-border-critical-accent: #ff999c;
+  --dt-colors-border-critical-accent-hover: #ffc1c1;
+  --dt-colors-border-critical-accent-active: #ffeceb;
+
+  /* Colors.Border.Critical.OnAccent */
+  --dt-colors-border-critical-on-accent-disabled: #f9f1f333;
+  --dt-colors-border-critical-on-accent-default: #f9f1f3;
+  --dt-colors-border-critical-on-accent-default-hover: #f9f1f3cc;
+  --dt-colors-border-critical-on-accent-default-active: #f9f1f399;
+
+  /* Colors.Text.Neutral */
+  --dt-colors-text-neutral-disabled: #b1b2d280;
+  --dt-colors-text-neutral-subdued: #b1b2d2;
+  --dt-colors-text-neutral-subdued-hover: #cecff0;
+  --dt-colors-text-neutral-subdued-active: #ebecff;
+  --dt-colors-text-neutral-default: #ebecff;
+  --dt-colors-text-neutral-default-hover: #cecff0;
+  --dt-colors-text-neutral-default-active: #b1b2d2;
+
+  /* Colors.Text.Neutral.OnAccent */
+  --dt-colors-text-neutral-on-accent-disabled: #1f203380;
+  --dt-colors-text-neutral-on-accent-default: #1f2033;
+  --dt-colors-text-neutral-on-accent-default-hover: #1f2033cc;
+  --dt-colors-text-neutral-on-accent-default-active: #1f203399;
+
+  /* Colors.Text.Primary */
+  --dt-colors-text-primary-disabled: #b1b2d280;
+  --dt-colors-text-primary-default: #adb0ff;
+  --dt-colors-text-primary-default-hover: #ccd0ff;
+  --dt-colors-text-primary-default-active: #eef1ff;
+
+  /* Colors.Text.Primary.OnAccent */
+  --dt-colors-text-primary-on-accent-disabled: #1f203780;
+  --dt-colors-text-primary-on-accent-default: #1f2037;
+  --dt-colors-text-primary-on-accent-default-hover: #1f2037cc;
+  --dt-colors-text-primary-on-accent-default-active: #1f203799;
+
+  /* Colors.Text.Success */
+  --dt-colors-text-success-disabled: #b1b2d280;
+  --dt-colors-text-success-default: #6fc3ba;
+  --dt-colors-text-success-default-hover: #8ce0d7;
+  --dt-colors-text-success-default-active: #aafef5;
+
+  /* Colors.Text.Success.OnAccent */
+  --dt-colors-text-success-on-accent-disabled: #1a233280;
+  --dt-colors-text-success-on-accent-default: #1a2332;
+  --dt-colors-text-success-on-accent-default-hover: #1a2332cc;
+  --dt-colors-text-success-on-accent-default-active: #1a233299;
+
+  /* Colors.Text.Warning */
+  --dt-colors-text-warning-disabled: #b1b2d280;
+  --dt-colors-text-warning-default: #eea83f;
+  --dt-colors-text-warning-default-hover: #ffc563;
+  --dt-colors-text-warning-default-active: #ffecc3;
+
+  /* Colors.Text.Warning.OnAccent */
+  --dt-colors-text-warning-on-accent-disabled: #27212680;
+  --dt-colors-text-warning-on-accent-default: #272126;
+  --dt-colors-text-warning-on-accent-default-hover: #272126cc;
+  --dt-colors-text-warning-on-accent-default-active: #27212699;
+
+  /* Colors.Text.Critical */
+  --dt-colors-text-critical-disabled: #b1b2d280;
+  --dt-colors-text-critical-default: #ff999c;
+  --dt-colors-text-critical-default-hover: #ffc1c1;
+  --dt-colors-text-critical-default-active: #ffeceb;
+
+  /* Colors.Text.Critical.OnAccent */
+  --dt-colors-text-critical-on-accent-disabled: #f9f1f380;
+  --dt-colors-text-critical-on-accent-default: #f9f1f3;
+  --dt-colors-text-critical-on-accent-default-hover: #f9f1f3cc;
+  --dt-colors-text-critical-on-accent-default-active: #f9f1f399;
+
+  /* Colors.Icon.Neutral */
+  --dt-colors-icon-neutral-disabled: #b1b2d280;
+  --dt-colors-icon-neutral-subdued: #b1b2d2;
+  --dt-colors-icon-neutral-subdued-hover: #cecff0;
+  --dt-colors-icon-neutral-subdued-active: #ebecff;
+  --dt-colors-icon-neutral-default: #ebecff;
+  --dt-colors-icon-neutral-default-hover: #cecff0;
+  --dt-colors-icon-neutral-default-active: #b1b2d2;
+
+  /* Colors.Icon.Neutral.OnAccent */
+  --dt-colors-icon-neutral-on-accent-disabled: #1f203380;
+  --dt-colors-icon-neutral-on-accent-default: #1f2033;
+  --dt-colors-icon-neutral-on-accent-default-hover: #1f2033cc;
+  --dt-colors-icon-neutral-on-accent-default-active: #1f203399;
+
+  /* Colors.Icon.Primary */
+  --dt-colors-icon-primary-disabled: #b1b2d280;
+  --dt-colors-icon-primary-default: #adb0ff;
+  --dt-colors-icon-primary-default-hover: #ccd0ff;
+  --dt-colors-icon-primary-default-active: #eef1ff;
+
+  /* Colors.Icon.Primary.OnAccent */
+  --dt-colors-icon-primary-on-accent-disabled: #1f203780;
+  --dt-colors-icon-primary-on-accent-default: #1f2037;
+  --dt-colors-icon-primary-on-accent-default-hover: #1f2037cc;
+  --dt-colors-icon-primary-on-accent-default-active: #1f203799;
+
+  /* Colors.Icon.Success */
+  --dt-colors-icon-success-disabled: #b1b2d280;
+  --dt-colors-icon-success-default: #6fc3ba;
+  --dt-colors-icon-success-default-hover: #8ce0d7;
+  --dt-colors-icon-success-default-active: #aafef5;
+
+  /* Colors.Icon.Success.OnAccent */
+  --dt-colors-icon-success-on-accent-disabled: #1a233280;
+  --dt-colors-icon-success-on-accent-default: #1a2332;
+  --dt-colors-icon-success-on-accent-default-hover: #1a2332cc;
+  --dt-colors-icon-success-on-accent-default-active: #1a233299;
+
+  /* Colors.Icon.Warning */
+  --dt-colors-icon-warning-disabled: #b1b2d280;
+  --dt-colors-icon-warning-default: #eea83f;
+  --dt-colors-icon-warning-default-hover: #ffc563;
+  --dt-colors-icon-warning-default-active: #ffecc3;
+
+  /* Colors.Icon.Warning.OnAccent */
+  --dt-colors-icon-warning-on-accent-disabled: #27212680;
+  --dt-colors-icon-warning-on-accent-default: #272126;
+  --dt-colors-icon-warning-on-accent-default-hover: #272126cc;
+  --dt-colors-icon-warning-on-accent-default-active: #27212699;
+
+  /* Colors.Icon.Critical */
+  --dt-colors-icon-critical-disabled: #b1b2d280;
+  --dt-colors-icon-critical-default: #ff999c;
+  --dt-colors-icon-critical-default-hover: #ffc1c1;
+  --dt-colors-icon-critical-default-active: #ffeceb;
+
+  /* Colors.Icon.Critical.OnAccent */
+  --dt-colors-icon-critical-on-accent-disabled: #f9f1f380;
+  --dt-colors-icon-critical-on-accent-default: #f9f1f3;
+  --dt-colors-icon-critical-on-accent-default-hover: #f9f1f3cc;
+  --dt-colors-icon-critical-on-accent-default-active: #f9f1f399;
+
+  /* Colors.Syntax */
+  --dt-colors-syntax-comment: #b2b3cd;
+  --dt-colors-syntax-string: #80dbca;
+  --dt-colors-syntax-variable: #abb1ed;
+  --dt-colors-syntax-number: #fd8fe1;
+  --dt-colors-syntax-punctuation: #cfa3f3;
+  --dt-colors-syntax-function: #abb1ed;
+  --dt-colors-syntax-classname: #f0f0f5;
+  --dt-colors-syntax-tag: #ff96a6;
+  --dt-colors-syntax-operators: #cfa3f3;
+  --dt-colors-syntax-boolean: #fe9b7d;
+
+  /* Colors.Charts.Status.Ideal */
+  --dt-colors-charts-status-ideal-default: #5eb1a9;
+
+  /* Colors.Charts.Status.Good */
+  --dt-colors-charts-status-good-default: #999bed;
+
+  /* Colors.Charts.Status.Neutral */
+  --dt-colors-charts-status-neutral-default: #a0a1c0;
+
+  /* Colors.Charts.Status.Warning */
+  --dt-colors-charts-status-warning-default: #eea746;
+
+  /* Colors.Charts.Status.Critical */
+  --dt-colors-charts-status-critical-default: #c82d40;
+
+  /* Colors.Charts.Categorical.Color01 */
+  --dt-colors-charts-categorical-color-01-default: #2e5bd6;
+
+  /* Colors.Charts.Categorical.Color02 */
+  --dt-colors-charts-categorical-color-02-default: #e1e3ef;
+
+  /* Colors.Charts.Categorical.Color03 */
+  --dt-colors-charts-categorical-color-03-default: #368160;
+
+  /* Colors.Charts.Categorical.Color04 */
+  --dt-colors-charts-categorical-color-04-default: #d35091;
+
+  /* Colors.Charts.Categorical.Color05 */
+  --dt-colors-charts-categorical-color-05-default: #7f8194;
+
+  /* Colors.Charts.Categorical.Color06 */
+  --dt-colors-charts-categorical-color-06-default: #b68c2b;
+
+  /* Colors.Charts.Categorical.Color07 */
+  --dt-colors-charts-categorical-color-07-default: #4285a9;
+
+  /* Colors.Charts.Categorical.Color08 */
+  --dt-colors-charts-categorical-color-08-default: #8d74cd;
+
+  /* Colors.Charts.Categorical.Color09 */
+  --dt-colors-charts-categorical-color-09-default: #62903c;
+
+  /* Colors.Charts.Categorical.Color10 */
+  --dt-colors-charts-categorical-color-10-default: #a24b20;
+
+  /* Colors.Charts.Categorical.Color11 */
+  --dt-colors-charts-categorical-color-11-default: #86c3e4;
+
+  /* Colors.Charts.Categorical.Color12 */
+  --dt-colors-charts-categorical-color-12-default: #cd3c44;
+
+  /* Colors.Charts.Categorical.Color13 */
+  --dt-colors-charts-categorical-color-13-default: #6fc3ad;
+
+  /* Colors.Charts.Categorical.Color14 */
+  --dt-colors-charts-categorical-color-14-default: #dc671e;
+
+  /* Colors.Charts.Categorical.Color15 */
+  --dt-colors-charts-categorical-color-15-default: #b138c7;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color01 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-01-default: #b138c7;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color02 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-02-default: #b68c2b;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color03 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-03-default: #d35091;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color04 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-04-default: #8d74cd;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color05 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-05-default: #a24b20;
+
+  /* Colors.Charts.CategoricalThemed.PurpleRain.Color06 */
+  --dt-colors-charts-categorical-themed-purple-rain-color-06-default: #cd3c44;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color01 */
+  --dt-colors-charts-categorical-themed-swamps-color-01-default: #107e65;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color02 */
+  --dt-colors-charts-categorical-themed-swamps-color-02-default: #7f8194;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color03 */
+  --dt-colors-charts-categorical-themed-swamps-color-03-default: #62903c;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color04 */
+  --dt-colors-charts-categorical-themed-swamps-color-04-default: #a24b20;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color05 */
+  --dt-colors-charts-categorical-themed-swamps-color-05-default: #e1e3ef;
+
+  /* Colors.Charts.CategoricalThemed.Swamps.Color06 */
+  --dt-colors-charts-categorical-themed-swamps-color-06-default: #b68c2b;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color01 */
+  --dt-colors-charts-categorical-themed-fireplace-color-01-default: #cd3c44;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color02 */
+  --dt-colors-charts-categorical-themed-fireplace-color-02-default: #d35091;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color03 */
+  --dt-colors-charts-categorical-themed-fireplace-color-03-default: #dc671e;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color04 */
+  --dt-colors-charts-categorical-themed-fireplace-color-04-default: #b68c2b;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color05 */
+  --dt-colors-charts-categorical-themed-fireplace-color-05-default: #a24b20;
+
+  /* Colors.Charts.CategoricalThemed.Fireplace.Color06 */
+  --dt-colors-charts-categorical-themed-fireplace-color-06-default: #a414bd;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color01 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-01-default: #5194b8;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color02 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-02-default: #7f8194;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color03 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-03-default: #86c3e4;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color04 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-04-default: #8d74cd;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color05 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-05-default: #2e5bd6;
+
+  /* Colors.Charts.CategoricalThemed.BlueSteel.Color06 */
+  --dt-colors-charts-categorical-themed-blue-steel-color-06-default: #e1e3ef;
+
+  /* Colors.Charts.Logstatus.Error */
+  --dt-colors-charts-logstatus-error-default: #cd3c44;
+
+  /* Colors.Charts.Logstatus.Warning */
+  --dt-colors-charts-logstatus-warning-default: #b68c2b;
+
+  /* Colors.Charts.Logstatus.Info */
+  --dt-colors-charts-logstatus-info-default: #2e5bd6;
+
+  /* Colors.Charts.Logstatus.None */
+  --dt-colors-charts-logstatus-none-default: #606276;
+
+  /* Colors.Charts.Loglevel.Emergency */
+  --dt-colors-charts-loglevel-emergency-default: #c21930;
+
+  /* Colors.Charts.Loglevel.Error */
+  --dt-colors-charts-loglevel-error-default: #cd3c44;
+
+  /* Colors.Charts.Loglevel.Alert */
+  --dt-colors-charts-loglevel-alert-default: #c43b80;
+
+  /* Colors.Charts.Loglevel.Critical */
+  --dt-colors-charts-loglevel-critical-default: #df62a1;
+
+  /* Colors.Charts.Loglevel.Severe */
+  --dt-colors-charts-loglevel-severe-default: #db7133;
+
+  /* Colors.Charts.Loglevel.Warning */
+  --dt-colors-charts-loglevel-warning-default: #b68c2b;
+
+  /* Colors.Charts.Loglevel.Notice */
+  --dt-colors-charts-loglevel-notice-default: #368160;
+
+  /* Colors.Charts.Loglevel.Info */
+  --dt-colors-charts-loglevel-info-default: #2e5bd6;
+
+  /* Colors.Charts.Loglevel.Debug */
+  --dt-colors-charts-loglevel-debug-default: #8d74cd;
+
+  /* Colors.Charts.Loglevel.None */
+  --dt-colors-charts-loglevel-none-default: #606276;
+
+  /* Colors.Charts.Apdex.Excellent */
+  --dt-colors-charts-apdex-excellent-default: #48936f;
+
+  /* Colors.Charts.Apdex.Good */
+  --dt-colors-charts-apdex-good-default: #007058;
+
+  /* Colors.Charts.Apdex.Fair */
+  --dt-colors-charts-apdex-fair-default: #b68c2b;
+
+  /* Colors.Charts.Apdex.Poor */
+  --dt-colors-charts-apdex-poor-default: #dc671e;
+
+  /* Colors.Charts.Apdex.Unacceptable */
+  --dt-colors-charts-apdex-unacceptable-default: #cd3c44;
+
+  /* Colors.Charts.SecurityRiskLevel.Muted */
+  --dt-colors-charts-security-risk-level-muted-default: #8f91a3;
+
+  /* Colors.Charts.SecurityRiskLevel.Critical */
+  --dt-colors-charts-security-risk-level-critical-default: #c21930;
+
+  /* Colors.Charts.SecurityRiskLevel.High */
+  --dt-colors-charts-security-risk-level-high-default: #d65151;
+
+  /* Colors.Charts.SecurityRiskLevel.Medium */
+  --dt-colors-charts-security-risk-level-medium-default: #b68c2b;
+
+  /* Colors.Charts.SecurityRiskLevel.Low */
+  --dt-colors-charts-security-risk-level-low-default: #2e5bd6;
+
+  /* Colors.Charts.SecurityRiskLevel.None */
+  --dt-colors-charts-security-risk-level-none-default: #606276;
+
+  /* Colors.Charts.VulnerabilityStatus.Muted */
+  --dt-colors-charts-vulnerability-status-muted-default: #8f91a3;
+
+  /* Colors.Charts.VulnerabilityStatus.Resolved */
+  --dt-colors-charts-vulnerability-status-resolved-default: #48936f;
+
+  /* Colors.Charts.VulnerabilityStatus.Affected */
+  --dt-colors-charts-vulnerability-status-affected-default: #d65151;
+
+  /* Colors.Charts.Threshold.Good */
+  --dt-colors-charts-threshold-good-default: #368160;
+
+  /* Colors.Charts.Threshold.Warning */
+  --dt-colors-charts-threshold-warning-default: #b68c2b;
+
+  /* Colors.Charts.Threshold.Bad */
+  --dt-colors-charts-threshold-bad-default: #cd3c44;
+
+  /* Colors.Charts.Rainbow.Red */
+  --dt-colors-charts-rainbow-red-default: #cd3c44;
+
+  /* Colors.Charts.Rainbow.Orange */
+  --dt-colors-charts-rainbow-orange-default: #dc671e;
+
+  /* Colors.Charts.Rainbow.Yellow */
+  --dt-colors-charts-rainbow-yellow-default: #b68c2b;
+
+  /* Colors.Charts.Rainbow.Moss */
+  --dt-colors-charts-rainbow-moss-default: #368160;
+
+  /* Colors.Charts.Rainbow.Blue */
+  --dt-colors-charts-rainbow-blue-default: #2e5bd6;
+
+  /* Colors.Charts.Rainbow.Magenta */
+  --dt-colors-charts-rainbow-magenta-default: #b138c7;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color01 */
+  --dt-colors-charts-sequential-pink-purple-color-01-default: #df62a1;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color02 */
+  --dt-colors-charts-sequential-pink-purple-color-02-default: #d062a8;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color03 */
+  --dt-colors-charts-sequential-pink-purple-color-03-default: #c261ae;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color04 */
+  --dt-colors-charts-sequential-pink-purple-color-04-default: #b15eb5;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color05 */
+  --dt-colors-charts-sequential-pink-purple-color-05-default: #9e5dbb;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color06 */
+  --dt-colors-charts-sequential-pink-purple-color-06-default: #8b5bc2;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color07 */
+  --dt-colors-charts-sequential-pink-purple-color-07-default: #745bc8;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color08 */
+  --dt-colors-charts-sequential-pink-purple-color-08-default: #595bcf;
+
+  /* Colors.Charts.Sequential.PinkPurple.Color09 */
+  --dt-colors-charts-sequential-pink-purple-color-09-default: #2e5bd6;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color01 */
+  --dt-colors-charts-sequential-blue-turquoise-color-01-default: #2e5bd6;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color02 */
+  --dt-colors-charts-sequential-blue-turquoise-color-02-default: #3b62ce;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color03 */
+  --dt-colors-charts-sequential-blue-turquoise-color-03-default: #466fc8;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color04 */
+  --dt-colors-charts-sequential-blue-turquoise-color-04-default: #4e7ac1;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color05 */
+  --dt-colors-charts-sequential-blue-turquoise-color-05-default: #5185b8;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color06 */
+  --dt-colors-charts-sequential-blue-turquoise-color-06-default: #5693b3;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color07 */
+  --dt-colors-charts-sequential-blue-turquoise-color-07-default: #559caa;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color08 */
+  --dt-colors-charts-sequential-blue-turquoise-color-08-default: #57a8a3;
+
+  /* Colors.Charts.Sequential.BlueTurquoise.Color09 */
+  --dt-colors-charts-sequential-blue-turquoise-color-09-default: #53b29a;
+
+  /* Colors.Charts.Sequential.Blue.Color01 */
+  --dt-colors-charts-sequential-blue-color-01-default: #2e5bd6;
+
+  /* Colors.Charts.Sequential.Blue.Color02 */
+  --dt-colors-charts-sequential-blue-color-02-default: #4766e1;
+
+  /* Colors.Charts.Sequential.Blue.Color03 */
+  --dt-colors-charts-sequential-blue-color-03-default: #6178ea;
+
+  /* Colors.Charts.Sequential.Blue.Color04 */
+  --dt-colors-charts-sequential-blue-color-04-default: #7989f1;
+
+  /* Colors.Charts.Sequential.Blue.Color05 */
+  --dt-colors-charts-sequential-blue-color-05-default: #8d99f7;
+
+  /* Colors.Charts.Sequential.Blue.Color06 */
+  --dt-colors-charts-sequential-blue-color-06-default: #9da8fb;
+
+  /* Colors.Charts.Sequential.Blue.Color07 */
+  --dt-colors-charts-sequential-blue-color-07-default: #b4bcfe;
+
+  /* Colors.Charts.Sequential.Blue.Color08 */
+  --dt-colors-charts-sequential-blue-color-08-default: #c2cbff;
+
+  /* Colors.Charts.Sequential.Blue.Color09 */
+  --dt-colors-charts-sequential-blue-color-09-default: #d6dfff;
+
+  /* Colors.Charts.Sequential.Grey.Color01 */
+  --dt-colors-charts-sequential-grey-color-01-default: #606276;
+
+  /* Colors.Charts.Sequential.Grey.Color02 */
+  --dt-colors-charts-sequential-grey-color-02-default: #6f7285;
+
+  /* Colors.Charts.Sequential.Grey.Color03 */
+  --dt-colors-charts-sequential-grey-color-03-default: #7f8194;
+
+  /* Colors.Charts.Sequential.Grey.Color04 */
+  --dt-colors-charts-sequential-grey-color-04-default: #8f91a3;
+
+  /* Colors.Charts.Sequential.Grey.Color05 */
+  --dt-colors-charts-sequential-grey-color-05-default: #9fa1b2;
+
+  /* Colors.Charts.Sequential.Grey.Color06 */
+  --dt-colors-charts-sequential-grey-color-06-default: #afb0c0;
+
+  /* Colors.Charts.Sequential.Grey.Color07 */
+  --dt-colors-charts-sequential-grey-color-07-default: #bfc1cf;
+
+  /* Colors.Charts.Sequential.Grey.Color08 */
+  --dt-colors-charts-sequential-grey-color-08-default: #d1d3e0;
+
+  /* Colors.Charts.Sequential.Grey.Color09 */
+  --dt-colors-charts-sequential-grey-color-09-default: #e1e3ef;
+
+  /* Colors.Charts.Sequential.Moss.Color01 */
+  --dt-colors-charts-sequential-moss-color-01-default: #287150;
+
+  /* Colors.Charts.Sequential.Moss.Color02 */
+  --dt-colors-charts-sequential-moss-color-02-default: #368160;
+
+  /* Colors.Charts.Sequential.Moss.Color03 */
+  --dt-colors-charts-sequential-moss-color-03-default: #48936f;
+
+  /* Colors.Charts.Sequential.Moss.Color04 */
+  --dt-colors-charts-sequential-moss-color-04-default: #5aa07e;
+
+  /* Colors.Charts.Sequential.Moss.Color05 */
+  --dt-colors-charts-sequential-moss-color-05-default: #6db08f;
+
+  /* Colors.Charts.Sequential.Moss.Color06 */
+  --dt-colors-charts-sequential-moss-color-06-default: #85c1a3;
+
+  /* Colors.Charts.Sequential.Moss.Color07 */
+  --dt-colors-charts-sequential-moss-color-07-default: #9ad0b4;
+
+  /* Colors.Charts.Sequential.Moss.Color08 */
+  --dt-colors-charts-sequential-moss-color-08-default: #b2e1c9;
+
+  /* Colors.Charts.Sequential.Moss.Color09 */
+  --dt-colors-charts-sequential-moss-color-09-default: #ccf0dd;
+
+  /* Colors.Charts.Sequential.Turquoise.Color01 */
+  --dt-colors-charts-sequential-turquoise-color-01-default: #007058;
+
+  /* Colors.Charts.Sequential.Turquoise.Color02 */
+  --dt-colors-charts-sequential-turquoise-color-02-default: #107e65;
+
+  /* Colors.Charts.Sequential.Turquoise.Color03 */
+  --dt-colors-charts-sequential-turquoise-color-03-default: #279176;
+
+  /* Colors.Charts.Sequential.Turquoise.Color04 */
+  --dt-colors-charts-sequential-turquoise-color-04-default: #3ba087;
+
+  /* Colors.Charts.Sequential.Turquoise.Color05 */
+  --dt-colors-charts-sequential-turquoise-color-05-default: #53b29a;
+
+  /* Colors.Charts.Sequential.Turquoise.Color06 */
+  --dt-colors-charts-sequential-turquoise-color-06-default: #6fc3ad;
+
+  /* Colors.Charts.Sequential.Turquoise.Color07 */
+  --dt-colors-charts-sequential-turquoise-color-07-default: #89d1bf;
+
+  /* Colors.Charts.Sequential.Turquoise.Color08 */
+  --dt-colors-charts-sequential-turquoise-color-08-default: #a8e1d2;
+
+  /* Colors.Charts.Sequential.Turquoise.Color09 */
+  --dt-colors-charts-sequential-turquoise-color-09-default: #c7efe7;
+
+  /* Colors.Charts.Sequential.Pink.Color01 */
+  --dt-colors-charts-sequential-pink-color-01-default: #b72a73;
+
+  /* Colors.Charts.Sequential.Pink.Color02 */
+  --dt-colors-charts-sequential-pink-color-02-default: #c43b80;
+
+  /* Colors.Charts.Sequential.Pink.Color03 */
+  --dt-colors-charts-sequential-pink-color-03-default: #d35091;
+
+  /* Colors.Charts.Sequential.Pink.Color04 */
+  --dt-colors-charts-sequential-pink-color-04-default: #df62a1;
+
+  /* Colors.Charts.Sequential.Pink.Color05 */
+  --dt-colors-charts-sequential-pink-color-05-default: #e977b4;
+
+  /* Colors.Charts.Sequential.Pink.Color06 */
+  --dt-colors-charts-sequential-pink-color-06-default: #f18ec6;
+
+  /* Colors.Charts.Sequential.Pink.Color07 */
+  --dt-colors-charts-sequential-pink-color-07-default: #f8a0d8;
+
+  /* Colors.Charts.Sequential.Pink.Color08 */
+  --dt-colors-charts-sequential-pink-color-08-default: #fcb6ec;
+
+  /* Colors.Charts.Sequential.Pink.Color09 */
+  --dt-colors-charts-sequential-pink-color-09-default: #ffc7ff;
+
+  /* Colors.Charts.Sequential.Yellow.Color01 */
+  --dt-colors-charts-sequential-yellow-color-01-default: #805b00;
+
+  /* Colors.Charts.Sequential.Yellow.Color02 */
+  --dt-colors-charts-sequential-yellow-color-02-default: #956d09;
+
+  /* Colors.Charts.Sequential.Yellow.Color03 */
+  --dt-colors-charts-sequential-yellow-color-03-default: #a47a19;
+
+  /* Colors.Charts.Sequential.Yellow.Color04 */
+  --dt-colors-charts-sequential-yellow-color-04-default: #b68c2b;
+
+  /* Colors.Charts.Sequential.Yellow.Color05 */
+  --dt-colors-charts-sequential-yellow-color-05-default: #c79e3d;
+
+  /* Colors.Charts.Sequential.Yellow.Color06 */
+  --dt-colors-charts-sequential-yellow-color-06-default: #d5ae53;
+
+  /* Colors.Charts.Sequential.Yellow.Color07 */
+  --dt-colors-charts-sequential-yellow-color-07-default: #e5c16c;
+
+  /* Colors.Charts.Sequential.Yellow.Color08 */
+  --dt-colors-charts-sequential-yellow-color-08-default: #f4d490;
+
+  /* Colors.Charts.Sequential.Yellow.Color09 */
+  --dt-colors-charts-sequential-yellow-color-09-default: #ffedc2;
+
+  /* Colors.Charts.Sequential.Petrol.Color01 */
+  --dt-colors-charts-sequential-petrol-color-01-default: #246789;
+
+  /* Colors.Charts.Sequential.Petrol.Color02 */
+  --dt-colors-charts-sequential-petrol-color-02-default: #337599;
+
+  /* Colors.Charts.Sequential.Petrol.Color03 */
+  --dt-colors-charts-sequential-petrol-color-03-default: #4285a9;
+
+  /* Colors.Charts.Sequential.Petrol.Color04 */
+  --dt-colors-charts-sequential-petrol-color-04-default: #5194b8;
+
+  /* Colors.Charts.Sequential.Petrol.Color05 */
+  --dt-colors-charts-sequential-petrol-color-05-default: #60a3c7;
+
+  /* Colors.Charts.Sequential.Petrol.Color06 */
+  --dt-colors-charts-sequential-petrol-color-06-default: #71b2d6;
+
+  /* Colors.Charts.Sequential.Petrol.Color07 */
+  --dt-colors-charts-sequential-petrol-color-07-default: #86c3e4;
+
+  /* Colors.Charts.Sequential.Petrol.Color08 */
+  --dt-colors-charts-sequential-petrol-color-08-default: #98d2f1;
+
+  /* Colors.Charts.Sequential.Petrol.Color09 */
+  --dt-colors-charts-sequential-petrol-color-09-default: #b0e2fc;
+
+  /* Colors.Charts.Sequential.Purple.Color01 */
+  --dt-colors-charts-sequential-purple-color-01-default: #6a51bd;
+
+  /* Colors.Charts.Sequential.Purple.Color02 */
+  --dt-colors-charts-sequential-purple-color-02-default: #7d63c5;
+
+  /* Colors.Charts.Sequential.Purple.Color03 */
+  --dt-colors-charts-sequential-purple-color-03-default: #8d74cd;
+
+  /* Colors.Charts.Sequential.Purple.Color04 */
+  --dt-colors-charts-sequential-purple-color-04-default: #9f85d5;
+
+  /* Colors.Charts.Sequential.Purple.Color05 */
+  --dt-colors-charts-sequential-purple-color-05-default: #ae97dd;
+
+  /* Colors.Charts.Sequential.Purple.Color06 */
+  --dt-colors-charts-sequential-purple-color-06-default: #bea9e5;
+
+  /* Colors.Charts.Sequential.Purple.Color07 */
+  --dt-colors-charts-sequential-purple-color-07-default: #cebbed;
+
+  /* Colors.Charts.Sequential.Purple.Color08 */
+  --dt-colors-charts-sequential-purple-color-08-default: #dfd1f5;
+
+  /* Colors.Charts.Sequential.Purple.Color09 */
+  --dt-colors-charts-sequential-purple-color-09-default: #efe2fd;
+
+  /* Colors.Charts.Sequential.Pear.Color01 */
+  --dt-colors-charts-sequential-pear-color-01-default: #3c7114;
+
+  /* Colors.Charts.Sequential.Pear.Color02 */
+  --dt-colors-charts-sequential-pear-color-02-default: #508028;
+
+  /* Colors.Charts.Sequential.Pear.Color03 */
+  --dt-colors-charts-sequential-pear-color-03-default: #62903c;
+
+  /* Colors.Charts.Sequential.Pear.Color04 */
+  --dt-colors-charts-sequential-pear-color-04-default: #75a14f;
+
+  /* Colors.Charts.Sequential.Pear.Color05 */
+  --dt-colors-charts-sequential-pear-color-05-default: #87b063;
+
+  /* Colors.Charts.Sequential.Pear.Color06 */
+  --dt-colors-charts-sequential-pear-color-06-default: #99c077;
+
+  /* Colors.Charts.Sequential.Pear.Color07 */
+  --dt-colors-charts-sequential-pear-color-07-default: #add08b;
+
+  /* Colors.Charts.Sequential.Pear.Color08 */
+  --dt-colors-charts-sequential-pear-color-08-default: #bfe09f;
+
+  /* Colors.Charts.Sequential.Pear.Color09 */
+  --dt-colors-charts-sequential-pear-color-09-default: #e1f6cb;
+
+  /* Colors.Charts.Sequential.Brown.Color01 */
+  --dt-colors-charts-sequential-brown-color-01-default: #913703;
+
+  /* Colors.Charts.Sequential.Brown.Color02 */
+  --dt-colors-charts-sequential-brown-color-02-default: #a24b20;
+
+  /* Colors.Charts.Sequential.Brown.Color03 */
+  --dt-colors-charts-sequential-brown-color-03-default: #b16139;
+
+  /* Colors.Charts.Sequential.Brown.Color04 */
+  --dt-colors-charts-sequential-brown-color-04-default: #c17753;
+
+  /* Colors.Charts.Sequential.Brown.Color05 */
+  --dt-colors-charts-sequential-brown-color-05-default: #cc8a6b;
+
+  /* Colors.Charts.Sequential.Brown.Color06 */
+  --dt-colors-charts-sequential-brown-color-06-default: #d9a287;
+
+  /* Colors.Charts.Sequential.Brown.Color07 */
+  --dt-colors-charts-sequential-brown-color-07-default: #e3b7a0;
+
+  /* Colors.Charts.Sequential.Brown.Color08 */
+  --dt-colors-charts-sequential-brown-color-08-default: #eecebe;
+
+  /* Colors.Charts.Sequential.Brown.Color09 */
+  --dt-colors-charts-sequential-brown-color-09-default: #f8e2d8;
+
+  /* Colors.Charts.Sequential.Red.Color01 */
+  --dt-colors-charts-sequential-red-color-01-default: #c21930;
+
+  /* Colors.Charts.Sequential.Red.Color02 */
+  --dt-colors-charts-sequential-red-color-02-default: #cd3c44;
+
+  /* Colors.Charts.Sequential.Red.Color03 */
+  --dt-colors-charts-sequential-red-color-03-default: #d65151;
+
+  /* Colors.Charts.Sequential.Red.Color04 */
+  --dt-colors-charts-sequential-red-color-04-default: #df6c68;
+
+  /* Colors.Charts.Sequential.Red.Color05 */
+  --dt-colors-charts-sequential-red-color-05-default: #e7817e;
+
+  /* Colors.Charts.Sequential.Red.Color06 */
+  --dt-colors-charts-sequential-red-color-06-default: #ee9590;
+
+  /* Colors.Charts.Sequential.Red.Color07 */
+  --dt-colors-charts-sequential-red-color-07-default: #f5ada8;
+
+  /* Colors.Charts.Sequential.Red.Color08 */
+  --dt-colors-charts-sequential-red-color-08-default: #fbbfbb;
+
+  /* Colors.Charts.Sequential.Red.Color09 */
+  --dt-colors-charts-sequential-red-color-09-default: #ffd5d1;
+
+  /* Colors.Charts.Sequential.Magenta.Color01 */
+  --dt-colors-charts-sequential-magenta-color-01-default: #a414bd;
+
+  /* Colors.Charts.Sequential.Magenta.Color02 */
+  --dt-colors-charts-sequential-magenta-color-02-default: #b138c7;
+
+  /* Colors.Charts.Sequential.Magenta.Color03 */
+  --dt-colors-charts-sequential-magenta-color-03-default: #bd50ce;
+
+  /* Colors.Charts.Sequential.Magenta.Color04 */
+  --dt-colors-charts-sequential-magenta-color-04-default: #c766d6;
+
+  /* Colors.Charts.Sequential.Magenta.Color05 */
+  --dt-colors-charts-sequential-magenta-color-05-default: #d27dde;
+
+  /* Colors.Charts.Sequential.Magenta.Color06 */
+  --dt-colors-charts-sequential-magenta-color-06-default: #dd90e4;
+
+  /* Colors.Charts.Sequential.Magenta.Color07 */
+  --dt-colors-charts-sequential-magenta-color-07-default: #e7a2eb;
+
+  /* Colors.Charts.Sequential.Magenta.Color08 */
+  --dt-colors-charts-sequential-magenta-color-08-default: #f0b9f3;
+
+  /* Colors.Charts.Sequential.Magenta.Color09 */
+  --dt-colors-charts-sequential-magenta-color-09-default: #faccfa;
+
+  /* Colors.Charts.Sequential.Orange.Color01 */
+  --dt-colors-charts-sequential-orange-color-01-default: #b13902;
+
+  /* Colors.Charts.Sequential.Orange.Color02 */
+  --dt-colors-charts-sequential-orange-color-02-default: #c04b11;
+
+  /* Colors.Charts.Sequential.Orange.Color03 */
+  --dt-colors-charts-sequential-orange-color-03-default: #ce5e22;
+
+  /* Colors.Charts.Sequential.Orange.Color04 */
+  --dt-colors-charts-sequential-orange-color-04-default: #db7133;
+
+  /* Colors.Charts.Sequential.Orange.Color05 */
+  --dt-colors-charts-sequential-orange-color-05-default: #e78446;
+
+  /* Colors.Charts.Sequential.Orange.Color06 */
+  --dt-colors-charts-sequential-orange-color-06-default: #f2975a;
+
+  /* Colors.Charts.Sequential.Orange.Color07 */
+  --dt-colors-charts-sequential-orange-color-07-default: #faa770;
+
+  /* Colors.Charts.Sequential.Orange.Color08 */
+  --dt-colors-charts-sequential-orange-color-08-default: #ffbe8f;
+
+  /* Colors.Charts.Sequential.Orange.Color09 */
+  --dt-colors-charts-sequential-orange-color-09-default: #fed3b4;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color01 */
+  --dt-colors-charts-diverging-orange-blue-color-01-default: #b13902;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color02 */
+  --dt-colors-charts-diverging-orange-blue-color-02-default: #ce5e22;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color03 */
+  --dt-colors-charts-diverging-orange-blue-color-03-default: #e78446;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color04 */
+  --dt-colors-charts-diverging-orange-blue-color-04-default: #faa770;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color05 */
+  --dt-colors-charts-diverging-orange-blue-color-05-default: #fed3b4;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color06 */
+  --dt-colors-charts-diverging-orange-blue-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color07 */
+  --dt-colors-charts-diverging-orange-blue-color-07-default: #d6dfff;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color08 */
+  --dt-colors-charts-diverging-orange-blue-color-08-default: #b4bcfe;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color09 */
+  --dt-colors-charts-diverging-orange-blue-color-09-default: #8d99f7;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color10 */
+  --dt-colors-charts-diverging-orange-blue-color-10-default: #6178ea;
+
+  /* Colors.Charts.Diverging.OrangeBlue.Color11 */
+  --dt-colors-charts-diverging-orange-blue-color-11-default: #2e5bd6;
+
+  /* Colors.Charts.Diverging.RedBlue.Color01 */
+  --dt-colors-charts-diverging-red-blue-color-01-default: #c21930;
+
+  /* Colors.Charts.Diverging.RedBlue.Color02 */
+  --dt-colors-charts-diverging-red-blue-color-02-default: #d65151;
+
+  /* Colors.Charts.Diverging.RedBlue.Color03 */
+  --dt-colors-charts-diverging-red-blue-color-03-default: #e7817e;
+
+  /* Colors.Charts.Diverging.RedBlue.Color04 */
+  --dt-colors-charts-diverging-red-blue-color-04-default: #f5ada8;
+
+  /* Colors.Charts.Diverging.RedBlue.Color05 */
+  --dt-colors-charts-diverging-red-blue-color-05-default: #ffd5d1;
+
+  /* Colors.Charts.Diverging.RedBlue.Color06 */
+  --dt-colors-charts-diverging-red-blue-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.RedBlue.Color07 */
+  --dt-colors-charts-diverging-red-blue-color-07-default: #d6dfff;
+
+  /* Colors.Charts.Diverging.RedBlue.Color08 */
+  --dt-colors-charts-diverging-red-blue-color-08-default: #b4bcfe;
+
+  /* Colors.Charts.Diverging.RedBlue.Color09 */
+  --dt-colors-charts-diverging-red-blue-color-09-default: #8d99f7;
+
+  /* Colors.Charts.Diverging.RedBlue.Color10 */
+  --dt-colors-charts-diverging-red-blue-color-10-default: #6178ea;
+
+  /* Colors.Charts.Diverging.RedBlue.Color11 */
+  --dt-colors-charts-diverging-red-blue-color-11-default: #2e5bd6;
+
+  /* Colors.Charts.Diverging.RedPurple.Color01 */
+  --dt-colors-charts-diverging-red-purple-color-01-default: #c21930;
+
+  /* Colors.Charts.Diverging.RedPurple.Color02 */
+  --dt-colors-charts-diverging-red-purple-color-02-default: #d65151;
+
+  /* Colors.Charts.Diverging.RedPurple.Color03 */
+  --dt-colors-charts-diverging-red-purple-color-03-default: #e7817e;
+
+  /* Colors.Charts.Diverging.RedPurple.Color04 */
+  --dt-colors-charts-diverging-red-purple-color-04-default: #f5ada8;
+
+  /* Colors.Charts.Diverging.RedPurple.Color05 */
+  --dt-colors-charts-diverging-red-purple-color-05-default: #ffd5d1;
+
+  /* Colors.Charts.Diverging.RedPurple.Color06 */
+  --dt-colors-charts-diverging-red-purple-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.RedPurple.Color07 */
+  --dt-colors-charts-diverging-red-purple-color-07-default: #efe2fd;
+
+  /* Colors.Charts.Diverging.RedPurple.Color08 */
+  --dt-colors-charts-diverging-red-purple-color-08-default: #cebbed;
+
+  /* Colors.Charts.Diverging.RedPurple.Color09 */
+  --dt-colors-charts-diverging-red-purple-color-09-default: #ae97dd;
+
+  /* Colors.Charts.Diverging.RedPurple.Color10 */
+  --dt-colors-charts-diverging-red-purple-color-10-default: #8d74cd;
+
+  /* Colors.Charts.Diverging.RedPurple.Color11 */
+  --dt-colors-charts-diverging-red-purple-color-11-default: #6a51bd;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color01 */
+  --dt-colors-charts-diverging-blue-moss-color-01-default: #2e5bd6;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color02 */
+  --dt-colors-charts-diverging-blue-moss-color-02-default: #6178ea;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color03 */
+  --dt-colors-charts-diverging-blue-moss-color-03-default: #8d99f7;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color04 */
+  --dt-colors-charts-diverging-blue-moss-color-04-default: #b4bcfe;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color05 */
+  --dt-colors-charts-diverging-blue-moss-color-05-default: #d6dfff;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color06 */
+  --dt-colors-charts-diverging-blue-moss-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color07 */
+  --dt-colors-charts-diverging-blue-moss-color-07-default: #ccf0dd;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color08 */
+  --dt-colors-charts-diverging-blue-moss-color-08-default: #9ad0b4;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color09 */
+  --dt-colors-charts-diverging-blue-moss-color-09-default: #6db08f;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color10 */
+  --dt-colors-charts-diverging-blue-moss-color-10-default: #48936f;
+
+  /* Colors.Charts.Diverging.BlueMoss.Color11 */
+  --dt-colors-charts-diverging-blue-moss-color-11-default: #287150;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color01 */
+  --dt-colors-charts-diverging-purple-yellow-color-01-default: #6a51bd;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color02 */
+  --dt-colors-charts-diverging-purple-yellow-color-02-default: #8d74cd;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color03 */
+  --dt-colors-charts-diverging-purple-yellow-color-03-default: #ae97dd;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color04 */
+  --dt-colors-charts-diverging-purple-yellow-color-04-default: #cebbed;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color05 */
+  --dt-colors-charts-diverging-purple-yellow-color-05-default: #efe2fd;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color06 */
+  --dt-colors-charts-diverging-purple-yellow-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color07 */
+  --dt-colors-charts-diverging-purple-yellow-color-07-default: #ffedc2;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color08 */
+  --dt-colors-charts-diverging-purple-yellow-color-08-default: #e5c16c;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color09 */
+  --dt-colors-charts-diverging-purple-yellow-color-09-default: #c79e3d;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color10 */
+  --dt-colors-charts-diverging-purple-yellow-color-10-default: #a47a19;
+
+  /* Colors.Charts.Diverging.PurpleYellow.Color11 */
+  --dt-colors-charts-diverging-purple-yellow-color-11-default: #805b00;
+
+  /* Colors.Charts.Diverging.RedGreen.Color01 */
+  --dt-colors-charts-diverging-red-green-color-01-default: #c21930;
+
+  /* Colors.Charts.Diverging.RedGreen.Color02 */
+  --dt-colors-charts-diverging-red-green-color-02-default: #d65151;
+
+  /* Colors.Charts.Diverging.RedGreen.Color03 */
+  --dt-colors-charts-diverging-red-green-color-03-default: #e7817e;
+
+  /* Colors.Charts.Diverging.RedGreen.Color04 */
+  --dt-colors-charts-diverging-red-green-color-04-default: #f5ada8;
+
+  /* Colors.Charts.Diverging.RedGreen.Color05 */
+  --dt-colors-charts-diverging-red-green-color-05-default: #ffd5d1;
+
+  /* Colors.Charts.Diverging.RedGreen.Color06 */
+  --dt-colors-charts-diverging-red-green-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.RedGreen.Color07 */
+  --dt-colors-charts-diverging-red-green-color-07-default: #ccf0dd;
+
+  /* Colors.Charts.Diverging.RedGreen.Color08 */
+  --dt-colors-charts-diverging-red-green-color-08-default: #9ad0b4;
+
+  /* Colors.Charts.Diverging.RedGreen.Color09 */
+  --dt-colors-charts-diverging-red-green-color-09-default: #6db08f;
+
+  /* Colors.Charts.Diverging.RedGreen.Color10 */
+  --dt-colors-charts-diverging-red-green-color-10-default: #48936f;
+
+  /* Colors.Charts.Diverging.RedGreen.Color11 */
+  --dt-colors-charts-diverging-red-green-color-11-default: #287150;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color01 */
+  --dt-colors-charts-diverging-orange-petrol-color-01-default: #b13902;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color02 */
+  --dt-colors-charts-diverging-orange-petrol-color-02-default: #ce5e22;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color03 */
+  --dt-colors-charts-diverging-orange-petrol-color-03-default: #e78446;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color04 */
+  --dt-colors-charts-diverging-orange-petrol-color-04-default: #faa770;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color05 */
+  --dt-colors-charts-diverging-orange-petrol-color-05-default: #fed3b4;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color06 */
+  --dt-colors-charts-diverging-orange-petrol-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color07 */
+  --dt-colors-charts-diverging-orange-petrol-color-07-default: #b0e2fc;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color08 */
+  --dt-colors-charts-diverging-orange-petrol-color-08-default: #86c3e4;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color09 */
+  --dt-colors-charts-diverging-orange-petrol-color-09-default: #60a3c7;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color10 */
+  --dt-colors-charts-diverging-orange-petrol-color-10-default: #4285a9;
+
+  /* Colors.Charts.Diverging.OrangePetrol.Color11 */
+  --dt-colors-charts-diverging-orange-petrol-color-11-default: #246789;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color01 */
+  --dt-colors-charts-diverging-pink-green-color-01-default: #b72a73;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color02 */
+  --dt-colors-charts-diverging-pink-green-color-02-default: #d35091;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color03 */
+  --dt-colors-charts-diverging-pink-green-color-03-default: #e977b4;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color04 */
+  --dt-colors-charts-diverging-pink-green-color-04-default: #f8a0d8;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color05 */
+  --dt-colors-charts-diverging-pink-green-color-05-default: #ffc7ff;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color06 */
+  --dt-colors-charts-diverging-pink-green-color-06-default: #f5eee0;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color07 */
+  --dt-colors-charts-diverging-pink-green-color-07-default: #ccf0dd;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color08 */
+  --dt-colors-charts-diverging-pink-green-color-08-default: #9ad0b4;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color09 */
+  --dt-colors-charts-diverging-pink-green-color-09-default: #6db08f;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color10 */
+  --dt-colors-charts-diverging-pink-green-color-10-default: #48936f;
+
+  /* Colors.Charts.Diverging.PinkGreen.Color11 */
+  --dt-colors-charts-diverging-pink-green-color-11-default: #287150;
+}
+
+/* ── Typography ──────────────────────────────────────────────── */
+:root {
+
+  /* Typography.Display */
+  --dt-typography-display-level-1-family: var(--dt-font-family-sans);
+  --dt-typography-display-level-1-weight: 600;
+  --dt-typography-display-level-1-size: 64px;
+  --dt-typography-display-level-1-line-height: 1.1875;
+  --dt-typography-display-level-1-text-decoration: none;
+  --dt-typography-display-level-1-text-transform: none;
+  --dt-typography-display-level-2-family: var(--dt-font-family-sans);
+  --dt-typography-display-level-2-weight: 600;
+  --dt-typography-display-level-2-size: 56px;
+  --dt-typography-display-level-2-line-height: 1.2142857143;
+  --dt-typography-display-level-2-text-decoration: none;
+  --dt-typography-display-level-2-text-transform: none;
+  --dt-typography-display-level-3-family: var(--dt-font-family-sans);
+  --dt-typography-display-level-3-weight: 600;
+  --dt-typography-display-level-3-size: 48px;
+  --dt-typography-display-level-3-line-height: 1.25;
+  --dt-typography-display-level-3-text-decoration: none;
+  --dt-typography-display-level-3-text-transform: none;
+
+  /* Typography.Heading */
+  --dt-typography-heading-level-1-family: var(--dt-font-family-sans);
+  --dt-typography-heading-level-1-weight: 600;
+  --dt-typography-heading-level-1-size: 32px;
+  --dt-typography-heading-level-1-line-height: 1.25;
+  --dt-typography-heading-level-1-text-decoration: none;
+  --dt-typography-heading-level-1-text-transform: none;
+  --dt-typography-heading-level-2-family: var(--dt-font-family-sans);
+  --dt-typography-heading-level-2-weight: 600;
+  --dt-typography-heading-level-2-size: 28px;
+  --dt-typography-heading-level-2-line-height: 1.2857142857;
+  --dt-typography-heading-level-2-text-decoration: none;
+  --dt-typography-heading-level-2-text-transform: none;
+  --dt-typography-heading-level-3-family: var(--dt-font-family-sans);
+  --dt-typography-heading-level-3-weight: 600;
+  --dt-typography-heading-level-3-size: 24px;
+  --dt-typography-heading-level-3-line-height: 1.3333333333;
+  --dt-typography-heading-level-3-text-decoration: none;
+  --dt-typography-heading-level-3-text-transform: none;
+  --dt-typography-heading-level-4-family: var(--dt-font-family-sans);
+  --dt-typography-heading-level-4-weight: 600;
+  --dt-typography-heading-level-4-size: 20px;
+  --dt-typography-heading-level-4-line-height: 1.4;
+  --dt-typography-heading-level-4-text-decoration: none;
+  --dt-typography-heading-level-4-text-transform: none;
+  --dt-typography-heading-level-5-family: var(--dt-font-family-sans);
+  --dt-typography-heading-level-5-weight: 600;
+  --dt-typography-heading-level-5-size: 16px;
+  --dt-typography-heading-level-5-line-height: 1.5;
+  --dt-typography-heading-level-5-text-decoration: none;
+  --dt-typography-heading-level-5-text-transform: none;
+  --dt-typography-heading-level-6-family: var(--dt-font-family-sans);
+  --dt-typography-heading-level-6-weight: 600;
+  --dt-typography-heading-level-6-size: 14px;
+  --dt-typography-heading-level-6-line-height: 1.4285714286;
+  --dt-typography-heading-level-6-text-decoration: none;
+  --dt-typography-heading-level-6-text-transform: none;
+
+  /* Typography.Subtitle */
+  --dt-typography-subtitle-display-level-1-family: var(--dt-font-family-sans);
+  --dt-typography-subtitle-display-level-1-weight: 400;
+  --dt-typography-subtitle-display-level-1-size: 28px;
+  --dt-typography-subtitle-display-level-1-line-height: 1.4285714286;
+  --dt-typography-subtitle-display-level-1-text-decoration: none;
+  --dt-typography-subtitle-display-level-1-text-transform: none;
+  --dt-typography-subtitle-display-level-2-family: var(--dt-font-family-sans);
+  --dt-typography-subtitle-display-level-2-weight: 400;
+  --dt-typography-subtitle-display-level-2-size: 24px;
+  --dt-typography-subtitle-display-level-2-line-height: 1.5;
+  --dt-typography-subtitle-display-level-2-text-decoration: none;
+  --dt-typography-subtitle-display-level-2-text-transform: none;
+  --dt-typography-subtitle-display-level-3-family: var(--dt-font-family-sans);
+  --dt-typography-subtitle-display-level-3-weight: 400;
+  --dt-typography-subtitle-display-level-3-size: 21px;
+  --dt-typography-subtitle-display-level-3-line-height: 1.5238095238;
+  --dt-typography-subtitle-display-level-3-text-decoration: none;
+  --dt-typography-subtitle-display-level-3-text-transform: none;
+  --dt-typography-subtitle-heading-level-1-family: var(--dt-font-family-sans);
+  --dt-typography-subtitle-heading-level-1-weight: 400;
+  --dt-typography-subtitle-heading-level-1-size: 21px;
+  --dt-typography-subtitle-heading-level-1-line-height: 1.5238095238;
+  --dt-typography-subtitle-heading-level-1-text-decoration: none;
+  --dt-typography-subtitle-heading-level-1-text-transform: none;
+  --dt-typography-subtitle-heading-level-2-family: var(--dt-font-family-sans);
+  --dt-typography-subtitle-heading-level-2-weight: 400;
+  --dt-typography-subtitle-heading-level-2-size: 18px;
+  --dt-typography-subtitle-heading-level-2-line-height: 1.5555555556;
+  --dt-typography-subtitle-heading-level-2-text-decoration: none;
+  --dt-typography-subtitle-heading-level-2-text-transform: none;
+  --dt-typography-subtitle-heading-level-3-family: var(--dt-font-family-sans);
+  --dt-typography-subtitle-heading-level-3-weight: 400;
+  --dt-typography-subtitle-heading-level-3-size: 16px;
+  --dt-typography-subtitle-heading-level-3-line-height: 1.5;
+  --dt-typography-subtitle-heading-level-3-text-decoration: none;
+  --dt-typography-subtitle-heading-level-3-text-transform: none;
+
+  /* Typography.Text */
+  --dt-typography-text-base-default-family: var(--dt-font-family-sans);
+  --dt-typography-text-base-default-weight: 400;
+  --dt-typography-text-base-default-size: 14px;
+  --dt-typography-text-base-default-line-height: 1.4285714286;
+  --dt-typography-text-base-default-text-decoration: none;
+  --dt-typography-text-base-default-text-transform: none;
+  --dt-typography-text-base-emphasized-family: var(--dt-font-family-sans);
+  --dt-typography-text-base-emphasized-weight: 500;
+  --dt-typography-text-base-emphasized-size: 14px;
+  --dt-typography-text-base-emphasized-line-height: 1.4285714286;
+  --dt-typography-text-base-emphasized-text-decoration: none;
+  --dt-typography-text-base-emphasized-text-transform: none;
+  --dt-typography-text-small-default-family: var(--dt-font-family-sans);
+  --dt-typography-text-small-default-weight: 400;
+  --dt-typography-text-small-default-size: 12px;
+  --dt-typography-text-small-default-line-height: 1.333333333;
+  --dt-typography-text-small-default-text-decoration: none;
+  --dt-typography-text-small-default-text-transform: none;
+  --dt-typography-text-small-emphasized-family: var(--dt-font-family-sans);
+  --dt-typography-text-small-emphasized-weight: 500;
+  --dt-typography-text-small-emphasized-size: 12px;
+  --dt-typography-text-small-emphasized-line-height: 1.333333333;
+  --dt-typography-text-small-emphasized-text-decoration: none;
+  --dt-typography-text-small-emphasized-text-transform: none;
+
+  /* Typography.Code */
+  --dt-typography-code-base-default-family: var(--dt-font-family-mono);
+  --dt-typography-code-base-default-weight: 400;
+  --dt-typography-code-base-default-size: 14px;
+  --dt-typography-code-base-default-line-height: 1.4285714286;
+  --dt-typography-code-base-default-text-decoration: none;
+  --dt-typography-code-base-default-text-transform: none;
+  --dt-typography-code-base-emphasized-family: var(--dt-font-family-mono);
+  --dt-typography-code-base-emphasized-weight: 500;
+  --dt-typography-code-base-emphasized-size: 14px;
+  --dt-typography-code-base-emphasized-line-height: 1.4285714286;
+  --dt-typography-code-base-emphasized-text-decoration: none;
+  --dt-typography-code-base-emphasized-text-transform: none;
+  --dt-typography-code-small-default-family: var(--dt-font-family-mono);
+  --dt-typography-code-small-default-weight: 400;
+  --dt-typography-code-small-default-size: 12px;
+  --dt-typography-code-small-default-line-height: 1.333333333;
+  --dt-typography-code-small-default-text-decoration: none;
+  --dt-typography-code-small-default-text-transform: none;
+  --dt-typography-code-small-emphasized-family: var(--dt-font-family-mono);
+  --dt-typography-code-small-emphasized-weight: 500;
+  --dt-typography-code-small-emphasized-size: 12px;
+  --dt-typography-code-small-emphasized-line-height: 1.333333333;
+  --dt-typography-code-small-emphasized-text-decoration: none;
+  --dt-typography-code-small-emphasized-text-transform: none;
+}
+
+/* ── Spacings ─────────────────────────────────────────────────── */
+:root {
+  --dt-spacings-size-0: 0;
+  --dt-spacings-size-2: 2px;
+  --dt-spacings-size-4: 4px;
+  --dt-spacings-size-6: 6px;
+  --dt-spacings-size-8: 8px;
+  --dt-spacings-size-12: 12px;
+  --dt-spacings-size-16: 16px;
+  --dt-spacings-size-20: 20px;
+  --dt-spacings-size-24: 24px;
+  --dt-spacings-size-28: 28px;
+  --dt-spacings-size-32: 32px;
+  --dt-spacings-size-36: 36px;
+  --dt-spacings-size-40: 40px;
+  --dt-spacings-size-48: 48px;
+  --dt-spacings-size-56: 56px;
+  --dt-spacings-size-64: 64px;
+}
+
+/* ── Borders ──────────────────────────────────────────────────── */
+:root {
+
+  /* Borders.Style */
+  --dt-borders-style-default: solid;
+  --dt-borders-style-dashed: dashed;
+
+  /* Borders.Width */
+  --dt-borders-width-default: 1px;
+  --dt-borders-width-emphasized: 2px;
+
+  /* Borders.Radius */
+  --dt-borders-radius-surface-subdued: 9px;
+  --dt-borders-radius-surface-default: 12px;
+  --dt-borders-radius-container-subdued: 6px;
+  --dt-borders-radius-container-default: 9px;
+  --dt-borders-radius-field-subdued: 3px;
+  --dt-borders-radius-field-default: 6px;
+  --dt-borders-radius-field-emphasized: 9999px;
+}
+
+/* ── Box Shadows (light theme) ────────────────────────────────── */
+:root {
+
+  /* BoxShadows.Surface.Flat */
+  --dt-box-shadows-surface-flat-rest: 0px 0px 0px 1px #2d2e4e0d;
+  --dt-box-shadows-surface-flat-hover: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 4px 8px -2px #2d2e4e12;
+  --dt-box-shadows-surface-flat-active: 0px 0px 0px 1px #2d2e4e0d;
+  --dt-box-shadows-surface-flat-drag: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 7px 17px -2px #2d2e4e52;
+
+  /* BoxShadows.Surface.Raised */
+  --dt-box-shadows-surface-raised-rest: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 4px 8px -2px #2d2e4e12;
+  --dt-box-shadows-surface-raised-hover: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 5px 11px -2px #2d2e4e29;
+  --dt-box-shadows-surface-raised-active: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 4px 8px -2px #2d2e4e12;
+  --dt-box-shadows-surface-raised-drag: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 7px 17px -2px #2d2e4e52;
+
+  /* BoxShadows.Surface.Floating */
+  --dt-box-shadows-surface-floating-rest: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 5px 11px -2px #2d2e4e29;
+  --dt-box-shadows-surface-floating-hover: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 6px 14px -2px #2d2e4e3d;
+  --dt-box-shadows-surface-floating-active: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 5px 11px -2px #2d2e4e29;
+  --dt-box-shadows-surface-floating-drag: 0px 0px 0px 1px #2d2e4e08, 0px 1px 2px #2d2e4e0d, 0px 7px 17px -2px #2d2e4e52;
+
+  /* BoxShadows.Field.Neutral.Emphasized */
+  --dt-box-shadows-field-neutral-emphasized-rest: inset 0px 0px 0px 1px #2f2f4f1f, inset 0px -1px 0px #2f2f4f14, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #fff;
+  --dt-box-shadows-field-neutral-emphasized-hover: inset 0px 0px 0px 1px #2f2f4f1f, inset 0px -1px 0px #2f2f4f14, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #dadbe4;
+  --dt-box-shadows-field-neutral-emphasized-active: inset 0px 0px 0px 1px #2f2f4f1f, inset 0px -1px 0px #2f2f4f14, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #d0d1dc;
+
+  /* BoxShadows.Field.Neutral */
+  --dt-box-shadows-field-neutral-accent: inset 0px 0px 0px 1px #0000004d, inset 0px -1px 0px #0000008c, 0px 1px 1px -1px #2d2e4e1f;
+  --dt-box-shadows-field-neutral-disabled: inset 0px 0px 0px 1px #2f2f4f0f, inset 0px -1px 0px #2f2f4f0a, 0px 1px 1px -1px #2d2e4e1f;
+
+  /* BoxShadows.Field.Primary.Emphasized */
+  --dt-box-shadows-field-primary-emphasized-rest: inset 0px 0px 0px 1px #250f980f, inset 0px -1px 0px #250f981a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #e1e5f7;
+  --dt-box-shadows-field-primary-emphasized-hover: inset 0px 0px 0px 1px #250f980f, inset 0px -1px 0px #250f981a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #d5dbf6;
+  --dt-box-shadows-field-primary-emphasized-active: inset 0px 0px 0px 1px #250f980f, inset 0px -1px 0px #250f981a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #c9d1f4;
+
+  /* BoxShadows.Field.Primary */
+  --dt-box-shadows-field-primary-accent: inset 0px 0px 0px 1px #250f9833, inset 0px -1px 0px #250f984d, 0px 1px 1px -1px #2d2e4e1f;
+  --dt-box-shadows-field-primary-disabled: inset 0px 0px 0px 1px #2f2f4f0f, inset 0px -1px 0px #2f2f4f0a, 0px 1px 1px -1px #2d2e4e1f;
+
+  /* BoxShadows.Field.Success.Emphasized */
+  --dt-box-shadows-field-success-emphasized-rest: inset 0px 0px 0px 1px #003b360f, inset 0px -1px 0px #003b361a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #e0e7e6;
+  --dt-box-shadows-field-success-emphasized-hover: inset 0px 0px 0px 1px #003b360f, inset 0px -1px 0px #003b361a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #d3dedd;
+  --dt-box-shadows-field-success-emphasized-active: inset 0px 0px 0px 1px #003b360f, inset 0px -1px 0px #003b361a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #c7d5d3;
+
+  /* BoxShadows.Field.Success */
+  --dt-box-shadows-field-success-accent: inset 0px 0px 0px 1px #003b3626, inset 0px -1px 0px #003b364d, 0px 1px 1px -1px #2d2e4e1f;
+  --dt-box-shadows-field-success-disabled: inset 0px 0px 0px 1px #2f2f4f0f, inset 0px -1px 0px #2f2f4f0a, 0px 1px 1px -1px #2d2e4e1f;
+
+  /* BoxShadows.Field.Warning.Emphasized */
+  --dt-box-shadows-field-warning-emphasized-rest: inset 0px 0px 0px 1px #512a000f, inset 0px -1px 0px #512a001a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #f9f0e5;
+  --dt-box-shadows-field-warning-emphasized-hover: inset 0px 0px 0px 1px #512a000f, inset 0px -1px 0px #512a001a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #f9ebdb;
+  --dt-box-shadows-field-warning-emphasized-active: inset 0px 0px 0px 1px #512a000f, inset 0px -1px 0px #512a001a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #f9e6d0;
+
+  /* BoxShadows.Field.Warning */
+  --dt-box-shadows-field-warning-accent: inset 0px 0px 0px 1px #512a001a, inset 0px -1px 0px #512a0033, 0px 1px 1px -1px #2d2e4e1f;
+  --dt-box-shadows-field-warning-disabled: inset 0px 0px 0px 1px #2f2f4f0f, inset 0px -1px 0px #2f2f4f0a, 0px 1px 1px -1px #2d2e4e1f;
+
+  /* BoxShadows.Field.Critical.Emphasized */
+  --dt-box-shadows-field-critical-emphasized-rest: inset 0px 0px 0px 1px #7500130f, inset 0px -1px 0px #7500131a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #f8e1e1;
+  --dt-box-shadows-field-critical-emphasized-hover: inset 0px 0px 0px 1px #7500130f, inset 0px -1px 0px #7500131a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #f6d6d5;
+  --dt-box-shadows-field-critical-emphasized-active: inset 0px 0px 0px 1px #7500130f, inset 0px -1px 0px #7500131a, 0px 1px 1px -1px #2d2e4e1f, inset 0px 0px 0px 1px #f5cac9;
+
+  /* BoxShadows.Field.Critical */
+  --dt-box-shadows-field-critical-accent: inset 0px 0px 0px 1px #75001333, inset 0px -1px 0px #7500134d, 0px 1px 1px -1px #2d2e4e1f;
+  --dt-box-shadows-field-critical-disabled: inset 0px 0px 0px 1px #2f2f4f0f, inset 0px -1px 0px #2f2f4f0a, 0px 1px 1px -1px #2d2e4e1f;
+}
+
+/* ── Box Shadows (dark theme overrides) ───────────────────────── */
+[data-theme="dark"] {
+
+  /* BoxShadows.Surface.Flat */
+  --dt-box-shadows-surface-flat-rest: 0px 0px 0px 1px #f0f0f514;
+  --dt-box-shadows-surface-flat-hover: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 4px 8px #112c;
+  --dt-box-shadows-surface-flat-active: 0px 0px 0px 1px #f0f0f514;
+  --dt-box-shadows-surface-flat-drag: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 13px 8px #112c;
+
+  /* BoxShadows.Surface.Raised */
+  --dt-box-shadows-surface-raised-rest: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 4px 8px #112c;
+  --dt-box-shadows-surface-raised-hover: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 7px 8px #112c;
+  --dt-box-shadows-surface-raised-active: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 4px 8px #112c;
+  --dt-box-shadows-surface-raised-drag: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 13px 8px #112c;
+
+  /* BoxShadows.Surface.Floating */
+  --dt-box-shadows-surface-floating-rest: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 7px 8px #112c;
+  --dt-box-shadows-surface-floating-hover: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 10px 8px #112c;
+  --dt-box-shadows-surface-floating-active: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 7px 8px #112c;
+  --dt-box-shadows-surface-floating-drag: 0px 0px 0px 1px #f0f0f514, 0px 1px 2px #112, 0px 13px 8px #112c;
+
+  /* BoxShadows.Field.Neutral.Emphasized */
+  --dt-box-shadows-field-neutral-emphasized-rest: inset 0px 0px 0px 1px #ebecff1f, inset 0px 1px 0px #ebecff14, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #112;
+  --dt-box-shadows-field-neutral-emphasized-hover: inset 0px 0px 0px 1px #ebecff1f, inset 0px 1px 0px #ebecff14, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #3b3b52;
+  --dt-box-shadows-field-neutral-emphasized-active: inset 0px 0px 0px 1px #ebecff1f, inset 0px 1px 0px #ebecff14, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #44445c;
+
+  /* BoxShadows.Field.Neutral */
+  --dt-box-shadows-field-neutral-accent: inset 0px 0px 0px 1px #ffffff4d, inset 0px 1px 0px #ffffff8c, 0px 1px 1px -1px #f0f0f51f;
+  --dt-box-shadows-field-neutral-disabled: inset 0px 0px 0px 1px #ebecff12, inset 0px 1px 0px #ebecff0a, 0px 1px 1px -1px #f0f0f51f;
+
+  /* BoxShadows.Field.Primary.Emphasized */
+  --dt-box-shadows-field-primary-emphasized-rest: inset 0px 0px 0px 1px #eef1ff0f, inset 0px 1px 0px #eef1ff1a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #313150;
+  --dt-box-shadows-field-primary-emphasized-hover: inset 0px 0px 0px 1px #eef1ff0f, inset 0px 1px 0px #eef1ff1a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #39395d;
+  --dt-box-shadows-field-primary-emphasized-active: inset 0px 0px 0px 1px #eef1ff0f, inset 0px 1px 0px #eef1ff1a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #42426a;
+
+  /* BoxShadows.Field.Primary */
+  --dt-box-shadows-field-primary-accent: inset 0px 0px 0px 1px #eef1ff26, inset 0px 1px 0px #eef1ff40, 0px 1px 1px -1px #f0f0f51f;
+  --dt-box-shadows-field-primary-disabled: inset 0px 0px 0px 1px #ebecff12, inset 0px 1px 0px #ebecff0a, 0px 1px 1px -1px #f0f0f51f;
+
+  /* BoxShadows.Field.Success.Emphasized */
+  --dt-box-shadows-field-success-emphasized-rest: inset 0px 0px 0px 1px #aafef50f, inset 0px 1px 0px #aafef51a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #273644;
+  --dt-box-shadows-field-success-emphasized-hover: inset 0px 0px 0px 1px #aafef50f, inset 0px 1px 0px #aafef51a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #2b404c;
+  --dt-box-shadows-field-success-emphasized-active: inset 0px 0px 0px 1px #aafef50f, inset 0px 1px 0px #aafef51a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #304a54;
+
+  /* BoxShadows.Field.Success */
+  --dt-box-shadows-field-success-accent: inset 0px 0px 0px 1px #aafef533, inset 0px 1px 0px #aafef540, 0px 1px 1px -1px #f0f0f51f;
+  --dt-box-shadows-field-success-disabled: inset 0px 0px 0px 1px #ebecff12, inset 0px 1px 0px #ebecff0a, 0px 1px 1px -1px #f0f0f51f;
+
+  /* BoxShadows.Field.Warning.Emphasized */
+  --dt-box-shadows-field-warning-emphasized-rest: inset 0px 0px 0px 1px #ffecc30f, inset 0px 1px 0px #ffecc31a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #403537;
+  --dt-box-shadows-field-warning-emphasized-hover: inset 0px 0px 0px 1px #ffecc30f, inset 0px 1px 0px #ffecc31a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #4e3e39;
+  --dt-box-shadows-field-warning-emphasized-active: inset 0px 0px 0px 1px #ffecc30f, inset 0px 1px 0px #ffecc31a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #5d483c;
+
+  /* BoxShadows.Field.Warning */
+  --dt-box-shadows-field-warning-accent: inset 0px 0px 0px 1px #ffecc340, inset 0px 1px 0px #ffecc373, 0px 1px 1px -1px #f0f0f51f;
+  --dt-box-shadows-field-warning-disabled: inset 0px 0px 0px 1px #ebecff12, inset 0px 1px 0px #ebecff0a, 0px 1px 1px -1px #f0f0f51f;
+
+  /* BoxShadows.Field.Critical.Emphasized */
+  --dt-box-shadows-field-critical-emphasized-rest: inset 0px 0px 0px 1px #ffeceb0f, inset 0px 1px 0px #ffeceb1a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #3c2131;
+  --dt-box-shadows-field-critical-emphasized-hover: inset 0px 0px 0px 1px #ffeceb0f, inset 0px 1px 0px #ffeceb1a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #482332;
+  --dt-box-shadows-field-critical-emphasized-active: inset 0px 0px 0px 1px #ffeceb0f, inset 0px 1px 0px #ffeceb1a, 0px 1px 1px -1px #11112280, inset 0px 0px 0px 1px #542433;
+
+  /* BoxShadows.Field.Critical */
+  --dt-box-shadows-field-critical-accent: inset 0px 0px 0px 1px #ffeceb33, inset 0px 1px 0px #ffeceb40, 0px 1px 1px -1px #f0f0f51f;
+  --dt-box-shadows-field-critical-disabled: inset 0px 0px 0px 1px #ebecff12, inset 0px 1px 0px #ebecff0a, 0px 1px 1px -1px #f0f0f51f;
+}
+
+/* ── Elevations ───────────────────────────────────────────────── */
+:root {
+  --dt-elevations-default: 1;
+  --dt-elevations-sticky: 10;
+  --dt-elevations-overlay: 20;
+  --dt-elevations-notification: 1999999999;
+}
+
+/* ── Breakpoints ──────────────────────────────────────────────── */
+:root {
+  --dt-breakpoints-max-mobile: 640px;
+  --dt-breakpoints-min-tablet: 641px;
+  --dt-breakpoints-max-tablet: 960px;
+  --dt-breakpoints-min-desktop: 961px;
+  --dt-breakpoints-max-desktop: 1920px;
+  --dt-breakpoints-min-widescreen: 1921px;
+}
+
+/* ── Animations & Easings ─────────────────────────────────────── */
+:root {
+
+  /* Animations */
+  --dt-animations-open-duration-fast: 170ms;
+  --dt-animations-close-duration-fast: 0ms;
+  --dt-animations-slide-in-duration-fast: 200ms;
+  --dt-animations-slide-out-duration-fast: 150ms;
+  --dt-animations-fade-in-duration-fast: 150ms;
+  --dt-animations-fade-out-duration-fast: 150ms;
+  --dt-animations-hover-duration-base: 150ms;
+  --dt-animations-staggered-motion-duration-fast: 250ms;
+  --dt-animations-expand-collapse-duration-fast: 250ms;
+  --dt-animations-move-duration-fast: 150ms;
+  --dt-animations-rescale-duration-fast: 170ms;
+
+  /* Easings */
+  --dt-easings-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --dt-easings-accelerate: cubic-bezier(0.5, 0, 1, 1);
+  --dt-easings-slow-in-fast-out: cubic-bezier(0.8, 0, 0.5, 1);
+  --dt-easings-fast-in-slow-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dt-easings-out-back: cubic-bezier(0.4, 1.6, 0.7, 1);
+  --dt-easings-rotate-elastic: cubic-bezier(0.8, 0.3, 0.3, 0.8);
+
+  /* Timings */
+  --dt-timings-instant-default: 0ms;
+  --dt-timings-offset-short: 20ms;
+  --dt-timings-fast-quick: 150ms;
+  --dt-timings-base-quick: 250ms;
+  --dt-timings-slow-default: 400ms;
+  --dt-timings-slowest-default: 1000ms;
+}
+
+/* ── Typography utility classes ───────────────────────────────── */
+.dt-display-1 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-display-level-1-size);
+  font-weight: var(--dt-typography-display-level-1-weight);
+  line-height: var(--dt-typography-display-level-1-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0; letter-spacing: -0.02em;
+}
+.dt-display-2 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-display-level-2-size);
+  font-weight: var(--dt-typography-display-level-2-weight);
+  line-height: var(--dt-typography-display-level-2-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0; letter-spacing: -0.015em;
+}
+.dt-display-3 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-display-level-3-size);
+  font-weight: var(--dt-typography-display-level-3-weight);
+  line-height: var(--dt-typography-display-level-3-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0; letter-spacing: -0.01em;
+}
+.dt-h1 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-heading-level-1-size);
+  font-weight: var(--dt-typography-heading-level-1-weight);
+  line-height: var(--dt-typography-heading-level-1-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0;
+}
+.dt-h2 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-heading-level-2-size);
+  font-weight: var(--dt-typography-heading-level-2-weight);
+  line-height: var(--dt-typography-heading-level-2-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0;
+}
+.dt-h3 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-heading-level-3-size);
+  font-weight: var(--dt-typography-heading-level-3-weight);
+  line-height: var(--dt-typography-heading-level-3-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0;
+}
+.dt-h4 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-heading-level-4-size);
+  font-weight: var(--dt-typography-heading-level-4-weight);
+  line-height: var(--dt-typography-heading-level-4-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0;
+}
+.dt-h5 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-heading-level-5-size);
+  font-weight: var(--dt-typography-heading-level-5-weight);
+  line-height: var(--dt-typography-heading-level-5-line-height);
+  color: var(--dt-colors-text-neutral-default);
+  margin: 0;
+}
+.dt-h6 {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-heading-level-6-size);
+  font-weight: var(--dt-typography-heading-level-6-weight);
+  line-height: var(--dt-typography-heading-level-6-line-height);
+  color: var(--dt-colors-text-neutral-subdued);
+  margin: 0; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.dt-body    {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-text-base-default-size);
+  font-weight: var(--dt-typography-text-base-default-weight);
+  line-height: var(--dt-typography-text-base-default-line-height);
+  color: var(--dt-colors-text-neutral-default);
+}
+.dt-body-sm {
+  font-family: var(--dt-font-family-sans);
+  font-size: var(--dt-typography-text-small-default-size);
+  font-weight: var(--dt-typography-text-small-default-weight);
+  line-height: var(--dt-typography-text-small-default-line-height);
+  color: var(--dt-colors-text-neutral-subdued);
+}
+.dt-body-lg {
+  font-family: var(--dt-font-family-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--dt-colors-text-neutral-default);
+}
+.dt-code {
+  font-family: var(--dt-font-family-mono);
+  font-size: var(--dt-typography-code-base-default-size);
+  font-weight: var(--dt-typography-code-base-default-weight);
+  line-height: var(--dt-typography-code-base-default-line-height);
+  color: var(--dt-colors-text-neutral-default);
+}
+.dt-caption {
+  font-family: var(--dt-font-family-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dt-colors-text-neutral-subdued);
+}

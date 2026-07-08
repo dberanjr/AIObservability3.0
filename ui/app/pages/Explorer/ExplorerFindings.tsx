@@ -1,9 +1,8 @@
 import React from "react";
-import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { FindingCard } from "../../components/FindingCard";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState } from "../../components/EmptyState";
 import type { Finding } from "../../components/drawers/types";
 
 export interface ExplorerFindingsProps {
@@ -17,12 +16,18 @@ const ExplorerFindingsBody = ({
   isLoading,
   onSelect,
 }: ExplorerFindingsProps) => {
+  // A fixed responsive track keeps cards a stable width regardless of how many
+  // heuristics fired (2 findings no longer stretch to full width), left-aligned
+  // and wrapping instead of restretching (Explorer-11). auto-fill (not auto-fit)
+  // leaves empty tracks so a couple of cards don't balloon.
+  const GRID_COLUMNS = "repeat(auto-fill, minmax(220px, 1fr))";
+
   if (isLoading && findings.length === 0) {
     return (
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: `repeat(5, minmax(0, 1fr))`,
+          gridTemplateColumns: GRID_COLUMNS,
           gap: 12,
           padding: 12,
         }}
@@ -36,11 +41,11 @@ const ExplorerFindingsBody = ({
 
   if (findings.length === 0) {
     return (
-      <Flex style={{ padding: "16px 12px" }}>
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No findings surfaced in the current scope.
-        </Text>
-      </Flex>
+      <EmptyState
+        bare
+        cause="no-activity"
+        title="No findings surfaced in the current scope."
+      />
     );
   }
 
@@ -48,7 +53,7 @@ const ExplorerFindingsBody = ({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: `repeat(${Math.min(findings.length, 5)}, minmax(0, 1fr))`,
+        gridTemplateColumns: GRID_COLUMNS,
         gap: 12,
         padding: 12,
       }}

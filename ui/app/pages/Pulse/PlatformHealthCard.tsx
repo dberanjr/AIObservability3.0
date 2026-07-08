@@ -11,6 +11,8 @@ import {
   TargetFilledIcon,
 } from "@dynatrace/strato-icons";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorState } from "../../components/ErrorState";
 import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
 import type { Pillar, PillarStatus } from "./types";
 import { usePulseHealth } from "./usePulseHealth";
@@ -106,9 +108,12 @@ const PillarColumn = ({ pillar }: { pillar: Pillar }) => {
 
       <Flex flexDirection="column" gap={6}>
         {pillar.reasons.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No signals available yet.
-          </Text>
+          <EmptyState
+            bare
+            cause="no-activity"
+            title="No signals yet"
+            description="No signals for this pillar in the current scope."
+          />
         ) : (
           pillar.reasons.map((r, i) => (
             <Flex key={i} alignItems="flex-start" gap={6}>
@@ -292,6 +297,15 @@ const PlatformHealthBody = () => {
               </Flex>
             ))}
           </Flex>
+        ) : health.error ? (
+          // A failed health query must read as an error, not as three empty
+          // "no-data" pillars (STATE-2). Retry re-runs every underlying query.
+          <ErrorState
+            title="Couldn't load platform health"
+            error={health.error}
+            onRetry={health.refetch}
+            bare
+          />
         ) : (
           <Flex gap={24} alignItems="stretch">
             <PillarColumn pillar={health.operational} />
@@ -302,7 +316,7 @@ const PlatformHealthBody = () => {
           </Flex>
         )}
 
-        {!health.isLoading && (
+        {!health.isLoading && !health.error && (
           <>
             <button
               type="button"

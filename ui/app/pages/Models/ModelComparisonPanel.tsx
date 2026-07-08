@@ -1,20 +1,170 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { ComparisonCard } from "./ComparisonCard";
 import { IntelligenceRecommendationPanel } from "./IntelligenceRecommendationPanel";
 import {
+  DIMENSIONS,
+  DIMENSION_LABEL,
   USE_CASE_PROFILES,
   compareModels,
   findProfile,
+  type ScoreDimension,
   type UseCaseProfile,
 } from "./scoring";
-import type { ModelRow } from "./useModels";
+import { useModels, type ModelRow } from "./useModels";
+import { useScope } from "../../scope/ScopeContext";
+import { THIRTY_DAYS_MS } from "../Explorer/serviceModelCost";
+import { timeframeDurationMs } from "../Explorer/useServiceModelDetail";
 
 const ACCENT_A = "var(--blue)";
 const ACCENT_B = "var(--purple)";
 
-const UpstreamBand = ({ profile }: { profile: UseCaseProfile }) => (
+const LABEL_STYLE: React.CSSProperties = {
+  fontSize: 10.5,
+  fontWeight: 600,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--text-3)",
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: "4px 8px",
+  borderRadius: 6,
+  border: "1px solid var(--border)",
+  background: "var(--surface)",
+  fontSize: 12.5,
+  color: "var(--text)",
+  maxWidth: "100%",
+};
+
+/** A labelled dropdown used for the use-case / service / upstream selectors. */
+const Picker = ({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+}) => (
+  <Flex flexDirection="column" gap={4} style={{ minWidth: 0, flex: 1 }}>
+    <Text style={LABEL_STYLE}>{label}</Text>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...selectStyle, fontFamily: "var(--mono, monospace)" }}
+    >
+      {children}
+    </select>
+  </Flex>
+);
+
+/** Editable weight sliders (0–100 per dimension). Scores are weighted averages,
+ *  so absolute magnitudes don't matter — only the ratios between dimensions. */
+const WeightSliders = ({
+  weights,
+  edited,
+  onChange,
+  onReset,
+}: {
+  weights: Record<ScoreDimension, number>;
+  edited?: boolean;
+  onChange: (dim: ScoreDimension, value: number) => void;
+  onReset: () => void;
+}) => (
+  <Flex flexDirection="column" gap={8}>
+    <Flex alignItems="center" justifyContent="space-between">
+      <Flex alignItems="center" gap={6}>
+        <Text style={LABEL_STYLE}>Scoring weights</Text>
+        {edited && (
+          <span
+            title="Weights differ from the use-case preset"
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: "var(--amber)",
+              background: "color-mix(in oklab, var(--amber) 16%, transparent)",
+              border: "1px solid color-mix(in oklab, var(--amber) 45%, transparent)",
+              borderRadius: 4,
+              padding: "0 4px",
+            }}
+          >
+            edited
+          </span>
+        )}
+      </Flex>
+      <button
+        type="button"
+        onClick={onReset}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          fontSize: 11,
+          color: "var(--blue)",
+          fontWeight: 600,
+        }}
+      >
+        Reset to preset
+      </button>
+    </Flex>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        gap: "8px 20px",
+      }}
+    >
+      {DIMENSIONS.map((dim) => (
+        <Flex key={dim} alignItems="center" gap={8}>
+          <Text
+            style={{
+              fontSize: 11.5,
+              color: "var(--text-2)",
+              width: 96,
+              flex: "0 0 auto",
+            }}
+          >
+            {DIMENSION_LABEL[dim]}
+          </Text>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={weights[dim]}
+            onChange={(e) => onChange(dim, Number(e.target.value))}
+            style={{ flex: 1, minWidth: 0, accentColor: "var(--blue)" }}
+          />
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
+              width: 26,
+              textAlign: "right",
+              flex: "0 0 auto",
+            }}
+          >
+            {weights[dim]}
+          </Text>
+        </Flex>
+      ))}
+    </div>
+  </Flex>
+);
+
+const UpstreamBand = ({
+  profile,
+  upstream,
+}: {
+  profile: UseCaseProfile;
+  upstream: string;
+}) => (
   <Flex
     alignItems="center"
     gap={12}
@@ -28,49 +178,26 @@ const UpstreamBand = ({ profile }: { profile: UseCaseProfile }) => (
   >
     <Flex flexDirection="column" gap={2} style={{ flex: 1, minWidth: 220 }}>
       <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-        Driving upstream service
+        Typical caller for this profile · context only
       </Text>
       <Text
         style={{
           fontSize: 13,
           fontWeight: 600,
           fontFamily: "var(--mono, monospace)",
+          color: "var(--text-2)",
         }}
       >
-        {profile.upstreamService}
+        {upstream || "—"}
       </Text>
       <Text style={{ fontSize: 12, color: "var(--text-2)" }}>
         {profile.description} · min quality:{" "}
         <strong>{profile.minQuality}</strong>
       </Text>
-    </Flex>
-    <Flex gap={6} style={{ flexWrap: "wrap" }}>
-      {(["latency", "cost", "quality", "throughput", "reliability"] as const).map(
-        (k) => (
-          <span
-            key={k}
-            style={{
-              padding: "2px 8px",
-              borderRadius: 999,
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              fontSize: 11,
-              color: "var(--text-2)",
-            }}
-          >
-            <span style={{ textTransform: "capitalize" }}>{k}</span>{" "}
-            <span
-              style={{
-                fontWeight: 600,
-                color: "var(--text)",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {profile.weights[k]}
-            </span>
-          </span>
-        ),
-      )}
+      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+        For context only — the scored metrics below reflect the service being
+        compared, not this caller.
+      </Text>
     </Flex>
   </Flex>
 );
@@ -78,39 +205,67 @@ const UpstreamBand = ({ profile }: { profile: UseCaseProfile }) => (
 const pickInitial = (models: ModelRow[]): [string | null, string | null] => {
   if (models.length === 0) return [null, null];
   const sorted = [...models].sort((a, b) => b.requests - a.requests);
-  return [sorted[0]?.modelKey ?? null, sorted[1]?.modelKey ?? sorted[0]?.modelKey ?? null];
-};
-
-const upstreamFor = (profile: UseCaseProfile, fallback: string[]): string[] => {
-  // Lead with the profile's named upstream, then merge any extra observed names.
-  const seen = new Set<string>([profile.upstreamService]);
-  const out = [profile.upstreamService];
-  for (const s of fallback) {
-    if (!seen.has(s)) {
-      seen.add(s);
-      out.push(s);
-    }
-  }
-  return out;
+  return [
+    sorted[0]?.modelKey ?? null,
+    sorted[1]?.modelKey ?? sorted[0]?.modelKey ?? null,
+  ];
 };
 
 export interface ModelComparisonPanelProps {
-  models: ModelRow[];
-  /** Upstream services observed in the current scope (best-effort context). */
-  observedUpstream: string[];
-  /** Total fleet requests over the scope timeframe — used to project savings. */
-  monthlyRequests: number;
+  /** AI service names for the "service being compared" dropdown. */
+  services: string[];
+  /** Detected upstream caller services for the "driving upstream" dropdown. */
+  upstreamOptions: string[];
 }
 
 export const ModelComparisonPanel = ({
-  models,
-  observedUpstream,
-  monthlyRequests,
+  services,
+  upstreamOptions,
 }: ModelComparisonPanelProps) => {
+  const { scope } = useScope();
   const [profileId, setProfileId] = useState<string>(
     USE_CASE_PROFILES[0]?.id ?? "rag-qna",
   );
   const profile = findProfile(profileId);
+
+  // "Service being compared" — empty = whole fleet. Scoped metrics come from a
+  // service-filtered useModels query so latency/cost/errors reflect that
+  // service's actual traffic.
+  const [selectedService, setSelectedService] = useState<string>("");
+  const { models, isLoading } = useModels(selectedService || undefined);
+
+  // Editable weights, seeded from the profile. Switching the use case discards
+  // edits, but only after an explicit confirm (see handleProfileChange) so an
+  // incidental dropdown change can't silently wipe carefully tuned sliders.
+  const [weights, setWeights] = useState<Record<ScoreDimension, number>>(
+    profile.weights,
+  );
+  const weightsEdited = useMemo(
+    () => DIMENSIONS.some((d) => weights[d] !== profile.weights[d]),
+    [weights, profile],
+  );
+
+  const handleProfileChange = (nextId: string) => {
+    if (
+      weightsEdited &&
+      !window.confirm(
+        "Switching the use case will discard your edited scoring weights. Continue?",
+      )
+    ) {
+      return;
+    }
+    setProfileId(nextId);
+    setWeights(findProfile(nextId).weights);
+  };
+
+  // Driving upstream service — seeded from the profile, overridable. Reset to
+  // the profile's named upstream when the profile changes.
+  const [selectedUpstream, setSelectedUpstream] = useState<string>(
+    profile.upstreamService,
+  );
+  useEffect(() => {
+    setSelectedUpstream(findProfile(profileId).upstreamService);
+  }, [profileId]);
 
   const eligibleModels = useMemo(
     () => models.filter((m) => m.type === "generative" && !m.pricingUnknown),
@@ -124,8 +279,8 @@ export const ModelComparisonPanel = ({
   const [aSelected, setASelected] = useState<string | null>(aKey);
   const [bSelected, setBSelected] = useState<string | null>(bKey);
 
-  // Re-sync selections when the eligible set changes (e.g. scope swap).
-  React.useEffect(() => {
+  // Re-sync selections when the eligible set changes (scope/service swap).
+  useEffect(() => {
     if (!aSelected || !eligibleModels.find((m) => m.modelKey === aSelected)) {
       setASelected(aKey);
     }
@@ -137,9 +292,18 @@ export const ModelComparisonPanel = ({
   const modelA = eligibleModels.find((m) => m.modelKey === aSelected) ?? null;
   const modelB = eligibleModels.find((m) => m.modelKey === bSelected) ?? null;
 
-  const upstream = useMemo(
-    () => upstreamFor(profile, observedUpstream),
-    [profile, observedUpstream],
+  // Project the in-scope generative volume to a 30-day month for savings.
+  const monthlyRequests = useMemo(() => {
+    const reqs = eligibleModels.reduce((acc, m) => acc + m.requests, 0);
+    if (reqs === 0) return 0;
+    const tfMs = timeframeDurationMs(scope.timeframe.from, scope.timeframe.to);
+    if (tfMs <= 0) return reqs;
+    return Math.round(reqs * (THIRTY_DAYS_MS / tfMs));
+  }, [eligibleModels, scope.timeframe]);
+
+  const upstreamChips = useMemo(
+    () => (selectedUpstream ? [selectedUpstream] : upstreamOptions.slice(0, 4)),
+    [selectedUpstream, upstreamOptions],
   );
 
   const result = useMemo(() => {
@@ -148,21 +312,17 @@ export const ModelComparisonPanel = ({
       modelA.requests > 0 ? modelA.cost / modelA.requests : 0;
     const bCostPerReq =
       modelB.requests > 0 ? modelB.cost / modelB.requests : 0;
+    // Apply the user's edited weights on top of the profile.
+    const weightedProfile: UseCaseProfile = { ...profile, weights };
     return compareModels(
-      profile,
+      weightedProfile,
       {
         model: modelA.model,
         avgMs: modelA.avgMs,
         costPerRequest: aCostPerReq,
         requests: modelA.requests,
         errorRatePct: modelA.errorRatePct,
-        pricing: {
-          inputPerMTok: 0,
-          outputPerMTok: 0,
-          contextWindow: null,
-          provider: modelA.provider.label,
-          tier: getTier(modelA),
-        },
+        pricing: modelA.pricing,
       },
       {
         model: modelB.model,
@@ -170,64 +330,77 @@ export const ModelComparisonPanel = ({
         costPerRequest: bCostPerReq,
         requests: modelB.requests,
         errorRatePct: modelB.errorRatePct,
-        pricing: {
-          inputPerMTok: 0,
-          outputPerMTok: 0,
-          contextWindow: null,
-          provider: modelB.provider.label,
-          tier: getTier(modelB),
-        },
+        pricing: modelB.pricing,
       },
       monthlyRequests,
     );
-  }, [profile, modelA, modelB, monthlyRequests]);
+  }, [profile, weights, modelA, modelB, monthlyRequests]);
+
+  const scopeLabel = selectedService
+    ? `metrics scoped to ${selectedService}`
+    : "metrics across the whole fleet";
 
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={16}>
-        <Flex alignItems="baseline" justifyContent="space-between" gap={12}>
-          <Flex flexDirection="column" gap={2}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Model A vs B comparison
-            </Heading>
-            <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-              Scored against the selected use case profile
-            </Text>
-          </Flex>
-          <Flex alignItems="center" gap={6}>
-            <Text
-              style={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-              }}
-            >
-              Use case
-            </Text>
-            <select
-              value={profileId}
-              onChange={(e) => setProfileId(e.target.value)}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                background: "var(--surface)",
-                fontSize: 12.5,
-                color: "var(--text)",
-              }}
-            >
-              {USE_CASE_PROFILES.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </Flex>
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+            Model A vs B comparison
+          </Heading>
+          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+            Scored against the use case profile and weights · {scopeLabel}
+          </Text>
         </Flex>
 
-        <UpstreamBand profile={profile} />
+        {/* Selectors: use case · service being compared · driving upstream */}
+        <Flex gap={12} style={{ flexWrap: "wrap" }}>
+          <Picker label="Use case" value={profileId} onChange={handleProfileChange}>
+            {USE_CASE_PROFILES.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </Picker>
+          <Picker
+            label="Service being compared"
+            value={selectedService}
+            onChange={setSelectedService}
+          >
+            <option value="">All services (fleet)</option>
+            {services.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Picker>
+          <Picker
+            label="Typical caller (context only)"
+            value={selectedUpstream}
+            onChange={setSelectedUpstream}
+          >
+            {/* Keep the profile's named upstream selectable even if topology
+                hasn't surfaced it as a caller. */}
+            {!upstreamOptions.includes(selectedUpstream) && selectedUpstream && (
+              <option value={selectedUpstream}>{selectedUpstream}</option>
+            )}
+            {upstreamOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Picker>
+        </Flex>
+
+        <UpstreamBand profile={profile} upstream={selectedUpstream} />
+
+        <WeightSliders
+          weights={weights}
+          edited={weightsEdited}
+          onChange={(dim, value) =>
+            setWeights((w) => ({ ...w, [dim]: value }))
+          }
+          onReset={() => setWeights(findProfile(profileId).weights)}
+        />
 
         <div
           style={{
@@ -241,7 +414,7 @@ export const ModelComparisonPanel = ({
             model={modelA}
             options={eligibleModels}
             onSelect={setASelected}
-            upstreamServices={upstream}
+            upstreamServices={upstreamChips}
             isWinner={result?.winner === "a"}
             accent={ACCENT_A}
             weightedScore={result ? result.a.weightedTotal : null}
@@ -252,7 +425,7 @@ export const ModelComparisonPanel = ({
             model={modelB}
             options={eligibleModels}
             onSelect={setBSelected}
-            upstreamServices={upstream}
+            upstreamServices={upstreamChips}
             isWinner={result?.winner === "b"}
             accent={ACCENT_B}
             weightedScore={result ? result.b.weightedTotal : null}
@@ -264,23 +437,12 @@ export const ModelComparisonPanel = ({
           <IntelligenceRecommendationPanel result={result} />
         ) : (
           <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            Pick two generative models with known pricing to see the
-            recommendation.
+            {isLoading
+              ? "Loading models…"
+              : "Pick two generative models with known pricing to see the recommendation."}
           </Text>
         )}
       </Flex>
     </Surface>
   );
-};
-
-/** Pull the cached tier off pricing for a ModelRow without re-importing pricing.ts. */
-const getTier = (m: ModelRow) => {
-  // pricing tier is already encoded into the ModelRow via getPricing() inside
-  // useModels — we re-derive here to keep the comparison panel decoupled.
-  if (/opus|claude-(?:opus|sonnet-4)/i.test(m.model)) return "frontier" as const;
-  if (/sonnet|gpt-4\.1|gpt-4o(?!-mini)|gemini-2\.5-pro/i.test(m.model))
-    return "high" as const;
-  if (/haiku|gpt-4o-mini|gemini-2\.5-flash/i.test(m.model)) return "mid" as const;
-  if (/embed|embedding/i.test(m.model)) return "low" as const;
-  return "mid" as const;
 };

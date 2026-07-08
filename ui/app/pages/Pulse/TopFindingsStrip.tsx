@@ -1,10 +1,15 @@
 import React from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { FindingCard } from "../../components/FindingCard";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import type { Finding } from "../../components/drawers/types";
+import {
+  ScanScope,
+  useScanGroup,
+  useScanScope,
+} from "../../scope/ScanReportContext";
 import { useAnomalies } from "./anomalies/useAnomalies";
 
 const MAX_CARDS = 5;
@@ -38,15 +43,27 @@ const IntelBadge = () => (
  * this absorbed the role of the legacy AnomalyPanel.
  */
 const TopFindingsBody = ({ onSelect }: TopFindingsStripProps) => {
-  const { anomalies, isLoading } = useAnomalies();
+  const { anomalies, isLoading, error } = useAnomalies();
   const cards = anomalies.slice(0, MAX_CARDS);
+  // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
+  // so a truncated scan surfaces the amber "Scan budget reached" empty rather
+  // than a misleading "no activity" (STATE-4). A query error already wins via
+  // emptyCause precedence, so a failed detection never reads as "no issues".
+  const limitHit = useScanGroup(useScanScope())?.limitHit ?? false;
+  const emptyKind = emptyCause({ error, limitHit });
 
   return (
       <Flex flexDirection="column" gap={12} style={{ padding: 16 }}>
         {!isLoading && cards.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No issues detected in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause={emptyKind}
+            title={
+              emptyKind === "no-activity"
+                ? "No issues detected in the current scope."
+                : undefined
+            }
+          />
         ) : isLoading && cards.length === 0 ? (
           <div
             style={{
@@ -83,6 +100,8 @@ export const TopFindingsStrip = ({ onSelect }: TopFindingsStripProps) => (
     headerRight={<IntelBadge />}
     defaultOpen
   >
-    <TopFindingsBody onSelect={onSelect} />
+    <ScanScope name="Top issues">
+      <TopFindingsBody onSelect={onSelect} />
+    </ScanScope>
   </CollapsibleCard>
 );

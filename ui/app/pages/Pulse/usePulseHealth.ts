@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
@@ -11,7 +11,7 @@ import {
 } from "./queries";
 import type { Pillar, PulseHealth } from "./types";
 import { QUALITY_EVAL_SETUP_GUIDE } from "./types";
-import { toNum } from "../../data/format";
+import { fmtCountCompact, toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -46,13 +46,6 @@ interface CostBaselineRecord {
 
 const HOURS_PER_WEEK = 24 * 7;
 
-const fmtNum = (n: number): string =>
-  n >= 1_000_000
-    ? `${(n / 1_000_000).toFixed(1)}M`
-    : n >= 1_000
-      ? `${(n / 1_000).toFixed(1)}k`
-      : String(Math.round(n));
-
 const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value));
 
@@ -86,7 +79,7 @@ const operationalPillar = (
 
   const reasons: Pillar["reasons"] = [
     {
-      text: `p95 latency ${p95.toFixed(0)} ms across ${fmtNum(total)} spans`,
+      text: `p95 latency ${p95.toFixed(0)} ms across ${fmtCountCompact(total)} spans`,
       intent: p95 > 4000 ? "critical" : p95 > 2000 ? "warning" : "info",
     },
     {
@@ -136,7 +129,7 @@ const qualityPillar = (
       score: null,
       reasons: [
         {
-          text: `No gen_ai.evaluation.* attrs on ${fmtNum(total)} LLM spans`,
+          text: `No gen_ai.evaluation.* attrs on ${fmtCountCompact(total)} LLM spans`,
           intent: "warning",
         },
         { text: "Add evaluation attrs to LLM spans or run an LLM-as-judge workflow." },
@@ -165,7 +158,7 @@ const qualityPillar = (
     score,
     reasons: [
       {
-        text: `Eval coverage ${coverage.toFixed(0)}% (${fmtNum(withEval)} / ${fmtNum(total)} spans)`,
+        text: `Eval coverage ${coverage.toFixed(0)}% (${fmtCountCompact(withEval)} / ${fmtCountCompact(total)} spans)`,
       },
       ...(avgScore != null
         ? [{ text: `Avg evaluation score ${avgScore.toFixed(2)}` }]
@@ -215,7 +208,7 @@ const costPillar = (
     ratio > 1.5 ? "critical" : ratio > 1.2 ? "warning" : "good";
 
   const reasons: Pillar["reasons"] = [
-    { text: `${fmtNum(totalTokens)} tokens across ${fmtNum(requests)} requests` },
+    { text: `${fmtCountCompact(totalTokens)} tokens across ${fmtCountCompact(requests)} requests` },
     {
       text:
         baselinePerHour > 0
@@ -270,6 +263,21 @@ export const usePulseHealth = (): PulseHealth => {
     { enabled: canQuery, staleTime: 5 * 60_000 },
   );
 
+  const refetch = useCallback(() => {
+    void opResult.refetch();
+    void qualityResult.refetch();
+    void costResult.refetch();
+    void costBaselineResult.refetch();
+    // react-query refetch identities are stable; depending on the whole result
+    // objects would rebuild this callback every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    opResult.refetch,
+    qualityResult.refetch,
+    costResult.refetch,
+    costBaselineResult.refetch,
+  ]);
+
   return useMemo<PulseHealth>(() => {
     const scopeHours = parseScopeHours(scope.timeframe.from);
     const operational = operationalPillar(
@@ -302,6 +310,7 @@ export const usePulseHealth = (): PulseHealth => {
         qualityResult.isLoading ||
         costResult.isLoading,
       error: error ?? undefined,
+      refetch,
     };
   }, [
     scope.timeframe.from,
@@ -318,5 +327,6 @@ export const usePulseHealth = (): PulseHealth => {
     costResult.isLoading,
     costBaselineResult.data,
     costBaselineResult.error,
+    refetch,
   ]);
 };

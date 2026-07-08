@@ -8,6 +8,7 @@ import { costOf } from "../../data/pricing";
 import { partitionAgents } from "../../detection/classifier";
 import { canonicalizeModel } from "../../detection/attributes";
 import { toNum } from "../../data/format";
+import { resolveAgentFramework } from "./frameworkLabel";
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -32,7 +33,10 @@ interface AgentRecord {
   orch_spans?: number;
   avg_ttft_ms?: number | null;
   models?: string[];
-  framework?: string;
+  fw_workflow?: string | null;
+  fw_entity?: string | null;
+  fw_system?: string | null;
+  fw_span?: string | null;
   error_rate_pct?: number;
 }
 
@@ -197,10 +201,10 @@ export const useAgents = (): UseAgentsResult => {
         ),
       );
       const inputTokens = costAttributed
-        ? join!.inputTokens
+        ? join.inputTokens
         : num(r.input_tokens);
       const outputTokens = costAttributed
-        ? join!.outputTokens
+        ? join.outputTokens
         : num(r.output_tokens);
       // Price with the dominant linked model (raw id), via the cache-aware
       // cost model — blended fallback so an unknown model estimates, not $0.
@@ -219,7 +223,7 @@ export const useAgents = (): UseAgentsResult => {
         agent: r.agent,
         service,
         serviceId,
-        framework: r.framework ?? null,
+        framework: resolveAgentFramework(r),
         models,
         invocations,
         p50Ms: num(r.p50_ms),

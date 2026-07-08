@@ -1,4 +1,5 @@
 import React from "react";
+import { CATEGORICAL } from "../../theme/palette";
 
 /**
  * Small inline SVG primitives used inside the Pulse summary tiles. They're
@@ -49,23 +50,16 @@ export interface MiniDonutProps {
   valueFormatter?: (n: number) => string;
   /** Per-slice color. Cycled if fewer colors than values. */
   colors?: string[];
-  /** Big number rendered in the center. */
-  centerValue?: string;
+  /** Big number rendered in the center. Accepts a node so callers can style
+   * parts of it (e.g. a smaller "%" suffix). */
+  centerValue?: React.ReactNode;
   centerLabel?: string;
 }
 
-const DEFAULT_PALETTE = [
-  "var(--blue)",
-  "var(--purple-2)",
-  "var(--cyan)",
-  "var(--green-2)",
-  "var(--pink)",
-  "var(--amber)",
-  "var(--blue-purple)",
-  "var(--purple-dark)",
-  "var(--red)",
-  "var(--green-lime)",
-];
+// Shared, perceptually-spaced categorical ramp (theme/palette.ts). Fixed hexes
+// so the accent Tweak can't collapse two slices onto one hue (UX report
+// Chart-3/4). Spread to a mutable array for the default-prop signature.
+const DEFAULT_PALETTE = [...CATEGORICAL];
 
 /**
  * Compact donut for the summary tiles. Renders slices proportional to
@@ -97,7 +91,7 @@ export const MiniDonut = ({
       ? values
           .map((v, originalIdx) => ({ v, originalIdx }))
           .filter((p) => p.v > 0)
-          .map((p, _, arr) => {
+          .map((p) => {
             const frac = p.v / total;
             const start = angle;
             const end = angle + Math.min(frac * Math.PI * 2, Math.PI * 2 - 0.0001);
@@ -243,11 +237,20 @@ export interface MiniPartialDonutProps {
   color?: string;
   /** Optional center text (already formatted by the caller). */
   centerValue?: string;
+  /** Small second line under the center value (e.g. the numeric score). */
+  centerSub?: string;
+  /** Draw a faint full-ring track behind the arc (reads as "out of 100"). */
+  track?: boolean;
+  /** Accessible label describing the value AND its meaning; when set, the gauge
+   *  is exposed as role="img" so a screen reader announces both together
+   *  (e.g. "Fleet trust index 92 of 100, grade A"). */
+  ariaLabel?: string;
 }
 
 /**
- * Single-arc donut used for percentage-style tiles (e.g. Token efficiency).
- * Background track is a faint full ring; the filled arc spans `percent`%.
+ * Single-arc donut used for percentage-style tiles (e.g. Token efficiency) and
+ * the fleet-posture gauge. With `track`, a faint full ring shows the 0–100
+ * scale; `centerSub` stacks a small score under the big center value.
  */
 export const MiniPartialDonut = ({
   size = 56,
@@ -255,6 +258,9 @@ export const MiniPartialDonut = ({
   percent,
   color = "var(--blue)",
   centerValue,
+  centerSub,
+  track = false,
+  ariaLabel,
 }: MiniPartialDonutProps) => {
   const cx = size / 2;
   const cy = size / 2;
@@ -270,6 +276,8 @@ export const MiniPartialDonut = ({
 
   return (
     <div
+      role={ariaLabel ? "img" : undefined}
+      aria-label={ariaLabel}
       style={{
         position: "relative",
         width: size,
@@ -278,28 +286,59 @@ export const MiniPartialDonut = ({
       }}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-        {/* No visible "track" — the unfilled portion is the tile background. */}
+        {track && (
+          <circle
+            cx={cx}
+            cy={cy}
+            r={(r + rInner) / 2}
+            fill="none"
+            stroke="var(--border)"
+            strokeWidth={thickness}
+            opacity={0.5}
+          />
+        )}
         {clamped > 0 && (
           <path d={arcPath(cx, cy, r, rInner, start, end)} fill={color} />
         )}
       </svg>
-      {centerValue && (
+      {(centerValue || centerSub) && (
         <div
           style={{
             position: "absolute",
             inset: 0,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             pointerEvents: "none",
-            fontSize: Math.max(13, Math.round(size * 0.22)),
-            fontWeight: 700,
-            lineHeight: 1,
-            fontVariantNumeric: "tabular-nums",
             color: "var(--text)",
           }}
         >
-          {centerValue}
+          {centerValue && (
+            <span
+              style={{
+                fontSize: Math.max(13, Math.round(size * 0.3)),
+                fontWeight: 800,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {centerValue}
+            </span>
+          )}
+          {centerSub && (
+            <span
+              style={{
+                fontSize: Math.max(9, Math.round(size * 0.13)),
+                fontWeight: 600,
+                lineHeight: 1.1,
+                color: "var(--text-3)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {centerSub}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -315,31 +354,42 @@ export interface MiniScaleProps {
   max: number;
   /** Optional tick markers (in the same units as value) for quick context. */
   ticks?: number[];
-  /** Color gradient. Defaults to a green→amber→red "intensity" gradient. */
+  /** Color gradient. Defaults to a colorblind-safe single-hue light→dark
+   *  --blue sequential ramp (magnitude, not a red/green good-vs-bad judgment). */
   gradient?: string;
   height?: number;
+  /** Pre-formatted value (with unit) surfaced as a native `title` on hover, so
+   *  the marker's underlying number is reachable by hovering the scale. */
+  valueLabel?: string;
 }
 
 /**
  * Thin horizontal gradient bar with a marker dot — used for the Cost /
  * request tile so it has its own visual idiom distinct from donuts and
  * sparklines. The dot's horizontal position encodes where the value falls
- * between `min` and `max`.
+ * between `min` and `max`. The track is a single-hue light→dark --blue
+ * sequential ramp (colorblind-safe magnitude) rather than the old
+ * green→amber→red good/bad gradient (UX report Chart-7); it follows the active
+ * accent since it is single-accent UI.
  */
 export const MiniScale = ({
   value,
   min = 0,
   max,
   ticks,
-  gradient = "linear-gradient(90deg, var(--green-2), var(--amber), var(--red))",
+  gradient = "linear-gradient(90deg, color-mix(in oklab, var(--blue) 12%, transparent), var(--blue))",
   height = 8,
+  valueLabel,
 }: MiniScaleProps) => {
   const span = Math.max(1e-9, max - min);
   const frac = Math.max(0, Math.min(1, (value - min) / span));
   const dotSize = 10;
 
   return (
-    <div style={{ position: "relative", width: "100%", paddingTop: dotSize / 2 }}>
+    <div
+      title={valueLabel}
+      style={{ position: "relative", width: "100%", paddingTop: dotSize / 2 }}
+    >
       <div
         style={{
           height,

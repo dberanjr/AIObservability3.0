@@ -9,13 +9,10 @@ import {
   MiniPartialDonut,
   MiniScale,
 } from "../../components/charts/TileGlyphs";
-import {
-  ChartModal,
-  useChartExpander,
-} from "../../components/charts/ChartExpander";
-import { InfoTooltip } from "../../components/InfoTooltip";
+import { ChartModal, ExpandButton } from "../../components/charts/ChartExpander";
+import { StatTile } from "../../components/StatTile";
+import { SamplingBadge } from "../../components/SamplingBadge";
 import { FilterTrigger } from "../../components/FilterTrigger";
-import { useTweaks } from "../../tweaks/TweaksContext";
 import {
   fmtCount,
   fmtMs,
@@ -25,7 +22,10 @@ import {
   fmtUSDCompact,
 } from "../../data/format";
 
+import { CATEGORICAL } from "../../theme/palette";
+import { toneToColor } from "../../theme/statusColor";
 import { useScope } from "../../scope/ScopeContext";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
 import type { PulseSummary } from "./usePulseSummary";
 import { useTileBreakdowns, type BreakdownSlice } from "./useTileBreakdowns";
 import { useSpendBreakdown } from "./useSpendBreakdown";
@@ -34,18 +34,10 @@ import { useAnomalies } from "./anomalies/useAnomalies";
 
 type DonutColumnMode = "tokens" | "mcp";
 
-const SLICE_COLORS = [
-  "var(--blue)",
-  "var(--purple-2)",
-  "var(--cyan)",
-  "var(--green-2)",
-  "var(--pink)",
-  "var(--amber)",
-  "var(--blue-purple)",
-  "var(--purple-dark)",
-  "var(--red)",
-  "var(--green-lime)",
-];
+// Shared, perceptually-spaced categorical ramp (theme/palette.ts). Fixed hexes
+// so the accent Tweak can't collapse the donut into duplicate hues
+// (UX report Chart-3/4).
+const SLICE_COLORS = CATEGORICAL;
 
 type McpSortKey =
   | "value" | "p50" | "p95" | "p99"
@@ -226,16 +218,16 @@ const McpCombinedTable = ({
               <td style={tdR}>{fmtMs(s.p50DurationMs)}</td>
               <td style={tdR}>{fmtMs(s.p95DurationMs)}</td>
               <td style={tdR}>{fmtMs(s.p99DurationMs)}</td>
-              <td style={{ ...tdR, color: s.spanErrors > 0 ? "var(--red)" : "var(--text-3)" }}>
+              <td style={{ ...tdR, color: s.spanErrors > 0 ? toneToColor("critical") : "var(--text-3)" }}>
                 {fmtCount(s.spanErrors)}
               </td>
-              <td style={{ ...tdR, color: s.toolErrors > 0 ? "var(--amber)" : "var(--text-3)" }}>
+              <td style={{ ...tdR, color: s.toolErrors > 0 ? toneToColor("warn") : "var(--text-3)" }}>
                 {fmtCount(s.toolErrors)}
               </td>
-              <td style={{ ...tdR, color: totalErrors > 0 ? "var(--red)" : "var(--text-3)" }}>
-                {errorRate.toFixed(1)}%
+              <td style={{ ...tdR, color: totalErrors > 0 ? toneToColor("critical") : "var(--text-3)" }}>
+                {fmtPercent(errorRate, 1)}
               </td>
-              <td style={{ ...tdR, color: "var(--text-3)" }}>{pct.toFixed(1)}%</td>
+              <td style={{ ...tdR, color: "var(--text-3)" }}>{fmtPercent(pct, 1)}</td>
             </tr>
           );
         })}
@@ -289,188 +281,12 @@ const formatTimeframe = (from: string, to: string | undefined): string => {
   return `${from} → ${to ?? "now()"}`;
 };
 
-type TileVariant = "value" | "visual";
-
-interface TileShellProps {
-  label: string;
-  /** Variant "value" shows a big number + optional bottom chart; variant
-   * "visual" centers a single visualization (e.g., a big donut) and skips
-   * the redundant left-side number. */
-  variant?: TileVariant;
-  value?: string;
-  sub?: string;
-  /** Bottom-pinned chart, used by "value" variant. */
-  bottom?: React.ReactNode;
-  /** Centered visualization, used by "visual" variant. */
-  visual?: React.ReactNode;
-  /** Visual variant — extra caption rendered under the centered visual. */
-  visualCaption?: string;
-  /** Short explanation shown when the user hovers the info glyph. */
-  info?: string;
-  /** When set, renders a maximize button that opens a ChartModal containing
-   * `expanded()`. The function is invoked with the modal's available
-   * inner width so the expanded view can size itself. */
-  expanded?: () => {
-    title: string;
-    subtitle?: string;
-    body: React.ReactNode;
-    stats?: { label: string; value: string; sub?: string }[];
-  };
-}
-
-/**
- * Small "expand" icon button — used at the top-right of any tile that
- * exposes a maximized view via the `expanded` prop.
- */
-const TileExpandButton = ({ onClick }: { onClick: () => void }) => (
-  <button
-    type="button"
-    aria-label="Expand"
-    title="Expand"
-    onClick={onClick}
-    style={{
-      all: "unset",
-      cursor: "pointer",
-      padding: 2,
-      borderRadius: 4,
-      color: "var(--text-3)",
-      lineHeight: 0,
-    }}
-  >
-    <svg width={12} height={12} viewBox="0 0 14 14" fill="none" aria-hidden>
-      <path
-        d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9"
-        stroke="currentColor"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  </button>
-);
-
-
-const Tile = ({
-  label,
-  variant = "value",
-  value,
-  sub,
-  bottom,
-  visual,
-  visualCaption,
-  info,
-  expanded,
-}: TileShellProps) => {
-  const { density, tileStyle } = useTweaks();
-  const pad = density === "minimal" ? 4 : density === "compact" ? 8 : 12;
-  const tileOverride: React.CSSProperties =
-    density === "minimal"
-      ? { boxShadow: "none", border: "none", background: "transparent" }
-      : tileStyle === "bordered"
-        ? { boxShadow: "none", border: "1px solid var(--border)" }
-        : tileStyle === "ghost"
-          ? { boxShadow: "none", border: "none", background: "transparent" }
-          : {};
-
-  const expander = useChartExpander();
-  const expandedContent = expanded && expander.open ? expanded() : null;
-
-  return (
-    <Surface
-      elevation="raised"
-      padding={pad}
-      style={{
-        minWidth: 0,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        ...tileOverride,
-      }}
-    >
-      <Flex
-        flexDirection="column"
-        gap={6}
-        style={{ minWidth: 0, flexGrow: 1, height: "100%" }}
-      >
-        <Flex
-          alignItems="flex-start"
-          justifyContent="space-between"
-          gap={6}
-          style={{ minHeight: 28 }}
-        >
-          <Text
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              color: "var(--text-3)",
-              whiteSpace: "normal",
-              lineHeight: 1.2,
-            }}
-          >
-            {label}
-          </Text>
-          <Flex alignItems="center" gap={4}>
-            {expanded && (
-              <TileExpandButton onClick={() => expander.setOpen(true)} />
-            )}
-            {info && <InfoTooltip text={info} />}
-          </Flex>
-        </Flex>
-
-        {variant === "visual" ? (
-          <Flex
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            gap={4}
-            style={{ flexGrow: 1, minHeight: 0, width: "100%" }}
-          >
-            {visual}
-            {visualCaption && (
-              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-                {visualCaption}
-              </Text>
-            )}
-          </Flex>
-        ) : (
-          <>
-            {value !== undefined && (
-              <Text
-                style={{
-                  fontSize: 22,
-                  fontWeight: 600,
-                  fontVariantNumeric: "tabular-nums",
-                  lineHeight: 1,
-                  color: "var(--text)",
-                }}
-              >
-                {value}
-              </Text>
-            )}
-            {sub && (
-              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-                {sub}
-              </Text>
-            )}
-            {bottom && <div style={{ marginTop: "auto" }}>{bottom}</div>}
-          </>
-        )}
-      </Flex>
-      {expandedContent && (
-        <ChartModal
-          open={expander.open}
-          onClose={() => expander.setOpen(false)}
-          title={expandedContent.title}
-          subtitle={expandedContent.subtitle}
-          stats={expandedContent.stats}
-        >
-          {expandedContent.body}
-        </ChartModal>
-      )}
-    </Surface>
-  );
+/** Rich content a tile's maximize button reveals in the shared ChartModal. */
+type ExpandedContent = {
+  title: string;
+  subtitle?: string;
+  body: React.ReactNode;
+  stats?: { label: string; value: string; sub?: string }[];
 };
 
 const TileSkeleton = () => (
@@ -498,19 +314,19 @@ export interface SummaryTilesRowProps {
  * tile has its own visualization.
  */
 // Explicit column counts at decreasing container widths. With 124px tile
-// minimum and 10px gap, the math is `cols * 124 + (cols - 1) * 10`.
-// Steps are picked so the row wraps in deliberate chunks (9 → 6 → 3 → 2)
-// rather than dropping one tile at a time.
-//   1196px  → 9 cols  (one row)
-//    794px  → 6 cols  (6 + 3)
-//    392px  → 3 cols  (3 + 3 + 3)
-//    258px  → 2 cols
+// minimum and the shared --d-gap grid gap (14px), the math is
+// `cols * 124 + (cols - 1) * 14`. Steps are picked so the row wraps in
+// deliberate chunks (9 → 6 → 3 → 2) rather than dropping one tile at a time.
+//   1228px  → 9 cols  (one row)
+//    814px  → 6 cols  (6 + 3)
+//    400px  → 3 cols  (3 + 3 + 3)
+//    262px  → 2 cols
 //   below   → 1 col
 const COLUMN_BREAKPOINTS: Array<{ minPx: number; cols: number }> = [
-  { minPx: 1196, cols: 9 },
-  { minPx: 794, cols: 6 },
-  { minPx: 392, cols: 3 },
-  { minPx: 258, cols: 2 },
+  { minPx: 1228, cols: 9 },
+  { minPx: 814, cols: 6 },
+  { minPx: 400, cols: 3 },
+  { minPx: 262, cols: 2 },
 ];
 
 const pickColumns = (width: number): number => {
@@ -545,10 +361,12 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
   const sev = { critical: 0, warning: 0, info: 0 };
   for (const a of anomalies) sev[a.severity] += 1;
   const findingsTotal = sev.critical + sev.warning + sev.info;
+  // Severity → color via the shared tone map (CONS-4). info has no tone in the
+  // vocabulary, so it keeps the decorative --blue.
   const findingSlices = (
     [
-      ["critical", "var(--red)", sev.critical],
-      ["warning", "var(--amber)", sev.warning],
+      ["critical", toneToColor("critical"), sev.critical],
+      ["warning", toneToColor("warn"), sev.warning],
       ["info", "var(--blue)", sev.info],
     ] as const
   ).filter(([, , n]) => n > 0);
@@ -575,6 +393,9 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
   const wrapRef = useRef<HTMLDivElement | null>(null);
   // Default until the observer fires — avoids a jarring reflow on first mount.
   const [columns, setColumns] = useState(initialColumns);
+  // Which tile (if any) has its maximized ChartModal open. A single modal is
+  // driven by an id so we don't need one useChartExpander per tile.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!wrapRef.current || typeof ResizeObserver === "undefined") return;
@@ -588,7 +409,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
   const gridStyle: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-    gap: 10,
+    gap: "var(--d-gap)",
   };
 
   if (summary.isLoading && summary.tokens == null) {
@@ -607,6 +428,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
     values: number[],
     color: string,
     fmt: (n: number) => string,
+    ariaLabel?: string,
   ) =>
     values.length > 1 ? (
       <Sparkline
@@ -615,6 +437,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
         height={24}
         valueFormatter={fmt}
         labels={summary.spark.labels}
+        ariaLabel={ariaLabel}
       />
     ) : null;
 
@@ -773,7 +596,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
                         <td style={{ padding: "8px", textAlign: "right" }}>{fmt(s.value)}</td>
                         <td style={{ padding: "8px", textAlign: "right" }}>{fmtTokens(s.tokens)}</td>
                         <td style={{ padding: "8px", textAlign: "right" }}>{fmtUSD(s.cost)}</td>
-                        <td style={{ padding: "8px", textAlign: "right", color: "var(--text-3)" }}>{pct.toFixed(1)}%</td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "var(--text-3)" }}>{fmtPercent(pct, 1)}</td>
                       </tr>
                     );
                   })}
@@ -812,9 +635,94 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
   // visually anchors to the same color as the token consumption chart.
   const efficiencyColor = "var(--blue)";
 
+  // Maximize builders keyed by tile id. Each tile routes StatTile's
+  // `headerRight` expand button through setExpandedId; the single ChartModal
+  // below renders whichever builder is active. Builders are only invoked when
+  // their tile is open, so the closures stay cheap.
+  const expandBuilders: Record<string, () => ExpandedContent> = {
+    tokens: () =>
+      sparklineExpanded(
+        "Tokens",
+        "Per-interval sum of input + output tokens across the active timeframe.",
+        summary.spark.tokens,
+        fmtTokens,
+      ),
+    spend: () =>
+      sparklineExpanded(
+        "Spend",
+        "Per-interval blended cost derived from token usage and default pricing.",
+        summary.spark.spend,
+        fmtUSDCompact,
+      ),
+    p95: () =>
+      sparklineExpanded(
+        "P95 latency",
+        "Per-interval 95th percentile of span duration.",
+        summary.spark.p95Ms,
+        fmtMs,
+      ),
+    error: () =>
+      sparklineExpanded(
+        "Error rate",
+        "Per-interval fraction of spans with an exception.type set.",
+        summary.spark.errorRatePct,
+        (n) => fmtPercent(n, 1),
+      ),
+    models: () =>
+      donutExpanded(
+        "Models",
+        "Distinct models invoked, sized by request volume. Version suffixes collapsed.",
+        summary.models,
+        "Model",
+        breakdowns.models,
+        (n) => `${fmtCount(n)} req`,
+      ),
+    mcpServers: () =>
+      donutExpanded(
+        "MCP servers",
+        "Distinct MCP workflows (traceloop.workflow.name ending in .mcp).",
+        summary.mcpServers,
+        "Server",
+        breakdowns.mcpServers,
+        (n) => `${fmtCount(n)} req`,
+        "mcp",
+      ),
+    tools: () =>
+      donutExpanded(
+        "Tools",
+        "Distinct tools invoked within MCP workflows, sized by call count.",
+        summary.mcpTools,
+        "Tool",
+        breakdowns.mcpTools,
+        (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
+        "mcp",
+      ),
+  };
+  if (showMcp && hasToolErrors) {
+    expandBuilders.mcpErrors = () =>
+      donutExpanded(
+        "MCP errors",
+        "Tool-call errors (span + functional) broken down by tool.",
+        totalToolErrors,
+        "error",
+        toolErrorSlices,
+        (n) => `${fmtCount(n)} err`,
+        "mcp",
+      );
+  }
+
+  const expandBtn = (id: string, label: string) => (
+    <ExpandButton ariaLabel={label} onClick={() => setExpandedId(id)} />
+  );
+
+  const activeBuilder = expandedId ? expandBuilders[expandedId] : undefined;
+  const expandedContent = activeBuilder ? activeBuilder() : null;
+
   return (
+    <>
     <div ref={wrapRef} style={gridStyle}>
-      <Tile
+      <ScanScopedTile name="Tokens">
+      <StatTile
         label="Tokens"
         info="Total tokens (input + output) consumed by GenAI calls in the current scope. Counts/sums are extrapolated to the unsampled population when sampling is on."
         value={fmtTokens(summary.tokens)}
@@ -823,103 +731,100 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
             ? `${fmtCount(summary.requests)} req`
             : undefined
         }
-        bottom={renderSpark(summary.spark.tokens, "var(--blue)", fmtTokens)}
-        expanded={() =>
-          sparklineExpanded(
-            "Tokens",
-            "Per-interval sum of input + output tokens across the active timeframe.",
-            summary.spark.tokens,
-            fmtTokens,
-          )
+        headerRight={expandBtn("tokens", "Expand Tokens")}
+        media={
+          <Flex flexDirection="column" gap={6} style={{ width: "100%" }}>
+            <SamplingBadge variant="compact" />
+            {renderSpark(summary.spark.tokens, "var(--blue)", fmtCount, "Tokens trend")}
+          </Flex>
         }
       />
-      <Tile
+      </ScanScopedTile>
+      <ScanScopedTile name="Spend">
+      <StatTile
         label="Spend"
         info="USD spend = actual (models priced in the table) + estimated (models not in the table, costed at a blended fallback rate). The sub-line splits the two. Counts are extrapolated to the unsampled population when sampling is on."
         value={fmtUSDCompact(totalSpend)}
         sub={spendSub}
-        bottom={renderSpark(summary.spark.spend, "var(--blue)", fmtUSDCompact)}
-        expanded={() =>
-          sparklineExpanded(
-            "Spend",
-            "Per-interval blended cost derived from token usage and default pricing.",
-            summary.spark.spend,
-            fmtUSDCompact,
-          )
+        headerRight={expandBtn("spend", "Expand Spend")}
+        media={
+          <Flex flexDirection="column" gap={6} style={{ width: "100%" }}>
+            <SamplingBadge variant="compact" />
+            {renderSpark(summary.spark.spend, "var(--blue)", fmtUSD, "Spend trend")}
+          </Flex>
         }
       />
-      <Tile
+      </ScanScopedTile>
+      <ScanScopedTile name="P95 latency">
+      <StatTile
         label="P95 latency"
         info="95th percentile request duration across all GenAI spans in scope. Percentile statistics are sampling-invariant — toggling sampling won't change this number."
         value={fmtMs(summary.p95Ms)}
-        bottom={renderSpark(summary.spark.p95Ms, "var(--blue)", fmtMs)}
-        expanded={() =>
-          sparklineExpanded(
-            "P95 latency",
-            "Per-interval 95th percentile of span duration.",
-            summary.spark.p95Ms,
-            fmtMs,
-          )
-        }
+        headerRight={expandBtn("p95", "Expand P95 latency")}
+        media={renderSpark(summary.spark.p95Ms, "var(--blue)", fmtMs, "P95 latency trend")}
       />
-      <Tile
+      </ScanScopedTile>
+      <ScanScopedTile name="Error rate">
+      <StatTile
         label="Error rate"
         info="Percentage of GenAI spans with a non-null exception.type field. A ratio (not a count) — sampling-invariant."
         value={fmtPercent(summary.errorRatePct)}
-        bottom={renderSpark(
+        headerRight={expandBtn("error", "Expand Error rate")}
+        media={renderSpark(
           summary.spark.errorRatePct,
           "var(--blue)",
           (n) => fmtPercent(n, 1),
+          "Error rate trend",
         )}
-        expanded={() =>
-          sparklineExpanded(
-            "Error rate",
-            "Per-interval fraction of spans with an exception.type set.",
-            summary.spark.errorRatePct,
-            (n) => fmtPercent(n, 1),
-          )
-        }
       />
+      </ScanScopedTile>
 
       {showMcp && (
-        <Tile
+        <ScanScopedTile name="MCP error rate">
+        <StatTile
           label="MCP error rate"
           info="Share of MCP tool calls that errored (span errors + functional tool errors). The donut breaks errors down by tool; the center shows the overall error rate. Expand for the full per-tool table."
-          variant="visual"
-          visual={
-            <MiniDonut
-              size={96}
-              thickness={14}
-              values={hasToolErrors ? toolErrorSlices.map((s) => s.value) : [1]}
-              labels={hasToolErrors ? toolErrorSlices.map((s) => s.label) : ["No errors"]}
-              colors={hasToolErrors ? undefined : ["var(--green-2)"]}
-              valueFormatter={(n) => `${fmtCount(n)} err`}
-              centerValue={fmtPercent(mcpErr, 1)}
-            />
+          headerRight={
+            hasToolErrors ? expandBtn("mcpErrors", "Expand MCP errors") : undefined
           }
-          visualCaption="errored calls"
-          expanded={
-            hasToolErrors
-              ? () =>
-                  donutExpanded(
-                    "MCP errors",
-                    "Tool-call errors (span + functional) broken down by tool.",
-                    totalToolErrors,
-                    "error",
-                    toolErrorSlices,
-                    (n) => `${fmtCount(n)} err`,
-                    "mcp",
-                  )
-              : undefined
+          media={
+            <Flex flexDirection="column" alignItems="center" gap={4}>
+              <MiniDonut
+                size={96}
+                thickness={14}
+                values={hasToolErrors ? toolErrorSlices.map((s) => s.value) : [1]}
+                labels={hasToolErrors ? toolErrorSlices.map((s) => s.label) : ["No errors"]}
+                colors={hasToolErrors ? undefined : ["var(--green-2)"]}
+                valueFormatter={(n) => `${fmtCount(n)} err`}
+                centerValue={(() => {
+                  // Render the trailing "%" smaller than the number so the
+                  // glyph doesn't crowd the donut ring (leaves breathing room).
+                  const s = fmtPercent(mcpErr, 1);
+                  return s.endsWith("%") ? (
+                    <>
+                      {s.slice(0, -1)}
+                      <span style={{ fontSize: "0.6em" }}>%</span>
+                    </>
+                  ) : (
+                    s
+                  );
+                })()}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                errored calls
+              </Text>
+            </Flex>
           }
         />
+        </ScanScopedTile>
       )}
 
-      <Tile
+      <ScanScopedTile name="Models">
+      <StatTile
         label="Models"
         info="Number of distinct gen_ai.request.model values observed in scope. The donut breaks down by request volume; model version suffixes are collapsed so e.g. claude-sonnet-4-5-20250114 and claude-sonnet-4-5 count as one model."
-        variant="visual"
-        visual={
+        headerRight={expandBtn("models", "Expand Models")}
+        media={
           <MiniDonut
             size={96}
             thickness={14}
@@ -931,22 +836,14 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
             }
           />
         }
-        expanded={() =>
-          donutExpanded(
-            "Models",
-            "Distinct models invoked, sized by request volume. Version suffixes collapsed.",
-            summary.models,
-            "Model",
-            breakdowns.models,
-            (n) => `${fmtCount(n)} req`,
-          )
-        }
       />
-      <Tile
+      </ScanScopedTile>
+      <ScanScopedTile name="MCP servers">
+      <StatTile
         label="MCP servers"
         info="Distinct MCP servers detected via traceloop.workflow.name matching `*.mcp` (the convention this tenant's SDKs use). Donut breaks down by workflow request volume."
-        variant="visual"
-        visual={
+        headerRight={expandBtn("mcpServers", "Expand MCP servers")}
+        media={
           <MiniDonut
             size={96}
             thickness={14}
@@ -960,23 +857,14 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
             }
           />
         }
-        expanded={() =>
-          donutExpanded(
-            "MCP servers",
-            "Distinct MCP workflows (traceloop.workflow.name ending in .mcp).",
-            summary.mcpServers,
-            "Server",
-            breakdowns.mcpServers,
-            (n) => `${fmtCount(n)} req`,
-            "mcp",
-          )
-        }
       />
-      <Tile
+      </ScanScopedTile>
+      <ScanScopedTile name="Tools">
+      <StatTile
         label="Tools"
         info="Distinct tools invoked within MCP workflows. Tool name comes from gen_ai.tool.name with a fallback to traceloop.entity.name. Donut sized by call count; center shows the distinct tool count."
-        variant="visual"
-        visual={
+        headerRight={expandBtn("tools", "Expand Tools")}
+        media={
           <MiniDonut
             size={96}
             thickness={14}
@@ -990,80 +878,95 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
             }
           />
         }
-        expanded={() =>
-          donutExpanded(
-            "Tools",
-            "Distinct tools invoked within MCP workflows, sized by call count.",
-            summary.mcpTools,
-            "Tool",
-            breakdowns.mcpTools,
-            (n) => `${fmtCount(n)} call${n === 1 ? "" : "s"}`,
-            "mcp",
-          )
-        }
       />
+      </ScanScopedTile>
 
-      <Tile
+      <ScanScopedTile name="Cost / request">
+      <StatTile
         label="Cost / request"
-        info="Total spend (actual + estimated) divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (green = cheap, red = expensive). Ratio is sampling-invariant."
+        info="Total spend (actual + estimated) divided by the number of requests. The scale below shows where this value falls on a $0–$0.05 range (darker = higher cost per request). Ratio is sampling-invariant."
         value={fmtUSD(costPerReq)}
         sub={costPerReqSub}
-        bottom={
+        media={
           costPerReq != null ? (
             <MiniScale
               value={costPerReq}
               min={0}
               max={costScaleMax}
               ticks={[costScaleMax / 2]}
+              valueLabel={`${fmtUSD(costPerReq)} / request`}
             />
-          ) : null
+          ) : undefined
         }
       />
+      </ScanScopedTile>
 
-      <Tile
+      <ScanScopedTile name="Token efficiency">
+      <StatTile
         label="Token efficiency"
         info="Output tokens as a share of total tokens (input + output). Higher means more of your token spend is going toward generated content vs prompt overhead. Filled arc follows the active accent color."
-        variant="visual"
-        visual={
-          <MiniPartialDonut
-            size={96}
-            thickness={14}
-            percent={summary.tokenEfficiencyPct ?? 0}
-            color={efficiencyColor}
-            centerValue={fmtPercent(summary.tokenEfficiencyPct, 0)}
-          />
+        media={
+          <Flex flexDirection="column" alignItems="center" gap={4}>
+            <MiniPartialDonut
+              size={96}
+              thickness={14}
+              percent={summary.tokenEfficiencyPct ?? 0}
+              color={efficiencyColor}
+              centerValue={fmtPercent(summary.tokenEfficiencyPct, 0)}
+            />
+            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+              output / total
+            </Text>
+          </Flex>
         }
-        visualCaption="output / total"
       />
+      </ScanScopedTile>
 
-      <Tile
+      <ScanScopedTile name="Avg tokens / request">
+      <StatTile
         label="Avg tokens / request"
         info="Total tokens ÷ requests — the average context size per call. A right-sizing signal alongside Cost/request. Ratio is sampling-invariant."
         value={avgTokensPerReq != null ? fmtCount(avgTokensPerReq) : "—"}
         sub="tokens ÷ requests"
       />
+      </ScanScopedTile>
 
-      <Tile
+      <ScanScopedTile name="Active findings">
+      <StatTile
         label="Active findings"
         info="Open problem patterns detected in the current scope, broken down by severity (critical / warning / info). Select a finding in the list below the map for detail and the contributing prompts."
-        variant="visual"
-        visual={
-          <MiniDonut
-            size={96}
-            thickness={14}
-            values={findingsTotal > 0 ? findingSlices.map((s) => s[2]) : [1]}
-            labels={findingsTotal > 0 ? findingSlices.map((s) => s[0]) : ["None"]}
-            colors={findingsTotal > 0 ? findingSlices.map((s) => s[1]) : ["var(--green-2)"]}
-            valueFormatter={(n) => `${fmtCount(n)}`}
-            centerValue={String(findingsTotal)}
-          />
-        }
-        visualCaption={
-          findingsTotal > 0
-            ? `${sev.critical} crit · ${sev.warning} warn · ${sev.info} info`
-            : "none open"
+        media={
+          <Flex flexDirection="column" alignItems="center" gap={4}>
+            <MiniDonut
+              size={96}
+              thickness={14}
+              values={findingsTotal > 0 ? findingSlices.map((s) => s[2]) : [1]}
+              labels={findingsTotal > 0 ? findingSlices.map((s) => s[0]) : ["None"]}
+              colors={findingsTotal > 0 ? findingSlices.map((s) => s[1]) : ["var(--green-2)"]}
+              valueFormatter={(n) => `${fmtCount(n)}`}
+              centerValue={String(findingsTotal)}
+            />
+            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+              {findingsTotal > 0
+                ? `${sev.critical} crit · ${sev.warning} warn · ${sev.info} info`
+                : "none open"}
+            </Text>
+          </Flex>
         }
       />
+      </ScanScopedTile>
     </div>
+    {expandedContent && (
+      <ChartModal
+        open={expandedId != null}
+        onClose={() => setExpandedId(null)}
+        title={expandedContent.title}
+        subtitle={expandedContent.subtitle}
+        stats={expandedContent.stats}
+      >
+        {expandedContent.body}
+      </ChartModal>
+    )}
+    </>
   );
 };

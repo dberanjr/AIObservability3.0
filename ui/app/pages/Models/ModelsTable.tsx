@@ -16,7 +16,14 @@ import {
 import { FilterTrigger } from "../../components/FilterTrigger";
 import { BlendedBadge } from "../../components/displayHints";
 import { useModelDisplay } from "../../components/useModelDisplay";
+import {
+  STATUS_CUE,
+  statusFromThreshold,
+  toneToColor,
+  type Tone,
+} from "../../theme/statusColor";
 import { MODEL_TYPE_LABEL, type ModelRow } from "./useModels";
+import { ModelDetailModal } from "./ModelDetailModal";
 
 type SortKey =
   | "model"
@@ -31,20 +38,51 @@ type SortKey =
   | "tokensPerSec"
   | "contextUtilizationPct"
   | "cost"
+  | "costPerRequest"
   | "costPerMTok";
+
+/** $ per LLM call — unit economics, derived from the row's total cost. */
+const costPerCall = (m: ModelRow): number =>
+  m.requests > 0 ? m.cost / m.requests : 0;
 
 interface Column {
   id: string;
   label: string;
   width?: number;
+  /** Flexible column that absorbs slack but never shrinks below minWidth. */
+  grow?: boolean;
+  minWidth?: number;
   align?: "left" | "right";
   sortBy?: SortKey;
 }
 
+/**
+ * Single source of truth for a column's flex/width so the header and every data
+ * cell lay out identically. Previously the header's flexible "Model" column had
+ * minWidth:auto while its data cell had minWidth:0 — they collapsed to different
+ * widths, knocking every downstream column out of alignment and squeezing the
+ * model name to a single character. Driving both from this helper keeps them
+ * pinned together; box-sizing makes the px widths exact regardless of theme.
+ */
+const colStyle = (c: Pick<Column, "width" | "grow" | "minWidth">): React.CSSProperties =>
+  c.grow
+    ? { flex: `1 1 ${c.minWidth ?? 200}px`, minWidth: c.minWidth ?? 200, boxSizing: "border-box" }
+    : { flex: "0 0 auto", width: c.width, boxSizing: "border-box" };
+
+/** Min width of the table body; below this the horizontal scroller kicks in so
+ *  columns keep their widths and stay aligned instead of collapsing. */
+const TABLE_MIN_WIDTH = 1540;
+
+// FinOps focus: money sits right after the model/provider identity columns so
+// $/call / Cost / $/1M are visible before the horizontal scroll reaches the
+// latency percentiles.
 const COLS: Column[] = [
-  { id: "model", label: "Model", sortBy: "model" },
+  { id: "model", label: "Model", grow: true, minWidth: 200, sortBy: "model" },
   { id: "type", label: "Type", width: 100 },
   { id: "provider", label: "Provider", width: 130 },
+  { id: "cost", label: "Cost", width: 90, align: "right", sortBy: "cost" },
+  { id: "percall", label: "$/call", width: 90, align: "right", sortBy: "costPerRequest" },
+  { id: "per1m", label: "$/1M", width: 90, align: "right", sortBy: "costPerMTok" },
   { id: "req", label: "Req", width: 80, align: "right", sortBy: "requests" },
   { id: "in", label: "In tok", width: 80, align: "right", sortBy: "inputTokens" },
   { id: "out", label: "Out tok", width: 80, align: "right", sortBy: "outputTokens" },
@@ -55,8 +93,6 @@ const COLS: Column[] = [
   { id: "p99", label: "P99", width: 80, align: "right", sortBy: "p99Ms" },
   { id: "err", label: "Err", width: 70, align: "right", sortBy: "errorRatePct" },
   { id: "timeout", label: "Timeout", width: 80, align: "right", sortBy: "timeoutRatePct" },
-  { id: "cost", label: "Cost", width: 90, align: "right", sortBy: "cost" },
-  { id: "per1m", label: "$/1M", width: 90, align: "right", sortBy: "costPerMTok" },
 ];
 
 const ProviderChip = ({ model }: { model: ModelRow }) => (
@@ -124,8 +160,14 @@ const ContextUtilBar = ({ model }: { model: ModelRow }) => {
     );
   }
   const pct = Math.min(100, Math.max(0, model.contextUtilizationPct));
-  const color =
-    pct < 40 ? "var(--green-2)" : pct < 80 ? "var(--amber)" : "var(--red)";
+  // Severity via the shared threshold scale (ideal < 40%, warning 40–80%,
+  // critical >= 80%) → the semantic --status-* tokens, so the bar stays in
+  // lockstep with the app-wide severity ramp. The % label below is the
+  // non-color cue, so no glyph is needed here.
+  const sev = statusFromThreshold(pct, { warn: 40, bad: 80 });
+  const color = toneToColor(
+    sev === "critical" ? "bad" : sev === "warning" ? "warn" : "good",
+  );
   return (
     <Flex flexDirection="column" gap={2} style={{ width: "100%" }}>
       <div
@@ -163,6 +205,8 @@ const ContextUtilBar = ({ model }: { model: ModelRow }) => {
 const Cell = ({
   children,
   width,
+  grow,
+  minWidth,
   align,
   mono,
   color,
@@ -170,6 +214,8 @@ const Cell = ({
 }: {
   children: React.ReactNode;
   width?: number;
+  grow?: boolean;
+  minWidth?: number;
   align?: "left" | "right";
   mono?: boolean;
   color?: string;
@@ -177,9 +223,7 @@ const Cell = ({
 }) => (
   <div
     style={{
-      flex: width ? "0 0 auto" : 1,
-      width,
-      minWidth: 0,
+      ...colStyle({ width, grow, minWidth }),
       textAlign: align,
       padding: "8px 6px",
       fontSize: 12.5,
@@ -196,10 +240,44 @@ const Cell = ({
   </div>
 );
 
-const costColor = (perMTok: number): string | undefined => {
-  if (perMTok > 0 && perMTok < 2) return "var(--green-2)";
-  if (perMTok > 20) return "var(--red)";
-  return undefined;
+/**
+ * Cost severity for the $/1M column: cheap (< $2/1M) reads good, pricey
+ * (> $20/1M) reads bad, and the mid-range stays neutral (default text colour).
+ * Returns a semantic {@link Tone} so the colour + non-color cue both derive
+ * from the shared severity vocabulary instead of raw --green-2 / --red.
+ */
+const costTone = (perMTok: number): Tone | null =>
+  perMTok > 0 && perMTok < 2 ? "good" : perMTok > 20 ? "bad" : null;
+
+/** Tone → the STATUS_CUE key whose glyph/word pairs with the tone. */
+const TONE_CUE_KEY = {
+  good: "good",
+  warn: "warning",
+  bad: "critical",
+  critical: "critical",
+  neutral: "neutral",
+} as const;
+
+/** Tone → its severity colour (var(--status-*)) plus the non-color cue glyph, so
+ *  a coloured numeric cell is never encoded by hue alone. */
+const toneCue = (tone: Tone): { color: string; glyph: string; word: string } => {
+  const cue = STATUS_CUE[TONE_CUE_KEY[tone]];
+  return { color: toneToColor(tone), glyph: cue.glyph, word: cue.word };
+};
+
+/** Small leading severity glyph — the non-color reinforcement for a coloured
+ *  cell (colorblind cue). Inherits the cell's severity colour. */
+const CueGlyph = ({ tone }: { tone: Tone }) => {
+  const { glyph, word } = toneCue(tone);
+  return (
+    <span
+      aria-hidden
+      title={word}
+      style={{ marginRight: 4, fontSize: 8.5, lineHeight: 1 }}
+    >
+      {glyph}
+    </span>
+  );
 };
 
 export interface ModelsTableProps {
@@ -209,6 +287,7 @@ export interface ModelsTableProps {
 
 export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
   const fmtModel = useModelDisplay();
+  const [selected, setSelected] = useState<ModelRow | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
     key: "requests",
     dir: "desc",
@@ -220,6 +299,10 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
       const k = sort.key;
       if (k === "model") {
         const cmp = a.model.localeCompare(b.model);
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
+      if (k === "costPerRequest") {
+        const cmp = costPerCall(a) - costPerCall(b);
         return sort.dir === "asc" ? cmp : -cmp;
       }
       const av = (a[k] as number | null | undefined) ?? 0;
@@ -237,13 +320,31 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
         : { key, dir: "desc" },
     );
 
+  // The Timeout column reads span.status_code == "TIMEOUT". Most tenants never
+  // emit it (this fleet sets span.status_code only for "error", never
+  // "TIMEOUT"), so the column would be an all-"—"/"0%" filler that pads the row
+  // and pushes Cost / $/1M off to the right. Only show it when a model actually
+  // recorded a timeout, so it carries real signal when present and disappears
+  // otherwise.
+  const showTimeout = useMemo(
+    () => models.some((m) => m.timeouts > 0),
+    [models],
+  );
+  const cols = useMemo(
+    () => (showTimeout ? COLS : COLS.filter((c) => c.id !== "timeout")),
+    [showTimeout],
+  );
+  const tableMinWidth = showTimeout ? TABLE_MIN_WIDTH : TABLE_MIN_WIDTH - 80;
+
   return (
-    <Flex flexDirection="column" gap={0}>
+    <div style={{ overflowX: "auto" }}>
+      <style>{`.models-row{cursor:pointer}.models-row:hover{background:var(--surface-2)}`}</style>
+      <Flex flexDirection="column" gap={0} style={{ minWidth: tableMinWidth }}>
         <Flex
           alignItems="center"
           style={{ padding: "0 10px", borderBottom: "1px solid var(--border)" }}
         >
-          {COLS.map((c) => {
+          {cols.map((c) => {
             const active = c.sortBy && sort.key === c.sortBy;
             const Arrow =
               active && sort.dir === "asc" ? ChevronUpIcon : ChevronDownIcon;
@@ -255,9 +356,8 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 onClick={() => c.sortBy && toggleSort(c.sortBy)}
                 style={{
                   all: "unset",
+                  ...colStyle(c),
                   cursor: c.sortBy ? "pointer" : "default",
-                  flex: c.width ? "0 0 auto" : 1,
-                  width: c.width,
                   textAlign: c.align,
                   padding: "8px 6px",
                   fontSize: 10.5,
@@ -295,10 +395,25 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
             </Text>
           </Flex>
         ) : (
-          sorted.map((m) => (
+          sorted.map((m) => {
+            // Severity tones for the two colour-only numeric columns, so both
+            // the cell colour and its non-color cue glyph derive from one place.
+            const costTn = m.pricingUnknown ? null : costTone(m.costPerMTok);
+            const errTn: Tone | null = m.errorRatePct > 5 ? "bad" : null;
+            return (
             <div
               key={m.modelKey}
-              role="row"
+              role="button"
+              tabIndex={0}
+              aria-label={`Open details for ${m.model}`}
+              className="models-row"
+              onClick={() => setSelected(m)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelected(m);
+                }
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -306,20 +421,42 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 borderTop: "1px solid var(--border)",
               }}
             >
-              <Cell mono>
-                <FilterTrigger
-                  attribute="gen_ai.request.model"
-                  value={m.rawModels}
-                  label="model"
-                >
-                  {fmtModel(m.rawModels?.[0] ?? m.model)}
-                </FilterTrigger>
+              <Cell mono grow minWidth={200}>
+                {/* Stop propagation so the model-name click filters (existing
+                    behavior) without also opening the row detail modal. */}
+                <span onClick={(e) => e.stopPropagation()}>
+                  <FilterTrigger
+                    attribute="gen_ai.request.model"
+                    value={m.rawModels}
+                    label="model"
+                  >
+                    {fmtModel(m.rawModels?.[0] ?? m.model)}
+                  </FilterTrigger>
+                </span>
               </Cell>
               <Cell width={100}>
                 <TypeChip model={m} />
               </Cell>
               <Cell width={130}>
                 <ProviderChip model={m} />
+              </Cell>
+              <Cell width={90} align="right" mono>
+                {fmtUSD(m.cost)}
+                {m.pricingUnknown && <BlendedBadge />}
+              </Cell>
+              <Cell width={90} align="right" mono>
+                {fmtUSD(costPerCall(m))}
+                {m.pricingUnknown && <BlendedBadge />}
+              </Cell>
+              <Cell
+                width={90}
+                align="right"
+                mono
+                color={costTn ? toneCue(costTn).color : undefined}
+              >
+                {costTn && <CueGlyph tone={costTn} />}
+                {fmtUSD(m.costPerMTok)}
+                {m.pricingUnknown && <BlendedBadge />}
               </Cell>
               <Cell width={80} align="right" mono>
                 {fmtCount(m.requests)}
@@ -361,45 +498,36 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
                 width={70}
                 align="right"
                 mono
-                color={m.errorRatePct > 5 ? "var(--red)" : undefined}
+                color={errTn ? toneCue(errTn).color : undefined}
               >
+                {errTn && <CueGlyph tone={errTn} />}
                 {m.errors > 0 ? fmtPercent(m.errorRatePct) : "0%"}
               </Cell>
-              <Cell width={80} align="right" mono>
-                {m.hasTimeoutAttribute ? (
-                  m.timeouts > 0 ? (
-                    fmtPercent(m.timeoutRatePct, 2)
+              {showTimeout && (
+                <Cell width={80} align="right" mono>
+                  {m.hasTimeoutAttribute ? (
+                    m.timeouts > 0 ? (
+                      fmtPercent(m.timeoutRatePct, 2)
+                    ) : (
+                      "0%"
+                    )
                   ) : (
-                    "0%"
-                  )
-                ) : (
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: "var(--text-4)",
-                      fontFamily: "var(--mono, monospace)",
-                    }}
-                    title="span.status_code not set on this model's spans"
-                  >
-                    —
-                  </Text>
-                )}
-              </Cell>
-              <Cell width={90} align="right" mono>
-                {fmtUSD(m.cost)}
-                {m.pricingUnknown && <BlendedBadge />}
-              </Cell>
-              <Cell
-                width={90}
-                align="right"
-                mono
-                color={m.pricingUnknown ? undefined : costColor(m.costPerMTok)}
-              >
-                {fmtUSD(m.costPerMTok)}
-                {m.pricingUnknown && <BlendedBadge />}
-              </Cell>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--text-4)",
+                        fontFamily: "var(--mono, monospace)",
+                      }}
+                      title="span.status_code not set on this model's spans"
+                    >
+                      —
+                    </Text>
+                  )}
+                </Cell>
+              )}
             </div>
-          ))
+            );
+          })
         )}
 
         <Flex
@@ -410,12 +538,20 @@ export const ModelsTable = ({ models, isLoading }: ModelsTableProps) => {
           }}
         >
           <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-            $/1M coloured green &lt; $2, red &gt; $20. Context util = avg input
-            tokens / model context window from{" "}
-            <code>data/pricing.ts</code> (green &lt; 40%, amber 40–80%, red &gt;
-            80%). Tokens/sec shows "—" for embedding models.
+            Click a row for full cost, pricing and golden-signal detail. $/1M
+            coloured green &lt; $2, red &gt; $20. Context util = avg input tokens
+            / model context window from <code>data/pricing.ts</code> (green &lt;
+            40%, amber 40–80%, red &gt; 80%). Tokens/sec shows "—" for embedding
+            models.
           </Text>
         </Flex>
-    </Flex>
+      </Flex>
+      {selected && (
+        <ModelDetailModal
+          model={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </div>
   );
 };

@@ -5,12 +5,15 @@ import { Route, Routes } from "react-router-dom";
 import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
 import { RedirectKeepingSearch } from "./lib/nav";
-import { Home } from "./pages/Home";
 import { AgentsPage } from "./pages/Agents/AgentsPage";
 import { ExplorerPage } from "./pages/Explorer/ExplorerPage";
 import { ModelsPage } from "./pages/Models/ModelsPage";
 import { PromptsPage } from "./pages/Prompts/PromptsPage";
 import { PulsePage } from "./pages/Pulse/PulsePage";
+import { SummaryPage } from "./pages/Summary/SummaryPage";
+import { AttributeAuditPage } from "./pages/AttributeAudit/AttributeAuditPage";
+import { About } from "./pages/About/About";
+import { FieldNotesPage } from "./pages/FieldNotes/FieldNotesPage";
 import { GlobalFilterStrip } from "./layout/GlobalFilterStrip";
 import { SamplingProvider } from "./scope/SamplingContext";
 import { ScanLimitProvider } from "./scope/ScanLimitContext";
@@ -18,8 +21,10 @@ import { ScopeProvider } from "./scope/ScopeContext";
 import { GlobalFilterProvider } from "./scope/GlobalFilterContext";
 import { TraceScopeProvider } from "./scope/TraceScopeContext";
 import { CapabilityProvider } from "./scope/CapabilityContext";
+import { ScanReportProvider } from "./scope/ScanReportContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
+import { EditLayoutProvider } from "./layout/EditLayoutContext";
 import { TweaksPanel } from "./tweaks/TweaksPanel";
 import { ColorBlindFilters } from "./tweaks/ColorBlindFilters";
 import { ModelPricingProvider } from "./pricing/ModelPricingContext";
@@ -28,6 +33,7 @@ import { ModelPricingPanel } from "./pricing/ModelPricingPanel";
 export const App = () => {
   return (
     <TweaksProvider>
+    <EditLayoutProvider>
     <ModelPricingProvider>
     <SegmentsProvider>
     <SamplingProvider>
@@ -36,6 +42,7 @@ export const App = () => {
     <GlobalFilterProvider>
     <TraceScopeProvider>
     <CapabilityProvider>
+    <ScanReportProvider>
       <ThemeStyles />
       <Page>
         <Page.Header>
@@ -52,15 +59,18 @@ export const App = () => {
           >
             <div style={{ flex: 1 }}>
               <Routes>
-                <Route path="/" element={<PulsePage />} />
+                <Route path="/" element={<SummaryPage />} />
+                <Route path="/summary" element={<SummaryPage />} />
                 <Route path="/pulse" element={<PulsePage />} />
                 <Route path="/explorer" element={<ExplorerPage />} />
                 <Route path="/agents" element={<AgentsPage />} />
                 <Route path="/prompts" element={<PromptsPage />} />
                 <Route path="/models" element={<ModelsPage />} />
+                <Route path="/attributes" element={<AttributeAuditPage />} />
                 {/* Folded tabs — redirect old deep-links to their new homes.
                     Tools + Topology → Agents, MCP Health → Pulse, FinOps →
-                    Models / FinOps. Query string (timeframe, focus) carries. */}
+                    Models (FinOps is an in-page section on the Models tab now).
+                    Query string (timeframe, focus) carries. */}
                 <Route
                   path="/tools"
                   element={<RedirectKeepingSearch to="/agents" />}
@@ -77,7 +87,8 @@ export const App = () => {
                   path="/finops"
                   element={<RedirectKeepingSearch to="/models" />}
                 />
-                <Route path="/home" element={<Home />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/field-notes" element={<FieldNotesPage />} />
               </Routes>
             </div>
             <AppFooter />
@@ -87,6 +98,7 @@ export const App = () => {
       <TweaksPanel />
       <ModelPricingPanel />
       <ColorBlindFilters />
+    </ScanReportProvider>
     </CapabilityProvider>
     </TraceScopeProvider>
     </GlobalFilterProvider>
@@ -95,6 +107,7 @@ export const App = () => {
     </SamplingProvider>
     </SegmentsProvider>
     </ModelPricingProvider>
+    </EditLayoutProvider>
     </TweaksProvider>
   );
 };

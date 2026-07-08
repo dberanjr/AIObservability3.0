@@ -8,12 +8,12 @@ import {
   type ChartLabels,
   type ChartStyle,
   type ColorBlindFilter,
-  type Density,
+  type ScanStatsMode,
   type Theme,
-  type TileStyle,
   type ToolsMode,
-  type TraceMatchCap,
 } from "./TweaksContext";
+import { ACCENT_HEX } from "../theme/palette";
+import { useModalA11y } from "../components/useModalA11y";
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <Text
@@ -117,7 +117,7 @@ const Swatch = ({
   active: boolean;
   onChange: (a: Accent) => void;
 }) => {
-  const swatch = ACCENT_SWATCH[accent];
+  const swatch = ACCENT_HEX[accent];
   return (
     <button
       type="button"
@@ -239,16 +239,6 @@ const THEME_OPTIONS: SegmentOption<Theme>[] = [
   { value: "light", label: "light" },
   { value: "dark", label: "dark" },
 ];
-const DENSITY_OPTIONS: SegmentOption<Density>[] = [
-  { value: "comfortable", label: "comfortable" },
-  { value: "compact", label: "compact" },
-  { value: "minimal", label: "minimal" },
-];
-const TILE_OPTIONS: SegmentOption<TileStyle>[] = [
-  { value: "card", label: "card" },
-  { value: "bordered", label: "bordered" },
-  { value: "ghost", label: "ghost" },
-];
 /**
  * Accents grouped by color family so the swatch row reads naturally:
  * blues / purples / greens / warms / greys, with `custom` always at the
@@ -260,11 +250,6 @@ const ACCENT_GROUPS: Array<{ label: string; accents: Exclude<Accent, "custom">[]
   { label: "Greens",  accents: ["green", "lime"] },
   { label: "Warm",    accents: ["amber", "red"] },
   { label: "Grays",   accents: ["gray25", "gray50", "gray75", "black"] },
-];
-const ACCENT_OPTIONS: SegmentOption<Accent>[] = [
-  ...ACCENT_GROUPS.flatMap((g) =>
-    g.accents.map((a) => ({ value: a, label: a })),
-  ),
 ];
 const COLORBLIND_OPTIONS: SegmentOption<ColorBlindFilter>[] = [
   { value: "none", label: "off" },
@@ -299,40 +284,25 @@ const ON_OFF_OPTIONS: SegmentOption<"on" | "off">[] = [
   { value: "off", label: "Off" },
   { value: "on", label: "On" },
 ];
-
-const TRACE_CAP_OPTIONS: SegmentOption<TraceMatchCap>[] = [
-  { value: "fast", label: "Fast · 5k" },
-  { value: "balanced", label: "Balanced · 25k" },
-  { value: "exact", label: "Exact" },
+const SCAN_STATS_OPTIONS: SegmentOption<ScanStatsMode>[] = [
+  { value: "off", label: "off" },
+  { value: "totals", label: "totals" },
+  { value: "tiles", label: "tiles & totals" },
 ];
-
-/**
- * Accent options render as colour swatches so users can preview the
- * mapping. Hex pulled from `theme/tokens.ts` brand palette.
- */
-const ACCENT_SWATCH: Record<Exclude<Accent, "custom">, string> = {
-  blue: "#1C5BE5",
-  purple: "#B23BE4",
-  cyan: "#54C8E9",
-  green: "#73BE28",
-  pink: "#E436FF",
-  amber: "#B45F06",
-  red: "#C0291E",
-  indigo: "#4635D6",
-  lime: "#BDDF28",
-  teal: "#0EA5A5",
-  purpleDeep: "#6C3AD6",
-  gray25: "#bfbfbf",
-  gray50: "#808080",
-  gray75: "#404040",
-  black: "#000000",
-};
 
 export const TweaksPanel = () => {
   const t = useTweaks();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Click outside or Esc closes the panel.
+  // Focus management: move focus into the panel, trap Tab, Esc-to-close, and
+  // restore focus to the trigger on close.
+  useModalA11y(panelRef, t.closePanel, {
+    initialFocusRef: closeBtnRef,
+    active: t.isPanelOpen,
+  });
+
+  // Click outside closes the panel (Esc is handled by useModalA11y above).
   useEffect(() => {
     if (!t.isPanelOpen) return;
     const onClick = (e: MouseEvent) => {
@@ -345,14 +315,9 @@ export const TweaksPanel = () => {
         t.closePanel();
       }
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") t.closePanel();
-    };
     document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
     };
   }, [t.isPanelOpen, t]);
 
@@ -363,6 +328,7 @@ export const TweaksPanel = () => {
       ref={panelRef}
       role="dialog"
       aria-label="Tweaks"
+      tabIndex={-1}
       style={{
         position: "fixed",
         top: 64,
@@ -386,12 +352,12 @@ export const TweaksPanel = () => {
               Tweaks
             </Heading>
             <button
+              ref={closeBtnRef}
               type="button"
               aria-label="Close tweaks"
+              className="aiobs-icon-btn"
               onClick={t.closePanel}
               style={{
-                all: "unset",
-                cursor: "pointer",
                 padding: "2px 6px",
                 borderRadius: 6,
                 fontSize: 18,
@@ -413,26 +379,6 @@ export const TweaksPanel = () => {
                 options={THEME_OPTIONS}
                 value={t.theme}
                 onChange={t.setTheme}
-              />
-            </Flex>
-
-            <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Density</FieldLabel>
-              <Segmented
-                ariaLabel="Density"
-                options={DENSITY_OPTIONS}
-                value={t.density}
-                onChange={t.setDensity}
-              />
-            </Flex>
-
-            <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Tile style</FieldLabel>
-              <Segmented
-                ariaLabel="Tile style"
-                options={TILE_OPTIONS}
-                value={t.tileStyle}
-                onChange={t.setTileStyle}
               />
             </Flex>
 
@@ -485,13 +431,18 @@ export const TweaksPanel = () => {
           <Flex flexDirection="column" gap={12}>
             <SectionLabel>Accessibility</SectionLabel>
             <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Color-blindness filter</FieldLabel>
+              <FieldLabel>Simulate color-vision deficiency</FieldLabel>
               <Segmented
-                ariaLabel="Colorblind filter"
+                ariaLabel="Simulate color-vision deficiency"
                 options={COLORBLIND_OPTIONS}
                 value={t.colorBlindFilter}
                 onChange={t.setColorBlindFilter}
               />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Previews the whole app as someone with this deficiency sees it —
+                a design check for our own color choices, not a correction. Leave
+                this off if you have a color-vision deficiency.
+              </Text>
             </Flex>
           </Flex>
 
@@ -521,7 +472,7 @@ export const TweaksPanel = () => {
               />
               <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
                 Off by default —{" "}
-                <code>gen_ai.usage.time_to_first_token</code> is not
+                <code>gen_ai.response.ttft</code> is not
                 instrumented in this environment.
               </Text>
             </Flex>
@@ -555,20 +506,55 @@ export const TweaksPanel = () => {
               </Text>
             </Flex>
             <Flex flexDirection="column" gap={6}>
-              <FieldLabel>Global filter · trace cap</FieldLabel>
+              <FieldLabel>Scanned-data stats</FieldLabel>
               <Segmented
-                ariaLabel="Global filter trace cap"
-                options={TRACE_CAP_OPTIONS}
-                value={t.pageConfig.traceMatchCap}
-                onChange={t.setTraceMatchCap}
+                ariaLabel="Scanned-data stats"
+                options={SCAN_STATS_OPTIONS}
+                value={t.pageConfig.scanStats}
+                onChange={t.setScanStats}
               />
               <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-                The global filter resolves matching <code>trace.id</code>s once
-                and scopes every query to them. This caps how many traces are
-                injected — <strong>Fast</strong> (5k) is snappiest,{" "}
-                <strong>Balanced</strong> (25k) is the default, and{" "}
-                <strong>Exact</strong> never truncates (but a very broad filter
-                can fail). Truncated results are flagged as approximate.
+                <strong>Off</strong> hides scan stats.{" "}
+                <strong>Totals</strong> shows the page-wide bytes-scanned /
+                budget readout in the footer. <strong>Tiles &amp; totals</strong>{" "}
+                adds per-element scan pills (bytes + response time) for
+                pinpointing expensive queries.
+              </Text>
+            </Flex>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Span-bucket filter</FieldLabel>
+              <Segmented
+                ariaLabel="Span-bucket filter"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.bucketFilterEnabled ? "on" : "off"}
+                onChange={(v) => t.setBucketFilterEnabled(v === "on")}
+              />
+              {t.pageConfig.bucketFilterEnabled && (
+                <input
+                  type="text"
+                  aria-label="Span buckets (comma-separated)"
+                  placeholder="bos_spans, genai_spans"
+                  value={t.pageConfig.bucketFilterText}
+                  onChange={(e) => t.setBucketFilterText(e.target.value)}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    fontFamily: "var(--mono, monospace)",
+                    fontSize: 12,
+                    padding: "6px 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--text-1)",
+                  }}
+                />
+              )}
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Restricts every span query to these Grail buckets (OR) so the
+                default span bucket isn&apos;t scanned — a large scan-cost saving.
+                Comma-separated; your buckets are remembered even when this is
+                off. Use <strong>Attributes → Detect AI buckets</strong> to find
+                which buckets hold AI spans.
               </Text>
             </Flex>
           </Flex>

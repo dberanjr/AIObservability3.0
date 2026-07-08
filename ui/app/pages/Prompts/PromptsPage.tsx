@@ -1,24 +1,173 @@
-import React, { useState, useRef, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
+import { Heading, Text } from "@dynatrace/strato-components/typography";
 import {
   CloseSidebarIcon,
   OpenSidebarIcon,
   FilterIcon,
+  XmarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  WarningIcon,
 } from "@dynatrace/strato-icons";
+import { promptsFocusChip } from "./focus";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
 import { PromptsTable, type PromptView } from "./PromptsTable";
 import { PromptsTilesRow } from "./PromptsTilesRow";
+import { GuardrailsStrip } from "../../guardrails/GuardrailsStrip";
 import { usePersistedState } from "../../state/usePersistedState";
 import { usePrompts, type PromptsFilter } from "./usePrompts";
+import { type PromptSort } from "./promptsSort";
 import { decodePromptsFilter } from "./findingFilter";
+import { describeFilter } from "./filterScope";
+import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+
+/**
+ * A single dismissible/expandable "Data coverage" callout that folds the two
+ * instrumentation caveats (metadata-only notice + telemetry-gap note) into one
+ * collapsed line, instead of stacking two always-on gray/amber blocks above the
+ * table (Prompts-10). Collapsed + dismissed state persist across visits.
+ */
+const DataCoverageCallout = ({
+  showMetadata,
+  hasContent,
+  hasEval,
+}: {
+  showMetadata: boolean;
+  hasContent: boolean;
+  hasEval: boolean;
+}) => {
+  const [dismissed, setDismissed] = usePersistedState<boolean>(
+    "ai-obs.prompts-coverage-dismissed",
+    false,
+  );
+  const [open, setOpen] = usePersistedState<boolean>(
+    "ai-obs.prompts-coverage-open",
+    false,
+  );
+  if (dismissed) return null;
+  const Chevron = open ? ChevronDownIcon : ChevronRightIcon;
+  return (
+    <div
+      style={{
+        borderRadius: 6,
+        border: "1px solid color-mix(in oklab, var(--amber) 35%, transparent)",
+        background: "color-mix(in oklab, var(--amber) 7%, var(--surface))",
+      }}
+    >
+      <Flex alignItems="center" gap={8} style={{ padding: "6px 10px" }}>
+        <WarningIcon size={14} style={{ color: "var(--amber)", flex: "0 0 auto" }} />
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flex: 1,
+            minWidth: 0,
+            color: "var(--text)",
+          }}
+        >
+          <Chevron size={14} style={{ color: "var(--text-3)", flex: "0 0 auto" }} />
+          <Text style={{ fontSize: 11.5 }}>
+            <strong>Data coverage</strong> — some AI telemetry is missing on this
+            tenant (quality scoring, content capture, conversation grouping).
+          </Text>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss data-coverage notice"
+          title="Dismiss"
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "inline-flex",
+            color: "var(--text-3)",
+            flex: "0 0 auto",
+          }}
+        >
+          <XmarkIcon size={12} />
+        </button>
+      </Flex>
+      {open && (
+        <Flex flexDirection="column" gap={8} style={{ padding: "0 12px 12px 34px" }}>
+          {showMetadata && (
+            <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+              <strong>Metadata-only.</strong> This environment doesn't instrument
+              {!hasContent && (
+                <>
+                  {" "}prompt/response content (<code>gen_ai.prompt.*</code> /{" "}
+                  <code>gen_ai.completion.*</code>)
+                </>
+              )}
+              {!hasContent && !hasEval ? " or" : ""}
+              {!hasEval && (
+                <>
+                  {" "}evaluation scores (<code>gen_ai.evaluation.*</code>)
+                </>
+              )}
+              , so the table shows LLM-call metadata (model, tokens, latency,
+              agent) and the masking / quality-analytics panels stay inert until
+              those attributes are emitted.
+            </Text>
+          )}
+          <DataGapNote
+            tone="warn"
+            message="Multi-turn conversation grouping is unavailable and prompts often resolve to a single app/agent: no conversation id is emitted, and prompt content is captured on only a small share of spans. Prompts also can't be attributed to an agent because gen_ai.agent.name isn't set on LLM spans."
+            attributes={[
+              "gen_ai.conversation.id",
+              "gen_ai.prompt.0.content (sparse)",
+              "gen_ai.agent.name (on LLM spans)",
+            ]}
+            bestPractice="Emit a stable gen_ai.conversation.id per dialogue, raise prompt/response content capture coverage (behind privacy controls), and propagate trace context / agent name to LLM spans. See INSTRUMENTATION-REQUIREMENTS.md P1.1 and P2.6."
+            href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
+            hrefLabel="OTel GenAI spans"
+          />
+        </Flex>
+      )}
+    </div>
+  );
+};
 
 export const PromptsPage = () => {
-  const { search } = useLocation();
+  const { search, pathname } = useLocation();
+  const navigate = useNavigate();
+  // Pulse problem-pattern drill-down (PP-3): the RAW `?focus` id (not the typed
+  // useFocusParam union, which only covers architecture-layer keys). A known id
+  // applies that pattern's predicate to the list; unknown/absent is a no-op.
+  const focus = new URLSearchParams(search).get("focus");
+  // Chip label for ANY known focus — same-span (PP-3) OR cross-span (PP-4).
+  // `approximate` adds the "≈ approximate" marker where the signal is a proxy.
+  const focusChip = promptsFocusChip(focus);
+  // Remove the `?focus` param (drops the predicate and the chip), keeping every
+  // other search param (timeframe, global filter, sidebar pf_*) intact.
+  const clearFocus = useCallback(() => {
+    const next = new URLSearchParams(search);
+    next.delete("focus");
+    const qs = next.toString();
+    navigate({ pathname, search: qs ? `?${qs}` : "" }, { replace: true });
+  }, [search, pathname, navigate]);
+  // Set (or clear, when null) the `?focus` problem-pattern from the sidebar —
+  // the SAME mechanism the Pulse drill-down and the "Filtered:" chip use, so the
+  // chip and the sidebar selection stay in sync via the URL.
+  const setFocus = useCallback(
+    (id: string | null) => {
+      if (!id) return clearFocus();
+      const next = new URLSearchParams(search);
+      next.set("focus", id);
+      navigate({ pathname, search: `?${next.toString()}` }, { replace: true });
+    },
+    [search, pathname, navigate, clearFocus],
+  );
   const [filter, setFilter] = useState<PromptsFilter>(() =>
     decodePromptsFilter(typeof window !== "undefined" ? window.location.search : ""),
   );
@@ -34,7 +183,33 @@ export const PromptsPage = () => {
       setFilter((prev) => ({ ...prev, ...incoming }));
     }
   }, [search]);
+  // The shared toolbar's global Reset must also clear the Prompts left sidebar
+  // filter (services/agents/models/onlyErrors/…), which lives in this local
+  // state — mirrors Explorer's reset-handler registration. Also clear the
+  // applied-filter ref so a still-present `pf_*` URL param doesn't immediately
+  // re-apply on the next render.
+  const { registerResetHandler } = useGlobalFilters();
+  // Keep the latest clearFocus in a ref so the once-registered reset handler
+  // always clears the CURRENT `?focus` (avoids a stale-closure that would clear
+  // an old search string).
+  const clearFocusRef = useRef(clearFocus);
+  clearFocusRef.current = clearFocus;
+  // Reset everything: sidebar filter, the applied-filter ref, and the URL focus.
+  // Shared by the toolbar's global Reset and the table's filtered-empty recovery
+  // action (Prompts-7).
+  const resetAll = useCallback(() => {
+    appliedFilterRef.current = "";
+    setFilter({});
+    clearFocusRef.current();
+  }, []);
+  useEffect(
+    () => registerResetHandler(resetAll),
+    [registerResetHandler, resetAll],
+  );
   const [view, setView] = useState<PromptView>("stream");
+  // Table sort lives here (not in the table) so a heavy numeric sort can be
+  // pushed into the list query server-side before the 200-row cap (Prompts-9).
+  const [sort, setSort] = useState<PromptSort>({ key: "timestampMs", dir: "desc" });
   // Sticky sidebar height must equal the space from its (pinned) top to the
   // viewport bottom — a fixed calc() guesses the page-header height wrong and
   // pushes the bottom (Privacy) off-screen, unreachable by the inner scroll.
@@ -80,7 +255,7 @@ export const PromptsPage = () => {
     refetch,
     hasContent,
     hasEval,
-  } = usePrompts(filter);
+  } = usePrompts(filter, focus, sort);
 
   const firstError = promptsError ?? null;
 
@@ -168,59 +343,98 @@ export const PromptsPage = () => {
               facets={facets}
               filter={filter}
               privacy={privacy}
+              focus={focus}
               onFilterChange={setFilter}
               onPrivacyChange={setPrivacy}
+              onFocusChange={setFocus}
             />
           </>
         )}
       </div>
 
       <Flex flexDirection="column" gap={16} style={{ minWidth: 0 }}>
+        {/* Page identity + one-line purpose (IA): an in-page "you are here"
+            beyond the active nav pill, stating what this page answers. */}
+        <Flex flexDirection="column" gap={2}>
+          <Heading level={1} style={{ fontSize: 18, fontWeight: 700 }}>
+            Prompts
+          </Heading>
+          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+            Every LLM call in scope — inspect prompts, tokens, cost and quality
+            scores, and drill into the full trace behind any response.
+          </Text>
+        </Flex>
         {firstError && <ErrorBanner error={firstError} />}
-        {showMetadataNotice && (
-          <Flex
-            alignItems="flex-start"
-            gap={8}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 6,
-              background: "color-mix(in oklab, var(--amber) 10%, var(--surface))",
-              border: "1px solid color-mix(in oklab, var(--amber) 40%, transparent)",
-            }}
-          >
-            <Text style={{ fontSize: 11.5, color: "var(--text)" }}>
-              <strong>Metadata-only.</strong> This environment doesn't instrument
-              {!hasContent && (
-                <>
-                  {" "}prompt/response content (<code>gen_ai.prompt.*</code> /{" "}
-                  <code>gen_ai.completion.*</code>)
-                </>
+        {focusChip && (
+          <Flex alignItems="center" gap={8}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "3px 8px",
+                borderRadius: 6,
+                background:
+                  "var(--blue-surface, color-mix(in oklab, var(--blue) 12%, transparent))",
+                border: "1px solid color-mix(in oklab, var(--blue) 35%, transparent)",
+                fontSize: 11.5,
+                color: "var(--text)",
+                whiteSpace: "nowrap",
+                maxWidth: 420,
+              }}
+            >
+              <span style={{ color: "var(--text-2)" }}>Filtered:</span>
+              <span style={{ fontWeight: 600 }}>{focusChip.label}</span>
+              {focusChip.approximate && (
+                <span
+                  title="Approximate: the pattern's exact signal isn't emitted on this tenant, so the closest defensible proxy is used."
+                  style={{
+                    color: "var(--text-3)",
+                    fontStyle: "italic",
+                    cursor: "help",
+                  }}
+                >
+                  ≈ approximate
+                </span>
               )}
-              {!hasContent && !hasEval ? " or" : ""}
-              {!hasEval && (
-                <>
-                  {" "}evaluation scores (<code>gen_ai.evaluation.*</code>)
-                </>
-              )}
-              , so the table shows LLM-call metadata (model, tokens, latency,
-              agent) and the masking / quality-analytics panels stay inert until
-              those attributes are emitted.
-            </Text>
+              <button
+                type="button"
+                aria-label={`Remove ${focusChip.label} filter`}
+                title="Clear filter"
+                onClick={clearFocus}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  color: "var(--text-3)",
+                }}
+              >
+                <XmarkIcon size={12} />
+              </button>
+            </span>
           </Flex>
         )}
+        {/* Guardrails gate the prompt/response I/O analyzed below — surface the
+            fleet intervention context (Bedrock metrics; full view on Pulse). */}
+        <GuardrailsStrip />
         <PromptsTilesRow
           filter={filter}
           onFilterChange={setFilter}
+          focus={focus}
         />
-        <DataGapNote
-          tone="warn"
-          message="Multi-turn conversation grouping is unavailable and prompts often resolve to a single app/agent: no conversation id is emitted, and prompt content is captured on only a small share of spans. Prompts also can't be attributed to an agent because gen_ai.agent.name isn't set on LLM spans."
-          attributes={["gen_ai.conversation.id", "gen_ai.prompt.0.content (sparse)", "gen_ai.agent.name (on LLM spans)"]}
-          bestPractice="Emit a stable gen_ai.conversation.id per dialogue, raise prompt/response content capture coverage (behind privacy controls), and propagate trace context / agent name to LLM spans. See INSTRUMENTATION-REQUIREMENTS.md P1.1 and P2.6."
-          href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/"
-          hrefLabel="OTel GenAI spans"
+        {/* One consolidated, dismissible coverage callout instead of two stacked
+            always-on caveat blocks (Prompts-10). */}
+        <DataCoverageCallout
+          showMetadata={showMetadataNotice}
+          hasContent={hasContent}
+          hasEval={hasEval}
         />
-        <PromptQualityAnalytics />
+        <PromptQualityAnalytics
+          filter={filter}
+          focus={focus}
+          rows={filtered}
+          onFilterChange={setFilter}
+        />
 
         <PromptsTable
           view={view}
@@ -229,6 +443,10 @@ export const PromptsPage = () => {
           isLoading={isLoading}
           privacy={privacy}
           onRefresh={refetch}
+          onResetFilters={resetAll}
+          filterSummary={describeFilter(filter, focusChip?.label ?? null)}
+          sort={sort}
+          onSortChange={setSort}
         />
       </Flex>
     </div>

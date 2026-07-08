@@ -1,19 +1,25 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useScanLimit } from "../../scope/ScanLimitContext";
+import { readScanMeta } from "../../scope/ScanReportContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildModelsQuery } from "./queries";
-import { costOf, getPricing } from "../../data/pricing";
+import { costOf, getPricing, type ModelPricing } from "../../data/pricing";
 import {
   canonicalizeModel,
   normalizeProvider,
+  PROVIDER_COLOR,
   type ProviderId,
 } from "../../detection/attributes";
 import { toNum } from "../../data/format";
+import { inferModelType, MODEL_TYPE_LABEL, type ModelType } from "./finopsLogic";
+
+export { inferModelType, MODEL_TYPE_LABEL, type ModelType };
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -38,32 +44,6 @@ interface ModelRecord {
   error_rate_pct?: number;
   timeout_rate_pct?: number;
 }
-
-export type ModelType = "generative" | "embedding" | "reranking";
-
-export const MODEL_TYPE_LABEL: Record<ModelType, string> = {
-  generative: "Generative",
-  embedding: "Embedding",
-  reranking: "Reranking",
-};
-
-/**
- * Per Session 11 handoff: infer type from gen_ai.operation.name first, then
- * model-name substring. gen_ai.operation.name is not consistently set in BOS
- * data so the name-based fallback is load-bearing.
- */
-export const inferModelType = (
-  modelName: string,
-  operationName?: string | null,
-): ModelType => {
-  const op = (operationName ?? "").trim().toLowerCase();
-  if (op === "embeddings" || op === "embedding") return "embedding";
-  if (op === "rerank" || op === "reranking") return "reranking";
-  const m = modelName.toLowerCase();
-  if (m.includes("embed")) return "embedding";
-  if (m.includes("rerank")) return "reranking";
-  return "generative";
-};
 
 export interface ModelRow {
   model: string;
@@ -91,6 +71,9 @@ export interface ModelRow {
   hasTimeoutAttribute: boolean;
   cost: number;
   costPerMTok: number;
+  /** Effective pricing record (rates, context window, provider, tier) for the
+   *  dominant model variant — drives the detail modal's pricing card. */
+  pricing: ModelPricing;
   /** avg input tokens / context window size. Null when the model isn't in pricing.ts. */
   contextUtilizationPct: number | null;
   /** avg output tokens / (avg latency in seconds). Null for embedding (no output tokens). */
@@ -99,31 +82,26 @@ export interface ModelRow {
   pricingUnknown: boolean;
 }
 
-const PROVIDER_COLOR_LIGHT: Record<ProviderId, string> = {
-  anthropic: "var(--purple-2)",
-  openai: "var(--green-2)",
-  google: "var(--green-2)",
-  "aws-bedrock": "var(--cyan)",
-  azure: "var(--blue)",
-  cohere: "var(--blue-purple)",
-  mistral: "var(--amber)",
-  unknown: "var(--text-4)",
-};
-
 export interface UseModelsResult {
   models: ModelRow[];
   isLoading: boolean;
   error?: Error;
+  /** True when the model scan reached its scan-limit budget (results partial),
+   *  so an empty view can offer a "raise the scan limit" remedy (STATE-4/6). */
+  limitHit: boolean;
 }
 
-export const useModels = (): UseModelsResult => {
+export const useModels = (serviceName?: string | null): UseModelsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
+  const { scanLimitGb } = useScanLimit();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<ModelRecord>(
-    canQuery ? buildModelsQuery(resolution.serviceIds, scope.timeframe, filters) : "",
+    canQuery
+      ? buildModelsQuery(resolution.serviceIds, scope.timeframe, filters, serviceName)
+      : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 
@@ -253,7 +231,7 @@ export const useModels = (): UseModelsResult => {
         modelKey: agg.key,
         rawModels: Array.from(agg.rawModels),
         provider,
-        providerColor: PROVIDER_COLOR_LIGHT[provider.id],
+        providerColor: PROVIDER_COLOR[provider.id],
         type,
         typeInferredFromName,
         requests,
@@ -271,6 +249,7 @@ export const useModels = (): UseModelsResult => {
         hasTimeoutAttribute,
         cost,
         costPerMTok,
+        pricing,
         contextUtilizationPct,
         tokensPerSec,
         pricingUnknown:
@@ -283,6 +262,7 @@ export const useModels = (): UseModelsResult => {
       models,
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
+      limitHit: readScanMeta({ data }, scanLimitGb)?.limitHit ?? false,
     };
-  }, [data, isLoading, error, resolution.isLoading, filters]);
+  }, [data, isLoading, error, resolution.isLoading, filters, scanLimitGb]);
 };

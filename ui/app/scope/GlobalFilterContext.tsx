@@ -1,19 +1,12 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useRef } from "react";
 import { usePersistedState } from "../state/usePersistedState";
+import { hasActiveFilter, type GlobalFilters } from "./queries";
+import { createResetHandlerRegistry } from "./resetHandlerRegistry";
 
-/**
- * A single free-form filter condition: a span attribute and the set of values
- * to match (OR within a condition; AND across conditions). The attribute can
- * be ANY span field — gen_ai.*, langchain.*, service.name, k8s.*, span.*, etc.
- */
-export interface FilterCondition {
-  attribute: string;
-  values: string[];
-}
-
-export interface GlobalFilters {
-  conditions: FilterCondition[];
-}
+// `FilterCondition` / `GlobalFilters` are defined once in `queries.ts` (the DQL
+// resolver owns the shape); re-export the condition type for existing importers
+// of this module.
+export type { FilterCondition, GlobalFilters } from "./queries";
 
 interface GlobalFilterContextValue {
   filters: GlobalFilters;
@@ -21,9 +14,24 @@ interface GlobalFilterContextValue {
   upsertCondition: (attribute: string, values: string[]) => void;
   /** Replace the values of an existing condition; removes it if empty. */
   setConditionValues: (attribute: string, values: string[]) => void;
+  /**
+   * Set (replace) a presence ("exists") condition keyed by `attribute`. Scopes
+   * to traces where any span carries at least one of `attributeNames`
+   * (OR-joined). Defaults `attributeNames` to `[attribute]`.
+   */
+  setPresenceCondition: (attribute: string, attributeNames?: string[]) => void;
   removeCondition: (attribute: string) => void;
   clearAll: () => void;
   hasFilters: boolean;
+  /**
+   * Register a side-effect to run when the global Reset is invoked. Lets pages
+   * with their own local (e.g. URL-param) filter state clear themselves on
+   * Reset without the shared toolbar needing to know about them. Returns an
+   * unregister function — call it on unmount.
+   */
+  registerResetHandler: (fn: () => void) => () => void;
+  /** Invoke every registered reset handler. Called by the toolbar's Reset. */
+  runResetHandlers: () => void;
 }
 
 const GlobalFilterContext = createContext<GlobalFilterContextValue | undefined>(
@@ -62,6 +70,18 @@ export const GlobalFilterProvider = ({
     setConditionValues(attribute, merged);
   };
 
+  const setPresenceCondition = (
+    attribute: string,
+    attributeNames?: string[],
+  ) => {
+    const names =
+      attributeNames && attributeNames.length > 0 ? attributeNames : [attribute];
+    const others = conditions.filter((c) => c.attribute !== attribute);
+    setFilters({
+      conditions: [...others, { attribute, values: names, op: "exists" }],
+    });
+  };
+
   const removeCondition = (attribute: string) =>
     setFilters({
       conditions: conditions.filter((c) => c.attribute !== attribute),
@@ -69,17 +89,31 @@ export const GlobalFilterProvider = ({
 
   const clearAll = () => setFilters(EMPTY);
 
-  const hasFilters = conditions.length > 0;
+  // Reset-handler registry. Built once and held in a ref (stable across
+  // renders) so register/run never change identity and effects that register a
+  // handler don't re-run on every parent render.
+  const registryRef = useRef<ReturnType<typeof createResetHandlerRegistry>>();
+  if (!registryRef.current) {
+    registryRef.current = createResetHandlerRegistry();
+  }
+  const { register: registerResetHandler, run: runResetHandlers } =
+    registryRef.current;
+
+  const normalized: GlobalFilters = { conditions };
+  const hasFilters = hasActiveFilter(normalized);
 
   return (
     <GlobalFilterContext.Provider
       value={{
-        filters: { conditions },
+        filters: normalized,
         upsertCondition,
         setConditionValues,
+        setPresenceCondition,
         removeCondition,
         clearAll,
         hasFilters,
+        registerResetHandler,
+        runResetHandlers,
       }}
     >
       {children}

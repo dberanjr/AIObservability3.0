@@ -23,6 +23,8 @@ export interface BarListProps {
   max?: number;
   /** Maximum rows to render. */
   limit?: number;
+  /** When set, each row becomes clickable and calls this with the item. */
+  onSelect?: (item: BarListItem) => void;
 }
 
 export const BarList = ({
@@ -30,17 +32,39 @@ export const BarList = ({
   color = "var(--blue)",
   max,
   limit,
+  onSelect,
 }: BarListProps) => {
   const slice = limit != null ? items.slice(0, limit) : items;
   const capped = max ?? Math.max(1, ...items.map((i) => i.value));
 
   return (
     <Flex flexDirection="column" gap={8}>
+      {onSelect && (
+        <style>{`.barlist-row{cursor:pointer;border-radius:6px;margin:-2px -4px;padding:2px 4px}.barlist-row:hover{background:var(--surface-2)}`}</style>
+      )}
       {slice.map((item) => {
         const pct = capped > 0 ? (item.value / capped) * 100 : 0;
         const c = typeof color === "function" ? color(item) : color;
         return (
-          <Flex key={item.key} flexDirection="column" gap={4}>
+          <Flex
+            key={item.key}
+            flexDirection="column"
+            gap={4}
+            {...(onSelect
+              ? {
+                  className: "barlist-row",
+                  role: "button",
+                  tabIndex: 0,
+                  onClick: () => onSelect(item),
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(item);
+                    }
+                  },
+                }
+              : {})}
+          >
             <Flex alignItems="baseline" justifyContent="space-between" gap={8}>
               {item.filter ? (
                 <FilterTrigger
@@ -92,6 +116,11 @@ export const BarList = ({
               </Text>
             </Flex>
             <div
+              // Native `title` so hovering the bar itself surfaces the value
+              // (label + formatted value + optional secondary line).
+              title={`${item.label}: ${item.displayValue}${
+                item.secondary ? ` · ${item.secondary}` : ""
+              }`}
               style={{
                 position: "relative",
                 height: 6,

@@ -10,6 +10,7 @@ import { TIER_ICONS } from "./icons";
 import { CountUp } from "./CountUp";
 import { Spark } from "./Spark";
 import { statusColor } from "./tokens";
+import { fmtCount, fmtMs, fmtTokens } from "../../../data/format";
 import { resolveCell, type ArchNodeMeta, type DetailSpec, type LensId, type NodeView } from "./model";
 
 interface Props {
@@ -39,6 +40,14 @@ export const MapNode = ({
   const isData = cell.headline !== undefined;
   // Data-bearing tiers (not client/gateway) shimmer until the summarize lands.
   const showShimmer = !isData && loading && meta.category !== "edge";
+  // A lens-fallback headline (base number carried through a lens the tier doesn't
+  // measure) renders dimmed so it reads as context, not a live lens reading.
+  const lensMuted = lensId != null && cell.status === "muted" && cell.headline !== undefined;
+  // Redundant, non-colour status cue for non-healthy tiers (a11y — don't rely on
+  // the 8px corner dot / number hue alone).
+  const statusTag = cell.status === "critical" ? "Critical" : cell.status === "warning" ? "Warning" : null;
+  // The node sparkline's latest value formats to match the active lens's metric.
+  const sparkFmt = lensId === "latency" ? fmtMs : lensId === "cost" ? fmtTokens : fmtCount;
   // The sparkline tracks the active lens's metric (latency / errors / tokens),
   // falling back to throughput.
   const sparkData =
@@ -60,7 +69,7 @@ export const MapNode = ({
       data-dim={dim ? "true" : "false"}
       role="button"
       tabIndex={0}
-      aria-label={`${meta.name} — ${view.reason || cell.sub}`}
+      aria-label={`${meta.name}${statusTag ? ` — ${statusTag}` : ""} — ${view.reason || cell.sub}`}
       onClick={() => onPick(meta)}
       onMouseEnter={() => onHover(meta.key)}
       onMouseLeave={() => onHover(null)}
@@ -85,7 +94,14 @@ export const MapNode = ({
         <span className="am-node-title">{meta.name}</span>
         {sparkData && (
           <span className="am-node-spark">
-            <Spark data={sparkData} color={statusColor(cell.status)} width={84} height={24} />
+            <Spark
+              data={sparkData}
+              color={statusColor(cell.status)}
+              width={84}
+              height={24}
+              format={sparkFmt}
+              showEnd
+            />
           </span>
         )}
         {view.enrich && (
@@ -105,10 +121,16 @@ export const MapNode = ({
       {isData ? (
         <>
           <div className="am-node-metric">
-            <span className="am-node-num">
+            <span className="am-node-num" style={lensMuted ? { color: "var(--text-3)" } : undefined}>
               <CountUp value={cell.headline as string} />
             </span>
             <span className="am-node-unit">{cell.sub}</span>
+            {statusTag && (
+              <span className="am-node-status" data-status={cell.status}>
+                <span aria-hidden>{cell.status === "critical" ? "●" : "▲"}</span>
+                {statusTag}
+              </span>
+            )}
           </div>
           {cell.badges.length > 0 && (
             <div className="am-node-badges">

@@ -1,26 +1,24 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { fmtUSDCompact } from "../../data/format";
+import { fmtUSD, fmtUSDCompact } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { SR_ONLY } from "../../components/charts/AreaChart";
 import type { DailyCostSummary } from "./useFinOps";
+import { assignSeriesColors } from "./finopsLogic";
 
-const VIEW_W = 720;
+// Fallback width used before the ResizeObserver measures the container. Real
+// rendering drives the viewBox from the observed width so 9px axis labels and
+// bar geometry stay at native size instead of being horizontally stretched by
+// a fixed viewBox + preserveAspectRatio="none" (UX report Chart-8) — matching
+// the AreaChart/Histogram pattern.
+const FALLBACK_VIEW_W = 720;
 const HEIGHT = 240;
 const PAD_L = 48;
 const PAD_R = 16;
 const PAD_T = 12;
 const PAD_B = 28;
-
-const SERIES_COLORS = [
-  "var(--blue)",
-  "var(--purple)",
-  "var(--cyan)",
-  "var(--purple-2)",
-  "var(--green-2)",
-  "var(--amber)",
-  "var(--text-3)",
-];
 
 const niceMax = (max: number): number => {
   if (max <= 0) return 1;
@@ -40,12 +38,32 @@ export const DailyCostStackedBar = ({
   isLoading,
 }: DailyCostStackedBarProps) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [viewW, setViewW] = useState<number>(FALLBACK_VIEW_W);
+  // Spoken readout of the keyboard-focused day column, fed to an aria-live
+  // region so the hover tooltip's per-model breakdown is reachable without a
+  // pointer (Models/FinOps-13).
+  const [srText, setSrText] = useState("");
+
+  // Callback ref: (re)attaches a ResizeObserver whenever the plotting div
+  // mounts. A callback ref (rather than useEffect + useRef) is needed because
+  // the div lives inside the loading/empty conditional, so it mounts after the
+  // first render.
+  const roRef = useRef<ResizeObserver | null>(null);
+  const measureRef = useCallback((node: HTMLDivElement | null) => {
+    roRef.current?.disconnect();
+    if (node && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(([entry]) => {
+        setViewW(Math.max(200, Math.floor(entry.contentRect.width)));
+      });
+      ro.observe(node);
+      roRef.current = ro;
+    }
+  }, []);
 
   const { stacks, max, colorFor } = useMemo(() => {
-    const colorMap = new Map<string, string>();
-    daily.series.forEach((s, i) => {
-      colorMap.set(s.model, SERIES_COLORS[i % SERIES_COLORS.length]);
-    });
+    // Colour each model series by its provider so a model reads the same hue
+    // here as in the bubble chart, table chips and provider-mix donut.
+    const colorMap = assignSeriesColors(daily.series.map((s) => s.model));
     const max = niceMax(Math.max(...daily.totals, 0));
     const stacks = daily.totals.map((_, dayIdx) => {
       let running = 0;
@@ -68,7 +86,7 @@ export const DailyCostStackedBar = ({
     };
   }, [daily]);
 
-  const innerW = VIEW_W - PAD_L - PAD_R;
+  const innerW = viewW - PAD_L - PAD_R;
   const innerH = HEIGHT - PAD_T - PAD_B;
   const slot = daily.dayLabels.length > 0 ? innerW / daily.dayLabels.length : innerW;
   const barW = Math.max(8, slot * 0.6);
@@ -77,6 +95,48 @@ export const DailyCostStackedBar = ({
   const hovered = hoverIndex != null ? stacks[hoverIndex] : null;
   const hoverLabel =
     hoverIndex != null ? daily.dayLabels[hoverIndex] : null;
+
+  // Non-visual readout of a day column: total plus its top models by spend
+  // (named, so identity survives without the colour swatches).
+  const readoutFor = (dayIdx: number): string => {
+    const stack = stacks[dayIdx];
+    if (!stack) return "";
+    const label = daily.dayLabels[dayIdx] ?? `Day ${dayIdx + 1}`;
+    const parts = [`${label}, total ${fmtUSD(stack.total)}`];
+    stack.segments
+      .filter((s) => s.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 4)
+      .forEach((s) => parts.push(`${s.model} ${fmtUSD(s.value)}`));
+    return parts.join(", ");
+  };
+
+  // Arrow keys walk the day columns; Home/End jump to the ends; Escape clears.
+  // Mirrors the pointer hover so keyboard users reach the same tooltip content.
+  const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    const n = stacks.length;
+    if (n === 0) return;
+    let next: number | null = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown")
+      next = Math.min(n - 1, (hoverIndex ?? -1) + 1);
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+      next = Math.max(0, (hoverIndex ?? n) - 1);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = n - 1;
+    else if (e.key === "Escape") {
+      setHoverIndex(null);
+      setSrText("");
+      return;
+    } else return;
+    e.preventDefault();
+    setHoverIndex(next);
+    setSrText(readoutFor(next));
+  };
+
+  const onBlur = () => {
+    setHoverIndex(null);
+    setSrText("");
+  };
 
   return (
     <Surface elevation="raised" padding={16}>
@@ -113,19 +173,26 @@ export const DailyCostStackedBar = ({
         {isLoading && stacks.length === 0 ? (
           <Skeleton style={{ height: HEIGHT, borderRadius: 8 }} />
         ) : stacks.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No spend data over the last 7 days.
-          </Text>
+          <EmptyState
+            bare
+            title="No spend over the last 7 days"
+            description="No costable token usage was found in scope across the last 7 daily scans."
+            hint="Each day is scanned at a 1:100 sampling floor; widen the scope or check that priced models are in use."
+          />
         ) : (
-          <div style={{ position: "relative" }}>
+          <div ref={measureRef} style={{ position: "relative", width: "100%" }}>
             <svg
               width="100%"
               height={HEIGHT}
-              viewBox={`0 0 ${VIEW_W} ${HEIGHT}`}
-              preserveAspectRatio="none"
+              viewBox={`0 0 ${viewW} ${HEIGHT}`}
               role="img"
-              aria-label="Daily cost stacked bar chart"
+              tabIndex={0}
+              aria-label={`Daily cost over the last 7 days, stacked by model, total ${fmtUSDCompact(
+                daily.totals.reduce((a, b) => a + b, 0),
+              )}. Use arrow keys to move between days.`}
               onMouseLeave={() => setHoverIndex(null)}
+              onKeyDown={onKeyDown}
+              onBlur={onBlur}
             >
               {/* Y axis grid + ticks */}
               {[0, 0.25, 0.5, 0.75, 1].map((t) => {
@@ -134,7 +201,7 @@ export const DailyCostStackedBar = ({
                   <g key={t} pointerEvents="none">
                     <line
                       x1={PAD_L}
-                      x2={VIEW_W - PAD_R}
+                      x2={viewW - PAD_R}
                       y1={y}
                       y2={y}
                       stroke="var(--border)"
@@ -209,8 +276,9 @@ export const DailyCostStackedBar = ({
 
             {hovered && hoverLabel && (
               <div
-                role="status"
-                aria-live="polite"
+                // Visual echo of the SR_ONLY live readout below — hidden from
+                // AT so keyboard nav announces once, not twice.
+                aria-hidden
                 style={{
                   position: "absolute",
                   top: 8,
@@ -229,7 +297,7 @@ export const DailyCostStackedBar = ({
                     {hoverLabel}
                   </Text>
                   <Text style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                    Total {fmtUSDCompact(hovered.total)}
+                    Total {fmtUSD(hovered.total)}
                   </Text>
                   {hovered.segments
                     .filter((s) => s.value > 0)
@@ -269,13 +337,17 @@ export const DailyCostStackedBar = ({
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
-                          {fmtUSDCompact(s.value)}
+                          {fmtUSD(s.value)}
                         </Text>
                       </Flex>
                     ))}
                 </Flex>
               </div>
             )}
+            {/* Keyboard-cursor readout for the focused day column. */}
+            <div aria-live="polite" style={SR_ONLY}>
+              {srText}
+            </div>
           </div>
         )}
       </Flex>

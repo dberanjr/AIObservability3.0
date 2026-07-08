@@ -1,17 +1,27 @@
 import React, { useMemo } from "react";
-import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { FindingCard } from "../../components/FindingCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import { DEFAULT_FINDING_INTENTS, type Finding } from "../../components/drawers/types";
-import { fmtCount, fmtUSD } from "../../data/format";
+import { fmtCount } from "../../data/format";
 import type { ModelRow } from "./useModels";
 
 export interface ModelsFindingsProps {
   models: ModelRow[];
   onSelect: (finding: Finding) => void;
+  /** Model-query error, so an empty findings row reads as a failure rather than
+   *  "no data" (STATE-2). */
+  error?: Error;
+  /** True when the model scan hit its scan-limit budget, so an empty row can
+   *  surface the truncation instead of "no activity" (STATE-4). */
+  limitHit?: boolean;
 }
 
-export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
+export const ModelsFindings = ({
+  models,
+  onSelect,
+  error,
+  limitHit,
+}: ModelsFindingsProps) => {
   const findings = useMemo<Finding[]>(() => {
     if (models.length === 0) return [];
     const out: Finding[] = [];
@@ -33,6 +43,9 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
     const sharePct =
       totalRequests > 0 ? (topProviderRequests / totalRequests) * 100 : 0;
     if (sharePct > 80) {
+      const providerModels = models
+        .filter((m) => m.provider.id === topProvider)
+        .map((m) => m.model);
       out.push({
         id: "single-vendor-risk",
         severity: "warning",
@@ -42,46 +55,14 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
         context:
           "More than 80% of model requests route to one provider. Diversify to reduce blast radius if that vendor degrades.",
         intents: DEFAULT_FINDING_INTENTS,
+        promptsFilter: { models: providerModels },
       });
     }
 
-    const expensiveModel = [...models]
-      .filter((m) => !m.pricingUnknown && m.costPerMTok > 0)
-      .sort((a, b) => b.costPerMTok - a.costPerMTok)[0];
-    const cheapPeer = [...models]
-      .filter((m) => !m.pricingUnknown && m.costPerMTok > 0)
-      .sort((a, b) => a.costPerMTok - b.costPerMTok)[0];
-    if (
-      expensiveModel &&
-      cheapPeer &&
-      expensiveModel.modelKey !== cheapPeer.modelKey &&
-      expensiveModel.costPerMTok > cheapPeer.costPerMTok * 3
-    ) {
-      out.push({
-        id: "downgrade-candidate",
-        severity: "info",
-        category: "Downgrade candidate",
-        entity: expensiveModel.model,
-        metric: fmtUSD(expensiveModel.costPerMTok),
-        context: `${expensiveModel.model} costs ${(expensiveModel.costPerMTok / cheapPeer.costPerMTok).toFixed(1)}× ${cheapPeer.model}. Pilot ${cheapPeer.model} on lower-stakes prompts and compare quality.`,
-        intents: DEFAULT_FINDING_INTENTS,
-      });
-    }
-
-    const bedrockModels = models.filter((m) => m.provider.viaBedrock);
-    if (bedrockModels.length > 0) {
-      const totalCost = bedrockModels.reduce((acc, m) => acc + m.cost, 0);
-      out.push({
-        id: "bedrock-proxy-markup",
-        severity: "info",
-        category: "Bedrock proxy markup",
-        entity: `${bedrockModels.length} models via Bedrock`,
-        metric: fmtUSD(totalCost),
-        context:
-          "Anthropic / Cohere / Mistral served via AWS Bedrock typically carry a proxy markup. Compare to direct vendor pricing when sizing the FinOps story.",
-        intents: DEFAULT_FINDING_INTENTS,
-      });
-    }
+    // Downgrade-candidate and Bedrock-markup findings live in the FinOps
+    // findings row (they are cost/spend insights). Keeping them here too showed
+    // the same insight twice on one scroll — this block now focuses on
+    // model-mix risks (single-vendor concentration, Opus under-use).
 
     const opus = models.find((m) => /opus/i.test(m.model));
     if (opus && opus.requests > 0) {
@@ -96,6 +77,7 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
           metric: `${opusShare.toFixed(1)}% of requests`,
           context: `${opus.model} is provisioned but handles less than 5% of traffic (${fmtCount(opus.requests)} req). Consider routing harder prompts to it or downgrading the contract.`,
           intents: DEFAULT_FINDING_INTENTS,
+          promptsFilter: { models: [opus.model] },
         });
       }
     }
@@ -104,12 +86,19 @@ export const ModelsFindings = ({ models, onSelect }: ModelsFindingsProps) => {
   }, [models]);
 
   if (findings.length === 0) {
+    // STATE-2/STATE-4: never let an errored or truncated model scan read as
+    // "no data" — classify from the real signals when the parent supplies them.
+    const cause = emptyCause({ error, limitHit });
     return (
-      <Flex style={{ padding: "4px 4px" }}>
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No model findings surfaced in the current scope.
-        </Text>
-      </Flex>
+      <EmptyState
+        bare
+        cause={cause}
+        title={
+          cause === "no-activity"
+            ? "No model findings surfaced in the current scope."
+            : undefined
+        }
+      />
     );
   }
 

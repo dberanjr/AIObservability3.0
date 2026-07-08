@@ -5,12 +5,15 @@
  * then measure their boxes (refs + ResizeObserver + fonts.ready) and draw the
  * connecting edges in an absolutely-positioned SVG behind them. Edge thickness
  * tracks live call volume; a dashed magenta arc is the reasoning-loop feedback
- * edge (llm → orchestrator). Hovering a node or edge spotlights its neighbours;
+ * edge (llm → agent). Hovering a node or edge spotlights its neighbours;
  * a lens spotlights its contributing path. Flowing packets + dash drift are
  * decorative and motion-gated in CSS.
  */
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MapNode } from "./MapNode";
+import { FrameworkNode } from "./FrameworkNode";
+import { useFrameworkNodes } from "./useFrameworkNodes";
+import { TIER_ICONS } from "./icons";
 import {
   ARCH_NODES,
   EDGES,
@@ -80,6 +83,7 @@ interface Props {
 }
 
 export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) => {
+  const { frameworks, isLoading: fwLoading } = useFrameworkNodes();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const nodeEls = useRef<Partial<Record<LayerKey, HTMLDivElement | null>>>({});
   const [geo, setGeo] = useState<Geo | null>(null);
@@ -122,7 +126,9 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [measure, lensId]);
+    // Re-measure when the framework row's contents (and thus its size) change,
+    // so the orchestrator edges re-anchor to the updated row geometry.
+  }, [measure, lensId, frameworks, fwLoading]);
 
   const focus = useMemo(() => {
     if (hoverEdge) {
@@ -157,6 +163,19 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
     }
     return { active: false, nodes: new Set<LayerKey>(), edges: new Set<string>() };
   }, [hoverNode, hoverEdge, lensId, data.spotlight]);
+
+  // The 2 highest-volume edges get an always-on rate label so throughput is
+  // comparable at rest (not hover-only). Edges that already carry a finding pill
+  // or have no real span data are skipped to avoid stacking labels on one spot.
+  const labeledEdges = useMemo(() => {
+    const ranked = EDGES.map((e) => {
+      const key = edgeKey(e.from, e.to);
+      return { key, w: data.edgeWeight[key] ?? 0, rate: data.edgeRate[key] ?? "" };
+    })
+      .filter((x) => x.rate && !x.rate.startsWith("no ") && !data.edgeFinding[x.key])
+      .sort((a, b) => b.w - a.w);
+    return new Set(ranked.slice(0, 2).map((x) => x.key));
+  }, [data.edgeWeight, data.edgeRate, data.edgeFinding]);
 
   const nodeDim = (k: LayerKey): boolean => focus.active && !focus.nodes.has(k);
   const edgeState = (key: string): "normal" | "lit" | "dim" =>
@@ -234,10 +253,23 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
             {ef.label}
           </button>,
         );
+      } else if (labeledEdges.has(key) && (!hoverEdge || hoverEdge.key !== key)) {
+        // Always-on volume label on the busiest edges (hidden while that edge is
+        // hovered, where the richer tooltip takes over).
+        overlays.push(
+          <div
+            key={`er${i}`}
+            className="am-edge-rate-static"
+            data-dim={st === "dim" ? "true" : "false"}
+            style={{ left: (x1 + x2) / 2, top: (y1 + y2) / 2 }}
+          >
+            {data.edgeRate[key]}
+          </div>,
+        );
       }
     });
 
-    // ── loop edge (always anchors llm → orchestrator) ──────
+    // ── loop edge (always anchors llm → agent) ──────
     const a = R[LOOP.from];
     const b2 = R[LOOP.to];
     if (a && b2) {
@@ -313,11 +345,57 @@ export const NodeMap = ({ data, lensId, loading, onPick, onOpenSpec }: Props) =>
         </div>
       )}
       <div className="am-grid">
-        {SPINE_ROWS.map((k) => (
-          <div className="am-row" key={k}>
-            {renderNode(k)}
-          </div>
-        ))}
+        {SPINE_ROWS.map((k) =>
+          k === "orchestrator" ? (
+            <div className="am-row" key={k}>
+              {/* The orchestrator tier is split into one node per framework. The
+                  whole row registers as nodeEls["orchestrator"] so the orchestrator
+                  edges (gateway→orchestrator, orchestrator→agent) still anchor to it
+                  as a group. (The reasoning loop now anchors llm→agent, not here.)
+                  It always renders a measurable element (a tile during load, a
+                  fallback when empty) so edges never break. */}
+              <div
+                className="am-fw-row"
+                ref={(el) => {
+                  nodeEls.current.orchestrator = el;
+                }}
+              >
+                {frameworks.length > 0 ? (
+                  frameworks.map((fw) => (
+                    <FrameworkNode
+                      key={fw.id}
+                      framework={fw}
+                      dim={nodeDim("orchestrator")}
+                      onPick={(f) => onOpenSpec({ kind: "framework", id: f.id })}
+                    />
+                  ))
+                ) : fwLoading ? (
+                  <div className="am-fw-node am-fw-muted" data-cat="core" aria-hidden>
+                    <div className="am-node-shimmer">
+                      <span className="am-shimmer-bar am-shimmer-num" />
+                      <span className="am-shimmer-bar am-shimmer-sub" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="am-fw-node am-fw-muted" data-cat="core" data-status="muted">
+                    <div className="am-fw-head">
+                      <span className="am-fw-icon">
+                        {TIER_ICONS.orchestrator}
+                        <span className="am-fw-dot" />
+                      </span>
+                      <span className="am-fw-title">Orchestrator</span>
+                    </div>
+                    <div className="am-fw-sub">no framework spans in scope</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="am-row" key={k}>
+              {renderNode(k)}
+            </div>
+          ),
+        )}
         <div className="am-leaves-grid">{LEAF_GRID.map(renderNode)}</div>
       </div>
     </div>

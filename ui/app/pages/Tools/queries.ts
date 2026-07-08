@@ -1,4 +1,4 @@
-import { dqlEscape, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
+import { dqlEscape, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, mcpNotLifecycleClause, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
@@ -84,7 +84,8 @@ export const buildAgentToolDetailQuery = (
   const modeFilter = strict
     ? `| filter isNotNull(gen_ai.tool.name)`
     : `| filter span.kind == "internal" or span.kind == "client"
-| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)`;
+| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
+| filter ${mcpNotLifecycleClause()}`;
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
@@ -111,6 +112,7 @@ ${agentName ? `| filter gen_ai.agent.name == "${dqlEscape(agentName)}"` : ""}
 | filter span.kind == "internal" or span.kind == "client"
 | filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
 | filter span.name != gen_ai.agent.name
+| filter ${mcpNotLifecycleClause()}
 | dedup {span.id}
 | fieldsAdd
     ${logicalErrorField()}

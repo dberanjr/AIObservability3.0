@@ -10,13 +10,36 @@ import {
   SettingIcon,
 } from "@dynatrace/strato-icons";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
-import { fmtMs, fmtTokens } from "../../data/format";
+import { EmptyState } from "../../components/EmptyState";
+import { fmtMs, fmtPercent, fmtTokens } from "../../data/format";
 import { costOf } from "../../data/pricing";
 import type { PromptRow } from "./usePrompts";
 import type { PrivacyMode } from "./PromptsSidebar";
 import { maskPII } from "./privacy";
 import { usePersistedState } from "../../state/usePersistedState";
 import { PromptDetailPanel } from "./PromptDetailPanel";
+import { SAMPLE_SIZE } from "./usePromptSummary";
+import {
+  tempColor,
+  anomalyLevel,
+  fmtCentsCost,
+  qualityColor,
+  type AnomalyLevel,
+  type Thr,
+} from "./promptCells";
+import {
+  anyRowHasEval,
+  evalTableRows,
+  EVAL_INVERTED,
+  type EvalMetric,
+} from "./evalTable";
+import {
+  isServerSorted,
+  type PromptSort,
+  type SortKey,
+  type SortDir,
+} from "./promptsSort";
+import { handleRadioGroupKeyDown, radioTabIndex } from "./radioNav";
 
 export type PromptView = "stream" | "metadata" | "evaluations";
 // Every column except Time is optional. Time is always shown as the anchor.
@@ -34,16 +57,6 @@ type VisibleColumn =
   | "output"
   | "trace_id"
   | "system_prompt";
-type SortKey =
-  | "timestampMs"
-  | "inTokens"
-  | "outTokens"
-  | "durationMs"
-  | "temperature"
-  | "inCost"
-  | "outCost";
-type SortDir = "asc" | "desc";
-
 const VIEW_OPTIONS: { value: PromptView; label: string }[] = [
   { value: "stream", label: "Stream" },
   { value: "metadata", label: "Metadata" },
@@ -167,14 +180,6 @@ const ERROR_ROW_BG =
 const TRUNC_ROW_BG =
   "linear-gradient(90deg, color-mix(in oklab, var(--amber) 18%, transparent), color-mix(in oklab, var(--amber) 4%, transparent))";
 
-// Temperature color band: cold (deterministic) → hot (creative).
-const tempColor = (t: number): string => {
-  if (t <= 0.3) return "var(--blue)";
-  if (t <= 0.6) return "var(--green-2)";
-  if (t <= 0.85) return "var(--amber)";
-  return "var(--red)";
-};
-
 /**
  * Compact temperature pill — a small color-banded chip showing the value
  * (0–1+). Tinted background + matching text/border keep it readable while
@@ -187,7 +192,7 @@ const TempCell = ({ t }: { t: number | null }) => {
   const c = tempColor(t);
   return (
     <span
-      title={`temperature ${t}`}
+      title={`temperature ${t.toFixed(2)}`}
       style={{
         display: "inline-block",
         padding: "1px 7px",
@@ -247,6 +252,22 @@ const Cell = ({
 const truncate = (s: string, n: number): string =>
   s.length > n ? `${s.slice(0, n)}…` : s;
 
+// In/Out cost are client-side ESTIMATES (tokens × a static price table), not
+// measured spend — mark the columns so they aren't read as billed amounts
+// (Prompts-8). The trailing "~" echoes the estimate convention used elsewhere.
+const COST_EST_TITLE =
+  "Estimated from token counts × model pricing (static price table) — not billed spend.";
+const IN_COST_LABEL = (
+  <>
+    In cost <span style={{ color: "var(--text-4)" }}>~</span>
+  </>
+);
+const OUT_COST_LABEL = (
+  <>
+    Out cost <span style={{ color: "var(--text-4)" }}>~</span>
+  </>
+);
+
 const HeaderCell = ({
   children,
   width,
@@ -254,6 +275,7 @@ const HeaderCell = ({
   sortBy,
   activeSort,
   onSort,
+  title,
 }: {
   children: React.ReactNode;
   width?: number;
@@ -261,9 +283,18 @@ const HeaderCell = ({
   sortBy?: SortKey;
   activeSort?: { key: SortKey; dir: SortDir };
   onSort?: (key: SortKey) => void;
+  title?: string;
 }) => {
   const isActive = sortBy && activeSort?.key === sortBy;
   const Arrow = isActive && activeSort.dir === "asc" ? ChevronUpIcon : ChevronDownIcon;
+  // aria-sort lets assistive tech announce the sorted column + direction.
+  const ariaSort: React.AriaAttributes["aria-sort"] = sortBy
+    ? isActive
+      ? activeSort.dir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none"
+    : undefined;
   const baseStyle: React.CSSProperties = {
     flex: width ? "0 0 auto" : 1,
     width,
@@ -283,24 +314,29 @@ const HeaderCell = ({
     textTransform: "uppercase",
     color: isActive ? "var(--text)" : "var(--text-3)",
   };
-  if (!sortBy || !onSort) {
-    return <div style={baseStyle}>{children}</div>;
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(sortBy)}
-      style={{ all: "unset", cursor: "pointer", ...baseStyle }}
-    >
-      <Flex
-        alignItems="center"
-        justifyContent={align === "right" ? "flex-end" : "flex-start"}
-        gap={2}
+  const content =
+    !sortBy || !onSort ? (
+      children
+    ) : (
+      <button
+        type="button"
+        onClick={() => onSort(sortBy)}
+        style={{ all: "unset", cursor: "pointer", width: "100%" }}
       >
-        {children}
-        {isActive && <Arrow size={12} />}
-      </Flex>
-    </button>
+        <Flex
+          alignItems="center"
+          justifyContent={align === "right" ? "flex-end" : "flex-start"}
+          gap={2}
+        >
+          {children}
+          {isActive && <Arrow size={12} />}
+        </Flex>
+      </button>
+    );
+  return (
+    <div role="columnheader" aria-sort={ariaSort} title={title} style={baseStyle}>
+      {content}
+    </div>
   );
 };
 
@@ -314,6 +350,7 @@ const ViewSegmented = ({
   <div
     role="radiogroup"
     aria-label="View"
+    onKeyDown={handleRadioGroupKeyDown}
     style={{
       display: "inline-flex",
       padding: 2,
@@ -330,6 +367,7 @@ const ViewSegmented = ({
           type="button"
           role="radio"
           aria-checked={active}
+          tabIndex={radioTabIndex(active)}
           onClick={() => onChange(opt.value)}
           style={{
             all: "unset",
@@ -396,6 +434,8 @@ const ColumnSelector = ({
       </button>
       {open && (
         <div
+          role="group"
+          aria-label="Toggle columns"
           style={{
             position: "absolute",
             right: 0,
@@ -461,6 +501,7 @@ const StreamHeader = ({
   visibleCols: Set<VisibleColumn>;
 }) => (
   <Flex
+    role="row"
     alignItems="center"
     style={{ padding: "0 10px", borderLeft: "3px solid transparent" }}
   >
@@ -490,13 +531,13 @@ const StreamHeader = ({
       </HeaderCell>
     )}
     {visibleCols.has("in_cost") && (
-      <HeaderCell width={70} align="right" sortBy="inCost" activeSort={sort} onSort={onSort}>
-        In cost
+      <HeaderCell width={70} align="right" sortBy="inCost" activeSort={sort} onSort={onSort} title={COST_EST_TITLE}>
+        {IN_COST_LABEL}
       </HeaderCell>
     )}
     {visibleCols.has("out_cost") && (
-      <HeaderCell width={70} align="right" sortBy="outCost" activeSort={sort} onSort={onSort}>
-        Out cost
+      <HeaderCell width={70} align="right" sortBy="outCost" activeSort={sort} onSort={onSort} title={COST_EST_TITLE}>
+        {OUT_COST_LABEL}
       </HeaderCell>
     )}
     {visibleCols.has("input") && <HeaderCell>Input</HeaderCell>}
@@ -506,21 +547,12 @@ const StreamHeader = ({
   </Flex>
 );
 
-const fmtUSD = (cents: number): string => {
-  if (!Number.isFinite(cents) || cents <= 0) return "—";
-  const dollars = cents / 100;
-  return `$${dollars.toFixed(5)}`;
-};
-
 // ---- Anomaly highlighting -------------------------------------------------
 // Flag unusually HIGH duration / token / cost values relative to the rows on
 // screen, so the user is visually cued to slow or expensive calls. Thresholds
-// are percentile-based (p90 → amber "elevated", p98 → red "outlier") and only
-// kick in once there are enough samples to be meaningful.
-interface Thr {
-  p90: number;
-  p98: number;
-}
+// are percentile-based (p90 → "elevated", p98 → "outlier") and only kick in
+// once there are enough samples to be meaningful. Anomalies are cued with bold
+// weight + a ▲ marker (Prompts-3) — NOT red/amber, which now mean failure only.
 export interface AnomalyStats {
   duration: Thr | null;
   inTok: Thr | null;
@@ -547,12 +579,46 @@ const thresholdsFor = (values: number[]): Thr | null => {
   return { p90: percentileAsc(v, 90), p98: percentileAsc(v, 98) };
 };
 
-/** Color for a value given its column thresholds: red outlier, amber elevated. */
-const anomalyColor = (value: number, t: Thr | null): string | undefined => {
-  if (!t || value <= 0) return undefined;
-  if (value >= t.p98) return "var(--red)";
-  if (value >= t.p90) return "var(--amber)";
-  return undefined;
+/**
+ * Numeric right-aligned cell that cues an anomaly with WEIGHT + a ▲ marker
+ * instead of colour (Prompts-3). The tooltip notes the cue is relative to the
+ * loaded sample (Prompts-9), not the whole timeframe.
+ */
+const NumCell = ({
+  level,
+  width,
+  label,
+  children,
+}: {
+  level: AnomalyLevel;
+  width: number;
+  label: string;
+  children: React.ReactNode;
+}) => {
+  if (level === "none") {
+    return (
+      <Cell width={width} align="right" mono>
+        {children}
+      </Cell>
+    );
+  }
+  const kind = level === "outlier" ? "Outlier" : "Elevated";
+  return (
+    <Cell
+      width={width}
+      align="right"
+      mono
+      style={{ fontWeight: 600 }}
+      title={`${kind} ${label} — relative to the ${SAMPLE_SIZE}-row loaded sample`}
+    >
+      {level === "outlier" && (
+        <span aria-hidden style={{ color: "var(--text-2)", marginRight: 3 }}>
+          ▲
+        </span>
+      )}
+      {children}
+    </Cell>
+  );
 };
 
 /** Build per-column thresholds from the displayed rows. */
@@ -591,12 +657,11 @@ const StreamRow = ({
   const outCost =
     prompt.outTokens > 0 ? costOf(0, prompt.outTokens, prompt.model) : 0;
 
-  const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
-  const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
-  const durColor = anomalyColor(prompt.durationMs, stats.duration);
-  const inCostColor = anomalyColor(inCost, stats.inCost);
-  const outCostColor = anomalyColor(outCost, stats.outCost);
-  const bold = (c?: string) => (c ? { fontWeight: 600 } : undefined);
+  const inTokLvl = anomalyLevel(prompt.inTokens, stats.inTok);
+  const outTokLvl = anomalyLevel(prompt.outTokens, stats.outTok);
+  const durLvl = anomalyLevel(prompt.durationMs, stats.duration);
+  const inCostLvl = anomalyLevel(inCost, stats.inCost);
+  const outCostLvl = anomalyLevel(outCost, stats.outCost);
 
   return (
     <div
@@ -645,14 +710,14 @@ const StreamRow = ({
         </Cell>
       )}
       {visibleCols.has("in_tok") && (
-        <Cell width={70} align="right" mono color={inTokColor} style={bold(inTokColor)} title={inTokColor ? "Elevated input tokens" : undefined}>
+        <NumCell level={inTokLvl} width={70} label="input tokens">
           {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
-        </Cell>
+        </NumCell>
       )}
       {visibleCols.has("out_tok") && (
-        <Cell width={70} align="right" mono color={outTokColor} style={bold(outTokColor)} title={outTokColor ? "Elevated output tokens" : undefined}>
+        <NumCell level={outTokLvl} width={70} label="output tokens">
           {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
-        </Cell>
+        </NumCell>
       )}
       {visibleCols.has("temperature") && (
         <Cell width={64} align="right">
@@ -660,19 +725,19 @@ const StreamRow = ({
         </Cell>
       )}
       {visibleCols.has("duration") && (
-        <Cell width={90} align="right" mono color={durColor} style={bold(durColor)} title={durColor ? "Elevated duration" : undefined}>
+        <NumCell level={durLvl} width={90} label="duration">
           {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
-        </Cell>
+        </NumCell>
       )}
       {visibleCols.has("in_cost") && (
-        <Cell width={70} align="right" mono color={inCostColor} style={bold(inCostColor)} title={inCostColor ? "Elevated input cost" : undefined}>
-          {fmtUSD(inCost)}
-        </Cell>
+        <NumCell level={inCostLvl} width={70} label="input cost (est.)">
+          {fmtCentsCost(inCost)}
+        </NumCell>
       )}
       {visibleCols.has("out_cost") && (
-        <Cell width={70} align="right" mono color={outCostColor} style={bold(outCostColor)} title={outCostColor ? "Elevated output cost" : undefined}>
-          {fmtUSD(outCost)}
-        </Cell>
+        <NumCell level={outCostLvl} width={70} label="output cost (est.)">
+          {fmtCentsCost(outCost)}
+        </NumCell>
       )}
       {visibleCols.has("input") && (
         <Cell title={inputText}>
@@ -712,6 +777,7 @@ const MetadataHeader = ({
   visibleCols: Set<VisibleColumn>;
 }) => (
   <Flex
+    role="row"
     alignItems="center"
     style={{ padding: "0 10px", borderLeft: "3px solid transparent" }}
   >
@@ -742,13 +808,13 @@ const MetadataHeader = ({
       </HeaderCell>
     )}
     {visibleCols.has("in_cost") && (
-      <HeaderCell width={70} align="right" sortBy="inCost" activeSort={sort} onSort={onSort}>
-        In cost
+      <HeaderCell width={70} align="right" sortBy="inCost" activeSort={sort} onSort={onSort} title={COST_EST_TITLE}>
+        {IN_COST_LABEL}
       </HeaderCell>
     )}
     {visibleCols.has("out_cost") && (
-      <HeaderCell width={70} align="right" sortBy="outCost" activeSort={sort} onSort={onSort}>
-        Out cost
+      <HeaderCell width={70} align="right" sortBy="outCost" activeSort={sort} onSort={onSort} title={COST_EST_TITLE}>
+        {OUT_COST_LABEL}
       </HeaderCell>
     )}
     {visibleCols.has("trace_id") && <HeaderCell>Trace ID</HeaderCell>}
@@ -774,12 +840,11 @@ const MetadataRow = ({
   const outCost =
     prompt.outTokens > 0 ? costOf(0, prompt.outTokens, prompt.model) : 0;
 
-  const inTokColor = anomalyColor(prompt.inTokens, stats.inTok);
-  const outTokColor = anomalyColor(prompt.outTokens, stats.outTok);
-  const durColor = anomalyColor(prompt.durationMs, stats.duration);
-  const inCostColor = anomalyColor(inCost, stats.inCost);
-  const outCostColor = anomalyColor(outCost, stats.outCost);
-  const bold = (c?: string) => (c ? { fontWeight: 600 } : undefined);
+  const inTokLvl = anomalyLevel(prompt.inTokens, stats.inTok);
+  const outTokLvl = anomalyLevel(prompt.outTokens, stats.outTok);
+  const durLvl = anomalyLevel(prompt.durationMs, stats.duration);
+  const inCostLvl = anomalyLevel(inCost, stats.inCost);
+  const outCostLvl = anomalyLevel(outCost, stats.outCost);
 
   return (
     <div
@@ -841,29 +906,29 @@ const MetadataRow = ({
         </Cell>
       )}
       {visibleCols.has("duration") && (
-        <Cell width={90} align="right" mono color={durColor} style={bold(durColor)} title={durColor ? "Elevated duration" : undefined}>
+        <NumCell level={durLvl} width={90} label="duration">
           {prompt.durationMs > 0 ? fmtMs(prompt.durationMs) : "—"}
-        </Cell>
+        </NumCell>
       )}
       {visibleCols.has("in_tok") && (
-        <Cell width={70} align="right" mono color={inTokColor} style={bold(inTokColor)} title={inTokColor ? "Elevated input tokens" : undefined}>
+        <NumCell level={inTokLvl} width={70} label="input tokens">
           {prompt.inTokens > 0 ? fmtTokens(prompt.inTokens) : "—"}
-        </Cell>
+        </NumCell>
       )}
       {visibleCols.has("out_tok") && (
-        <Cell width={70} align="right" mono color={outTokColor} style={bold(outTokColor)} title={outTokColor ? "Elevated output tokens" : undefined}>
+        <NumCell level={outTokLvl} width={70} label="output tokens">
           {prompt.outTokens > 0 ? fmtTokens(prompt.outTokens) : "—"}
-        </Cell>
+        </NumCell>
       )}
       {visibleCols.has("in_cost") && (
-        <Cell width={70} align="right" mono color={inCostColor} style={bold(inCostColor)} title={inCostColor ? "Elevated input cost" : undefined}>
-          {fmtUSD(inCost)}
-        </Cell>
+        <NumCell level={inCostLvl} width={70} label="input cost (est.)">
+          {fmtCentsCost(inCost)}
+        </NumCell>
       )}
       {visibleCols.has("out_cost") && (
-        <Cell width={70} align="right" mono color={outCostColor} style={bold(outCostColor)} title={outCostColor ? "Elevated output cost" : undefined}>
-          {fmtUSD(outCost)}
-        </Cell>
+        <NumCell level={outCostLvl} width={70} label="output cost (est.)">
+          {fmtCentsCost(outCost)}
+        </NumCell>
       )}
       {visibleCols.has("trace_id") && (
         <Cell mono color="var(--text-2)">
@@ -921,6 +986,153 @@ const EvaluationsEmptyState = () => (
   </Flex>
 );
 
+// ---- Evaluations view (Prompts-1) ----------------------------------------
+// The eval scores each row already carries, finally rendered as a table instead
+// of the permanent setup-guide empty state. Values are 0..1; shown as a percent
+// with the same quality thresholds as the aggregate panel, worst-first.
+const EVAL_COLUMNS: { key: EvalMetric; label: string }[] = [
+  { key: "evalHallucination", label: "Hallucination" },
+  { key: "evalCorrectness", label: "Correctness" },
+  { key: "evalFaithfulness", label: "Faithfulness" },
+  { key: "evalRelevance", label: "Relevance" },
+];
+
+const EvalScoreCell = ({
+  value,
+  metric,
+}: {
+  value: number | null;
+  metric: EvalMetric;
+}) => {
+  if (value == null) {
+    return (
+      <Cell width={110} align="right">
+        <Text style={{ fontSize: 11, color: "var(--text-4)" }}>—</Text>
+      </Cell>
+    );
+  }
+  const pct = value * 100;
+  return (
+    <Cell
+      width={110}
+      align="right"
+      mono
+      color={qualityColor(pct, EVAL_INVERTED[metric])}
+      style={{ fontWeight: 600 }}
+    >
+      {fmtPercent(pct, 0)}
+    </Cell>
+  );
+};
+
+const EvalHeader = () => (
+  <Flex
+    role="row"
+    alignItems="center"
+    style={{ padding: "0 10px", borderLeft: "3px solid transparent" }}
+  >
+    <HeaderCell width={132}>Time</HeaderCell>
+    <HeaderCell width={160}>AI app</HeaderCell>
+    <HeaderCell width={160}>Model</HeaderCell>
+    {EVAL_COLUMNS.map((c) => (
+      <HeaderCell key={c.key} width={110} align="right">
+        {c.label}
+      </HeaderCell>
+    ))}
+    <HeaderCell>{""}</HeaderCell>
+    <HeaderCell width={24}>{""}</HeaderCell>
+  </Flex>
+);
+
+const EvalRow = ({
+  prompt,
+  onClick,
+  isSelected,
+}: {
+  prompt: PromptRow;
+  onClick: (p: PromptRow) => void;
+  isSelected: boolean;
+}) => (
+  <div
+    role="row"
+    tabIndex={0}
+    onClick={() => onClick(prompt)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onClick(prompt);
+      }
+    }}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      padding: "0 10px",
+      borderTop: "1px solid var(--border)",
+      borderLeft: isSelected ? "3px solid var(--blue)" : "3px solid transparent",
+      cursor: "pointer",
+      background: isSelected
+        ? "color-mix(in oklab, var(--blue) 8%, transparent)"
+        : undefined,
+    }}
+  >
+    <Cell width={132}>
+      <TimeCell ms={prompt.timestampMs} />
+    </Cell>
+    <Cell width={160} mono color="var(--text-2)">
+      {prompt.service}
+    </Cell>
+    <Cell width={160} mono color="var(--text-2)">
+      {prompt.model ?? "—"}
+    </Cell>
+    {EVAL_COLUMNS.map((c) => (
+      <EvalScoreCell key={c.key} value={prompt[c.key]} metric={c.key} />
+    ))}
+    <Cell>{""}</Cell>
+    <Cell width={24}>
+      <ChevronRightIcon size={14} style={{ color: "var(--text-3)" }} />
+    </Cell>
+  </div>
+);
+
+// Row-border / anomaly key so the overloaded colours are decodable at a glance
+// without hovering (Prompts-3).
+const LegendSwatch = ({ color, label }: { color: string; label: string }) => (
+  <Flex alignItems="center" gap={4} style={{ flex: "0 0 auto" }}>
+    <span
+      aria-hidden
+      style={{
+        width: 10,
+        height: 10,
+        borderRadius: 2,
+        background: color,
+        flex: "0 0 auto",
+      }}
+    />
+    <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>{label}</Text>
+  </Flex>
+);
+
+const RowLegend = () => (
+  <Flex
+    alignItems="center"
+    gap={12}
+    flexWrap="wrap"
+    style={{ padding: "6px 16px", borderBottom: "1px solid var(--border)" }}
+  >
+    <LegendSwatch color="var(--blue)" label="selected" />
+    <LegendSwatch color="var(--red)" label="error" />
+    <LegendSwatch color="var(--amber)" label="truncated" />
+    <Flex alignItems="center" gap={4} style={{ flex: "0 0 auto" }}>
+      <span aria-hidden style={{ color: "var(--text-2)", fontSize: 11 }}>
+        ▲
+      </span>
+      <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+        outlier vs loaded sample
+      </Text>
+    </Flex>
+  </Flex>
+);
+
 export interface PromptsTableProps {
   view: PromptView;
   onViewChange: (v: PromptView) => void;
@@ -928,6 +1140,16 @@ export interface PromptsTableProps {
   isLoading: boolean;
   privacy: PrivacyMode;
   onRefresh: () => void;
+  /** Reset every sidebar/facet/status/range filter + focus (Prompts-7). */
+  onResetFilters?: () => void;
+  /** Human-readable active constraints, echoed in the empty state (Prompts-7). */
+  filterSummary?: string[];
+  /**
+   * Active sort, lifted to the page so heavy numeric sorts (tokens / duration)
+   * can be pushed server-side before the 200-row cap (Prompts-9).
+   */
+  sort: PromptSort;
+  onSortChange: (s: PromptSort) => void;
 }
 
 const PromptsTableBody = ({
@@ -936,11 +1158,11 @@ const PromptsTableBody = ({
   isLoading,
   privacy,
   onRefresh,
+  onResetFilters,
+  filterSummary,
+  sort,
+  onSortChange,
 }: PromptsTableProps) => {
-  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
-    key: "timestampMs",
-    dir: "desc",
-  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState("");
   // v3 key: every column except Time is now individually toggleable, so the
@@ -955,9 +1177,9 @@ const PromptsTableBody = ({
   const visibleCols = new Set(validVisibleColsArray);
 
   const toggleSort = (key: SortKey) =>
-    setSort((current) =>
-      current.key === key
-        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+    onSortChange(
+      sort.key === key
+        ? { key, dir: sort.dir === "asc" ? "desc" : "asc" }
         : { key, dir: "desc" },
     );
 
@@ -994,6 +1216,9 @@ const PromptsTableBody = ({
   // Anomaly thresholds derived from the rows currently in view.
   const anomalyStats = useMemo(() => computeAnomalyStats(filtered), [filtered]);
 
+  // Evaluations view (Prompts-1): the eval scores each row already carries.
+  const hasEvalData = useMemo(() => anyRowHasEval(prompts), [prompts]);
+  const evalRows = useMemo(() => evalTableRows(filtered), [filtered]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -1005,9 +1230,50 @@ const PromptsTableBody = ({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [selectedId]);
 
+  const isEval = view === "evaluations";
+  const rows = isEval ? evalRows : sorted;
+  // When the active sort is a heavy numeric column it's fetched server-ordered
+  // before the cap, so the sample IS the true top-N — the badge must say so
+  // rather than implying the order is only sample-relative (Prompts-9).
+  const serverSorted = !isEval && isServerSorted(sort.key);
+  const constraints = filterSummary ?? [];
+  const toggleSelect = (id: string) =>
+    setSelectedId(selectedId === id ? null : id);
+
+  // Filtered-empty recovery (Prompts-7): name the responsible constraints and
+  // offer a one-click reset instead of a dead-end one-liner.
+  const emptyBody = localSearch ? (
+    <EmptyState
+      bare
+      title="No loaded rows match your filter"
+      description="The toolbar box filters only the rows already loaded below."
+      actions={[{ label: "Clear filter", onClick: () => setLocalSearch("") }]}
+    />
+  ) : (
+    <EmptyState
+      bare
+      title="No prompts match the current filters"
+      description={
+        constraints.length > 0
+          ? `Active: ${constraints.join(" • ")}`
+          : "Nothing in the current scope matches — this window may also lack instrumented AI spans."
+      }
+      hint={
+        constraints.length > 0
+          ? "Relax a constraint above, or clear everything to start over."
+          : undefined
+      }
+      actions={
+        onResetFilters
+          ? [{ label: "Clear all filters", onClick: onResetFilters }]
+          : undefined
+      }
+    />
+  );
+
   return (
       <Flex flexDirection="column" gap={0}>
-        {view === "evaluations" ? (
+        {isEval && !hasEvalData ? (
           <EvaluationsEmptyState />
         ) : (
           <>
@@ -1020,13 +1286,39 @@ const PromptsTableBody = ({
               }}
             >
               <Text style={{ fontSize: 11.5, color: "var(--text-3)", flex: "0 0 auto" }}>
-                {sorted.length} shown
+                {isEval ? `${rows.length} scored · worst first` : `${rows.length} shown`}
               </Text>
+              {/* Honest about WHICH columns are server-sorted (true top-N) vs
+                  sample-only. Anomaly (▲) cues are always sample-relative
+                  (Prompts-9). */}
+              <span
+                title={
+                  serverSorted
+                    ? `Sorted by this numeric column server-side BEFORE the ${SAMPLE_SIZE}-row cap, so these are the true top ${SAMPLE_SIZE} across the whole timeframe. Cost / temperature / time sorts, and anomaly (▲) cues, remain relative to this loaded sample.`
+                    : `The list is capped at ${SAMPLE_SIZE} rows. This sort and the anomaly (▲) cues are computed over the loaded sample only. Sort by tokens or duration to fetch the true top ${SAMPLE_SIZE} across the timeframe.`
+                }
+                style={{
+                  flex: "0 0 auto",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.03em",
+                  textTransform: "uppercase",
+                  color: serverSorted ? "var(--blue)" : "var(--text-3)",
+                  border: `1px solid ${serverSorted ? "color-mix(in oklab, var(--blue) 45%, transparent)" : "var(--border)"}`,
+                  borderRadius: 999,
+                  padding: "2px 8px",
+                  cursor: "help",
+                }}
+              >
+                {serverSorted ? `top ${SAMPLE_SIZE} · server-sorted` : `≤${SAMPLE_SIZE}-row sample`}
+              </span>
               <input
                 type="text"
-                placeholder="Search prompts..."
+                placeholder="Filter loaded rows…"
+                aria-label="Filter loaded rows"
                 value={localSearch}
                 onChange={(e) => setLocalSearch(e.target.value)}
+                title="Filters only the rows loaded below. Use the sidebar Search to filter the full population before the 200-row cap."
                 style={{
                   flex: 1,
                   padding: "6px 8px",
@@ -1057,65 +1349,80 @@ const PromptsTableBody = ({
               >
                 <RefreshIcon size={14} />
               </button>
-              <ColumnSelector
-                visibleCols={visibleCols}
-                onToggle={toggleColumn}
-                columns={view === "stream" ? STREAM_COLUMNS : METADATA_COLUMNS}
-              />
+              {!isEval && (
+                <ColumnSelector
+                  visibleCols={visibleCols}
+                  onToggle={toggleColumn}
+                  columns={view === "stream" ? STREAM_COLUMNS : METADATA_COLUMNS}
+                />
+              )}
             </Flex>
 
-            {view === "stream" ? (
-              <StreamHeader sort={sort} onSort={toggleSort} visibleCols={visibleCols} />
-            ) : (
-              <MetadataHeader sort={sort} onSort={toggleSort} visibleCols={visibleCols} />
-            )}
-            {isLoading && sorted.length === 0 ? (
-              <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} style={{ height: 36 }} />
-                ))}
-              </Flex>
-            ) : sorted.length === 0 ? (
-              <Flex style={{ padding: "32px 16px" }}>
-                <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-                  {localSearch
-                    ? "No prompts match the search."
-                    : "No prompts match the current filters."}
-                </Text>
-              </Flex>
-            ) : (
-              sorted.map((p) => (
-                <React.Fragment key={p.id}>
-                  {view === "stream" ? (
-                    <StreamRow
-                      prompt={p}
-                      privacy={privacy}
-                      onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
-                      isSelected={p.id === selectedId}
-                      visibleCols={visibleCols}
-                      stats={anomalyStats}
-                    />
-                  ) : (
-                    <MetadataRow
-                      prompt={p}
-                      onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
-                      isSelected={p.id === selectedId}
-                      visibleCols={visibleCols}
-                      stats={anomalyStats}
-                    />
-                  )}
-                  {p.id === selectedId && (
-                    <div style={{ borderTop: "1px solid var(--border)" }}>
-                      <PromptDetailPanel
-                        prompt={p}
-                        privacy={privacy}
-                        onClose={() => setSelectedId(null)}
-                      />
-                    </div>
-                  )}
-                </React.Fragment>
-              ))
-            )}
+            {!isEval && <RowLegend />}
+
+            <div role="table" aria-label="Prompts">
+              <div role="rowgroup">
+                {isEval ? (
+                  <EvalHeader />
+                ) : view === "stream" ? (
+                  <StreamHeader sort={sort} onSort={toggleSort} visibleCols={visibleCols} />
+                ) : (
+                  <MetadataHeader sort={sort} onSort={toggleSort} visibleCols={visibleCols} />
+                )}
+              </div>
+              <div role="rowgroup">
+                {isLoading && rows.length === 0 ? (
+                  <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Skeleton key={i} style={{ height: 36 }} />
+                    ))}
+                  </Flex>
+                ) : rows.length === 0 ? (
+                  emptyBody
+                ) : (
+                  rows.map((p) => (
+                    <React.Fragment key={p.id}>
+                      {isEval ? (
+                        <EvalRow
+                          prompt={p}
+                          onClick={() => toggleSelect(p.id)}
+                          isSelected={p.id === selectedId}
+                        />
+                      ) : view === "stream" ? (
+                        <StreamRow
+                          prompt={p}
+                          privacy={privacy}
+                          onClick={() => toggleSelect(p.id)}
+                          isSelected={p.id === selectedId}
+                          visibleCols={visibleCols}
+                          stats={anomalyStats}
+                        />
+                      ) : (
+                        <MetadataRow
+                          prompt={p}
+                          onClick={() => toggleSelect(p.id)}
+                          isSelected={p.id === selectedId}
+                          visibleCols={visibleCols}
+                          stats={anomalyStats}
+                        />
+                      )}
+                      {p.id === selectedId && (
+                        <div
+                          role="presentation"
+                          style={{ borderTop: "1px solid var(--border)" }}
+                        >
+                          <PromptDetailPanel
+                            prompt={p}
+                            privacy={privacy}
+                            onClose={() => setSelectedId(null)}
+                          />
+                        </div>
+                      )}
+                    </React.Fragment>
+                  ))
+                )}
+              </div>
+            </div>
           </>
         )}
       </Flex>

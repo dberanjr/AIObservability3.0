@@ -1,5 +1,6 @@
 import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
+import { promptsFocusPreset } from "./focus";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
@@ -110,6 +111,15 @@ export const buildPromptsListQuery = (
   timeframe: Timeframe,
   filters?: GlobalFilters,
   sidebar?: PromptsSidebarFilter,
+  /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-2/PP-3). */
+  focus?: string | null,
+  /**
+   * Explicit user server-sort fragment ("<field> <dir>") for a heavy numeric
+   * column (Prompts-9). When set it is applied as `| sort` BEFORE the 200-row
+   * cap, so the fetched sample is the true top-N across the timeframe — and it
+   * wins over the focus preset's default worst-offenders ordering.
+   */
+  serverSort?: string | null,
 ): string => {
   const svcClause = sidebar?.services?.length
     ? `| filter in(${SVC_EXPR}, array(${dqlIdArray(sidebar.services)}))`
@@ -149,6 +159,21 @@ export const buildPromptsListQuery = (
   const contentClause = statusFilterActive
     ? ""
     : `| filter prompt_text != "" or response_text != "" or span.status_code == "error"`;
+  // Pulse problem-pattern focus (PP-3): a page-local predicate applied as an
+  // additional `| filter`, ANDed with the sidebar + global filters. The marker
+  // comment makes the active focus visible in the emitted DQL (and testable).
+  // An optional orderBy overrides the default timestamp sort so the worst
+  // offenders surface first (e.g. highest ttft / most tokens).
+  const focusPreset = promptsFocusPreset(focus);
+  const focusClause = focusPreset
+    ? `| filter (${focusPreset.predicate}) /* focus: ${focus} */`
+    : "";
+  // Sort precedence: an explicit user server-sort (heavy numeric column) wins,
+  // then the focus preset's worst-offenders orderBy, else newest-first. The
+  // fields it references (in_tok / out_tok / duration_ms, or the focus preset's
+  // raw attributes) all exist by this point in the pipeline.
+  const sortExpr = serverSort ?? focusPreset?.orderBy ?? "timestamp desc";
+  const sortClause = `| sort ${sortExpr}`;
   return `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
@@ -208,6 +233,12 @@ ${agentClause}
 // content-less proxy spans, so the requirement is dropped there.
 ${contentClause}
 ${searchClause}
+${focusClause}
+// Sort BEFORE the projection: the focus orderBy may reference raw attributes
+// (e.g. gen_ai.response.ttft) that the fields projection drops. Row order is
+// preserved through the projection, so the subsequent limit keeps the
+// worst-offending rows.
+${sortClause}
 | fields
     timestamp = start_time,
     kind,
@@ -234,7 +265,6 @@ ${searchClause}
     eval_relevance,
     trace_id = trace.id,
     span_id = span.id
-| sort timestamp desc
 | limit 200
 `.trim();
 };
@@ -278,18 +308,56 @@ ${scopeFilterClause(serviceIds)}
 `.trim();
 
 /**
- * Aggregate counts/averages for the 6-tile summary row.
+ * Server-side clauses shared by the summary + quality aggregates so their
+ * totals respond to the same sidebar / focus scope the list obeys (Prompts-2).
+ *
+ * Only clauses that reference RAW span attributes are injected — the free-text
+ * `search` (which matches the list query's computed prompt_text/response_text
+ * fields, absent from these aggregates) and the cross-span agent JOIN are
+ * deliberately excluded; the page captions those as unreflected. Same-span
+ * problem-pattern focus predicates ARE applied (they compare raw attributes).
+ */
+export const serverSideScopeClauses = (
+  sidebar?: PromptsSidebarFilter,
+  focus?: string | null,
+): string => {
+  const lines: string[] = [];
+  if (sidebar?.services?.length) {
+    lines.push(`| filter in(${SVC_EXPR}, array(${dqlIdArray(sidebar.services)}))`);
+  }
+  const kinds = sidebar?.kinds ?? [];
+  if (kinds.length === 1) {
+    lines.push(
+      kinds[0] === "Agent"
+        ? "| filter isNotNull(gen_ai.agent.name)"
+        : "| filter isNull(gen_ai.agent.name)",
+    );
+  }
+  const extra = sidebarClauses(sidebar);
+  if (extra) lines.push(extra);
+  const preset = promptsFocusPreset(focus);
+  if (preset) lines.push(`| filter (${preset.predicate}) /* focus: ${focus} */`);
+  return lines.filter(Boolean).join("\n");
+};
+
+/**
+ * Aggregate counts/averages for the 6-tile summary row. Accepts the same
+ * sidebar + focus scope as the list so the tiles don't silently disagree with
+ * the rows beneath them (Prompts-2).
  */
 export const buildPromptsSummaryQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  sidebar?: PromptsSidebarFilter,
+  focus?: string | null,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.system) or isNotNull(gen_ai.provider.name)
 | filter isNull(llm.request.type) or in(llm.request.type, {"chat", "completion"})
+${serverSideScopeClauses(sidebar, focus)}
 | fieldsAdd
     in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
@@ -317,11 +385,14 @@ export const buildPromptQualityQuery = (
   serviceIds: string[] | null,
   timeframe: Timeframe,
   filters?: GlobalFilters,
+  sidebar?: PromptsSidebarFilter,
+  focus?: string | null,
 ): string => `
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.provider.name)
+${serverSideScopeClauses(sidebar, focus)}
 | fieldsAdd
     has_halluc = if(isNotNull(gen_ai.evaluation.hallucination), 1, else: 0),
     has_correct = if(isNotNull(gen_ai.evaluation.correctness), 1, else: 0),
@@ -366,52 +437,45 @@ const traceWindow = (
  * — comparing it to a bare string literal silently matches nothing (this was
  * the bug that left the Trace tab perpetually empty).
  */
+/** Max spans returned per trace. We now fetch the FULL trace (not just the
+ *  AI-relevant subset) to match the Dynatrace Distributed Traces app, so this
+ *  ceiling guards only against pathological traces (1M+ spans). Real AI traces
+ *  run ~100 spans; 1500 leaves ample headroom while still bounding the scan. */
+export const TRACE_SPANS_LIMIT = 1500;
+
 export const buildTraceSpansQuery = (
   traceId: string,
   startMs?: number,
 ): string => {
   const { from, to } = traceWindow(startMs);
+  // No AI-only filter here: we fetch the WHOLE trace (every span sharing this
+  // trace.id) so the waterfall matches the Distributed Traces app — including
+  // client HTTP spans and internal wrappers the old AI filter dropped. The
+  // `trace.id` filter scopes to a single trace; TRACE_SPANS_LIMIT caps the
+  // result and isTruncated flags pathological traces that exceed it.
+  //
+  // We deliberately do NOT project a curated `| fields` list: the span-attribute
+  // panel groups EVERY raw attribute by namespace (gen_ai.*, llm.*, traceloop.*,
+  // …), so the record must carry the full attribute set. A few derived helpers
+  // are added under stable snake_case names (`__*`-free so they don't collide
+  // with real attributes); `span.events` is dropped because it is large and not
+  // shown. useTraceSpans reads the raw keys for the waterfall and exposes the
+  // rest as the per-span attribute map.
   return `
 fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
 | filter trace.id == toUid("${dqlEscape(traceId)}")
 | dedup {span.id}
+| fieldsRemove span.events
 | fieldsAdd
-    duration_ms = duration / 1000000,
-    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
-    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0))
-| fields
-    span_id = span.id,
-    parent_span_id = span.parent_id,
-    name = span.name,
-    service = coalesce(service.name, getNodeName(dt.smartscape.service)),
-    duration_ms,
-    timestamp = start_time,
-    end_time,
-    has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
-    span_kind = span.kind,
-    status_code = span.status_code,
-    is_root = request.is_root_span,
-    endpoint = endpoint.name,
-    code_function = code.function,
-    code_namespace = code.namespace,
+    dur_ms = duration / 1000000,
     cpu_ms = span.timing.cpu / 1000000,
     cpu_self_ms = span.timing.cpu_self / 1000000,
-    gen_ai_provider = coalesce(gen_ai.system, gen_ai.provider.name),
-    gen_ai_model = coalesce(gen_ai.request.model, gen_ai.response.model, gen_ai.model),
-    gen_ai_operation = gen_ai.operation.name,
-    agent_name = gen_ai.agent.name,
-    tool_name = gen_ai.tool.name,
-    in_tok,
-    out_tok,
-    exception_type = exception.type,
-    exception_msg = exception.message,
-    workflow = traceloop.workflow.name,
-    tl_entity = traceloop.entity.name,
-    tl_entity_path = traceloop.entity.path,
-    tl_kind = traceloop.span.kind,
-    session_id = dt.rum.session.id
-| sort timestamp asc
-| limit 100
+    in_tok = toLong(coalesce(gen_ai.usage.input_tokens, gen_ai.usage.prompt_tokens, 0)),
+    out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
+    has_error = if(isNotNull(exception.type) or span.status_code == "error", true, else: false),
+    svc = coalesce(service.name, getNodeName(dt.smartscape.service))
+| sort start_time asc
+| limit ${TRACE_SPANS_LIMIT}
 `.trim();
 };
 

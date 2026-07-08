@@ -1,5 +1,6 @@
 import type { IntentKind } from "../../lib/intents";
 import type { LayerKey } from "../../data/ai-layer-patterns";
+import type { PromptsFilter } from "../../pages/Prompts/usePrompts";
 
 export type FindingSeverity = "info" | "warning" | "critical";
 
@@ -23,6 +24,13 @@ export interface Finding {
   detail?: string;
   timestampMs?: number;
   intents?: FindingIntent[];
+  /**
+   * Explicit Prompts filter for the drawer's "View contributing prompts" action.
+   * When set it wins over the type-based `promptsFilterForFinding` mapping — used
+   * by findings (e.g. Model findings) whose `entity` isn't a service/agent the
+   * type-switch understands, so the drill-down lands scoped instead of unfiltered.
+   */
+  promptsFilter?: PromptsFilter;
   /**
    * Architecture layer this finding belongs to (redesign C.5). Lets a finding
    * read as "Agent layer: reasoning loop on X" and drill out to the same place

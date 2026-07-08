@@ -1,5 +1,7 @@
-import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, type GlobalFilters } from "../../scope/queries";
+import { dqlEscape, dqlIdArray, dqlTimeArg, scopeFilterClause, globalFilterClauses, logicalErrorField, mcpNotLifecycleClause, type GlobalFilters } from "../../scope/queries";
 import type { Timeframe } from "../../scope/types";
+
+export type { CandidateTrace, RepTrace } from "./representativeTraces";
 
 const to = (tf: Timeframe): string => tf.to ?? "now()";
 
@@ -31,21 +33,27 @@ ${globalFilterClauses(filters)}
     out_tok = toLong(coalesce(gen_ai.usage.output_tokens, gen_ai.usage.completion_tokens, 0)),
     ${logicalErrorField()},
     lname = lower(span.name),
-    ttft_ms = if(isNotNull(gen_ai.usage.time_to_first_token), toDouble(gen_ai.usage.time_to_first_token), else: null)
+    ttft_ms = if(isNotNull(gen_ai.response.ttft) or isNotNull(gen_ai.usage.time_to_first_token) or isNotNull(gen_ai.response.time_to_first_chunk), toDouble(coalesce(gen_ai.response.ttft, gen_ai.usage.time_to_first_token, gen_ai.response.time_to_first_chunk)), else: null)
 | fieldsAdd
     // Classify each span in the agent's (single-service) trace into a stage.
     // LLM is usually ~0 here because model calls run on the shared proxy in a
     // separate trace — see "Latency by execution tier" for the LLM share.
     span_tier = if(isNotNull(gen_ai.provider.name) or isNotNull(gen_ai.system), "llm",
       else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "retrieval",
-      else: if(span.kind == "client" or contains(lname,"_tool"), "tool", else: "orch")))
+      else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and ${mcpNotLifecycleClause()}, "tool", else: "orch")))
 | summarize
-    invocations = count(),
+    // An invocation is one agent run, i.e. one trace — NOT one span. gen_ai.agent.name
+    // propagates to every child span in the run (tool calls, LangGraph nodes, task
+    // spans, …), so count() would tally the whole subtree (e.g. 49 spans for a single
+    // run). Count distinct traces instead. errors is likewise trace-grained: a run
+    // counts once if any of its spans errored, so error_rate_pct stays a 0–100% "share
+    // of runs that failed" rather than a per-span ratio that could exceed 100%.
+    invocations = countDistinct(trace.id),
     p50_ns = percentile(duration, 50),
     p90_ns = percentile(duration, 90),
     p99_ns = percentile(duration, 99),
     avg_ns = avg(duration),
-    errors = sum(is_error),
+    errors = countDistinct(if(is_error == 1, trace.id, else: null)),
     input_tokens = sum(in_tok),
     output_tokens = sum(out_tok),
     llm_spans = countIf(span_tier == "llm"),
@@ -54,7 +62,10 @@ ${globalFilterClauses(filters)}
     orch_spans = countIf(span_tier == "orch"),
     avg_ttft_ms = avg(ttft_ms),
     models = collectDistinct(gen_ai.request.model),
-    framework = takeFirst(gen_ai.framework),
+    fw_workflow = takeFirst(traceloop.workflow.name),
+    fw_entity = takeFirst(traceloop.entity.name),
+    fw_system = takeFirst(gen_ai.system),
+    fw_span = takeFirst(span.name),
     // Group by agent NAME only. The same agent is double-instrumented across
     // two dt.entity.service entities (one named, one with service.name=null),
     // which previously split each agent into duplicate rows. Collect both so
@@ -186,7 +197,7 @@ ${globalFilterClauses(filters)}
 | fieldsAdd lname = lower(span.name)
 | fieldsAdd tier = if(isNotNull(gen_ai.provider.name), "LLM",
     else: if(gen_ai.operation.name == "embeddings" or contains(lname,"retriev") or contains(lname,"vector") or contains(lname,"embed") or contains(lname,"rds") or contains(lname,"sql") or contains(lname,"catalog") or contains(lname,"lookup") or contains(lname,"query") or contains(lname,"search"), "Retrieval/DB",
-    else: if(span.kind == "client" or contains(lname,"_tool"), "Tool",
+    else: if((traceloop.span.kind == "tool" or isNotNull(gen_ai.tool.name) or mcp.method.name == "tools/call") and ${mcpNotLifecycleClause()}, "Tool",
     else: "Orchestration")))
 | summarize
     spans = count(),
@@ -267,9 +278,15 @@ ${globalFilterClauses(filters)}
 `.trim();
 
 /**
- * Step 1 for upstream services: the dt.entity.service IDs that host AI agents
- * in scope. parent.service.name is NOT emitted on spans, so upstream callers
+ * Step 1 for upstream services: the dt.entity.service IDs of the in-scope AI
+ * footprint. parent.service.name is NOT emitted on spans, so upstream callers
  * must come from Smartscape topology (step 2) keyed by these service IDs.
+ *
+ * Captures BOTH agent-hosting services (gen_ai.agent.name) AND LLM-calling
+ * services (gen_ai.request.model). Keying on agent.name alone missed the proxy
+ * / model services (e.g. bos-proxy-core), which are exactly the ones that carry
+ * monitored caller edges in Smartscape — so the upstream table came back empty
+ * even though real callers existed. The union is the correct "AI services" set.
  */
 export const buildAiServiceIdsQuery = (
   serviceIds: string[] | null,
@@ -279,7 +296,7 @@ export const buildAiServiceIdsQuery = (
 fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
-| filter isNotNull(gen_ai.agent.name)
+| filter isNotNull(gen_ai.agent.name) or isNotNull(gen_ai.request.model)
 | summarize spans = count(), by: { svc = dt.entity.service }
 | limit 200
 `.trim();
@@ -293,9 +310,13 @@ ${globalFilterClauses(filters)}
  */
 export const buildUpstreamSmartscapeQuery = (aiServiceIds: string[]): string => {
   if (aiServiceIds.length === 0) return "";
+  // NB: smartscapeEdges target_id is a *smartscape-id* type, not a string —
+  // `in(target_id, array("SERVICE-…"))` silently never matches (0 rows), which
+  // left the upstream-caller list empty. Coerce with toString() so the id-vs-
+  // string comparison holds.
   return `
 smartscapeEdges type:"calls"
-| filter in(target_id, array(${dqlIdArray(aiServiceIds)}))
+| filter in(toString(target_id), array(${dqlIdArray(aiServiceIds)}))
 | join [ smartscapeNodes type:"SERVICE" | fields source_id = id, upstream = name ], kind: inner, on: { source_id }, prefix: "s."
 | join [ smartscapeNodes type:"SERVICE" | fields target_id = id, target_name = name ], kind: inner, on: { target_id }, prefix: "t."
 | summarize
@@ -304,6 +325,78 @@ smartscapeEdges type:"calls"
     by: { upstream = \`s.upstream\` }
 | sort services desc
 | limit 25
+`.trim();
+};
+
+/**
+ * Most-recent trace id that carries this agent's name — used to seed the
+ * Agents-tab trace-level topology (reuses the Prompts TraceTopology renderer).
+ * `trace.id` is a uid column, so we surface it as a hex string via toString();
+ * start_ms (epoch ms) lets the trace-spans fetch bracket a tight time window.
+ */
+export const buildAgentLatestTraceQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  agentName: string,
+): string => `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter gen_ai.agent.name == "${dqlEscape(agentName)}"
+| summarize ts = max(start_time), by: { trace.id }
+| sort ts desc
+| limit 1
+| fieldsAdd trace_id = toString(trace.id), start_ms = toLong(ts) / 1000000
+| fields trace_id, start_ms
+`.trim();
+
+/**
+ * Candidate traces for ONE agent+tool — the pool the "Representative traces"
+ * list (Agents-tab tool drilldown) selects an interesting <=10 subset from.
+ *
+ * Scoping mirrors buildAgentToolDetailQuery EXACTLY so the candidate population
+ * matches the tool row's call counts: filter to the agent's tool spans (strict
+ * -> gen_ai.tool.name == toolName; discovered -> span.name == toolName with the
+ * same internal/client + non-LLM + non-MCP-lifecycle exclusions), then collapse
+ * to one row per trace.
+ *
+ * Per trace we surface: dur_ms (the slowest tool-span duration in the trace),
+ * is_error (any errored tool span -> the trace is interesting), start_ms (epoch
+ * ms, for recency + the trace-spans window) and calls. trace.id is a uid column
+ * so it's stringified via toString(). Tool spans carry no tokens/model, so
+ * selection downstream is latency/error/recency-driven only.
+ */
+export const buildAgentToolTracesQuery = (
+  serviceIds: string[] | null,
+  timeframe: Timeframe,
+  agentName: string,
+  toolName: string,
+  strict: boolean,
+): string => {
+  const toolKey = strict ? "gen_ai.tool.name" : "span.name";
+  const modeFilter = strict
+    ? `| filter isNotNull(gen_ai.tool.name)`
+    : `| filter span.kind == "internal" or span.kind == "client"
+| filter isNull(gen_ai.provider.name) and isNull(gen_ai.request.model)
+| filter ${mcpNotLifecycleClause()}`;
+  return `
+fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTimeArg(to(timeframe))}
+${scopeFilterClause(serviceIds)}
+| filter isNotNull(gen_ai.agent.name)
+| filter gen_ai.agent.name == "${dqlEscape(agentName)}"
+${modeFilter}
+| filter ${toolKey} == "${dqlEscape(toolName)}"
+| dedup {span.id}
+| fieldsAdd is_err_span = if(isNotNull(exception.type) or span.status_code == "error", 1, else: 0)
+| summarize
+    dur_ms = max(duration) / 1000000,
+    is_error = if(countIf(is_err_span > 0) > 0, true, else: false),
+    start_ms = toLong(min(start_time)) / 1000000,
+    calls = count(),
+    by: { trace.id }
+| fieldsAdd trace_id = toString(trace.id)
+| fields trace_id, start_ms, dur_ms, is_error, calls
+| sort start_ms desc
+| limit 200
 `.trim();
 };
 
@@ -318,7 +411,9 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(timeframe.from)}, to: ${dqlTim
 ${scopeFilterClause(serviceIds)}
 ${globalFilterClauses(filters)}
 | filter isNotNull(gen_ai.agent.name)
-| makeTimeseries invocations = count(), interval: ${intervalSec}s
+// One invocation = one trace, not one span (see buildAgentsQuery). countDistinct keeps
+// the hero chart consistent with the table's INV column.
+| makeTimeseries invocations = countDistinct(trace.id), interval: ${intervalSec}s
 `.trim();
 
 /**

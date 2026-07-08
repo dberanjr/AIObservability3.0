@@ -3,7 +3,7 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
-import { buildAIServicesQuery } from "./queries";
+import { AI_SERVICES_LIMIT, buildAIServicesQuery } from "./queries";
 import {
   ALL_PROVIDER_IDS,
   PROVIDER_COLOR,
@@ -24,6 +24,8 @@ interface ServiceRecord {
   service_id?: string;
   requests?: number;
   tokens?: number;
+  in_tokens?: number;
+  out_tokens?: number;
   errors?: number;
   logical_errors?: number;
   agents?: number;
@@ -44,6 +46,10 @@ export interface AIService {
   providers: ProviderId[];
   requests: number;
   tokens: number;
+  /** Aggregate input tokens across the service's models (for cost estimation). */
+  inTok: number;
+  /** Aggregate output tokens across the service's models (for cost estimation). */
+  outTok: number;
   tokPerReq: number;
   agents: number;
   errors: number;
@@ -68,6 +74,8 @@ export interface UseAIServicesResult {
   services: AIService[];
   filtered: AIService[];
   facets: ExplorerFacets;
+  /** True when the catalog query hit its row cap, so more services exist than shown. */
+  truncated: boolean;
   isLoading: boolean;
   error?: Error;
 }
@@ -96,6 +104,8 @@ const toService = (r: ServiceRecord): AIService | null => {
     providers,
     requests: num(r.requests),
     tokens: num(r.tokens),
+    inTok: num(r.in_tokens),
+    outTok: num(r.out_tokens),
     tokPerReq: num(r.tok_per_req),
     agents: num(r.agents),
     errors: num(r.errors),
@@ -180,6 +190,7 @@ export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult 
     return {
       services,
       filtered,
+      truncated: services.length >= AI_SERVICES_LIMIT,
       facets: {
         providers: providerOptions,
         frameworks: Array.from(frameworkCounts.entries())

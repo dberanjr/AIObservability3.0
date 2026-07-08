@@ -119,14 +119,22 @@ export const ALL_PROVIDER_IDS: ProviderId[] = [
   "mistral",
 ];
 
+/**
+ * Provider -> brand-token color. Single source of truth for donut arcs, badges,
+ * table chips, bubble/topology nodes. Every provider maps to a DISTINCT token
+ * so a legend row can always be matched back to its mark by color (UX report
+ * Chart-2): Google was previously the same green as OpenAI, and Mistral shared
+ * amber with nobody but sat next to Google's new amber, so Google took amber and
+ * Mistral moved to red.
+ */
 export const PROVIDER_COLOR: Record<ProviderId, string> = {
   anthropic: "var(--purple-2)",
   openai: "var(--green-2)",
-  google: "var(--green-2)",
+  google: "var(--amber)",
   "aws-bedrock": "var(--cyan)",
   azure: "var(--blue)",
   cohere: "var(--blue-purple)",
-  mistral: "var(--amber)",
+  mistral: "var(--red)",
   unknown: "var(--text-4)",
 };
 
@@ -227,4 +235,97 @@ export const detectFramework = (
   }
   if (spanName || pipelineTag) return "Custom";
   return "Unknown";
+};
+
+/**
+ * Canonical orchestration-framework identity, detected from the OTel/Traceloop
+ * signals each instrumentation emits. Unlike `detectFramework` (a span-name
+ * heuristic kept for Explorer), this resolves against the AUTHORITATIVE
+ * attributes confirmed by reading each instrumentation's source and validated
+ * against ualpre. See the design spec's "Research" table.
+ */
+export type FrameworkId =
+  | "langgraph"
+  | "langchain"
+  | "crewai"
+  | "llamaindex"
+  | "haystack"
+  | "openai-agents"
+  | "google-adk"
+  | "agno"
+  | "pydantic-ai"
+  | "custom"
+  | "unknown";
+
+export const FRAMEWORK_LABEL: Record<FrameworkId, string> = {
+  langgraph: "LangGraph",
+  langchain: "LangChain",
+  crewai: "CrewAI",
+  llamaindex: "LlamaIndex",
+  haystack: "Haystack",
+  "openai-agents": "OpenAI Agents SDK",
+  "google-adk": "Google ADK",
+  agno: "Agno",
+  "pydantic-ai": "Pydantic AI",
+  custom: "Custom",
+  unknown: "Unknown",
+};
+
+/** Raw span signals used to resolve framework identity. */
+export interface FrameworkSignal {
+  /** traceloop.workflow.name */
+  workflowName?: string | null;
+  /** traceloop.entity.name */
+  entityName?: string | null;
+  /** gen_ai.system — provider for most instrumentations, framework for crewai/agno. */
+  genAiSystem?: string | null;
+  /** span.name */
+  spanName?: string | null;
+  /** gen_ai.workflow.name (Google ADK) */
+  genAiWorkflowName?: string | null;
+  /** OTel instrumentation scope name */
+  scope?: string | null;
+}
+
+/**
+ * gen_ai.system values that denote a FRAMEWORK (not an LLM provider). Only these
+ * are honored; any other gen_ai.system value (openai, anthropic, …) is a provider
+ * and must NOT resolve to a framework.
+ */
+const GENAI_SYSTEM_FRAMEWORKS: Record<string, FrameworkId> = {
+  crewai: "crewai",
+  agno: "agno",
+  langchain: "langchain",
+};
+
+/** Patterns over traceloop.workflow.name / traceloop.entity.name. */
+const TL_NAME_PATTERNS: Array<[RegExp, FrameworkId]> = [
+  [/langgraph/i, "langgraph"],
+  [/^(runnable|agentexecutor|retrieval[\s_-]?chain)/i, "langchain"],
+  [/agent\s*workflow/i, "openai-agents"],
+  [/llama[\s_-]?index/i, "llamaindex"],
+  [/haystack/i, "haystack"],
+  [/crew/i, "crewai"],
+];
+
+export const detectFrameworkFromSignals = (sig: FrameworkSignal): FrameworkId => {
+  // 1. Traceloop workflow/entity names — the primary signal on real tenants.
+  for (const name of [sig.workflowName, sig.entityName]) {
+    if (!name) continue;
+    for (const [re, id] of TL_NAME_PATTERNS) if (re.test(name)) return id;
+  }
+  // 2. gen_ai.system — only when the value is a known framework (value-mapped).
+  const sys = (sig.genAiSystem ?? "").trim().toLowerCase();
+  if (sys && GENAI_SYSTEM_FRAMEWORKS[sys]) return GENAI_SYSTEM_FRAMEWORKS[sys];
+  // 3. Google ADK — invoke_agent/execute_tool span names with a gen_ai.workflow.name.
+  if (sig.spanName && /^(invoke_agent|execute_tool)\b/i.test(sig.spanName) && sig.genAiWorkflowName)
+    return "google-adk";
+  // 4. Pydantic AI — instrumentation scope marker (best-effort; no ualpre data).
+  if (sig.scope && /pydantic[_-]?ai/i.test(sig.scope)) return "pydantic-ai";
+  // 5. Some agent signal present but unmatched → custom; nothing at all → unknown.
+  //    A bare gen_ai.system value is a provider (openai, anthropic, …), not an
+  //    agent signal — framework values already returned in step 2 — so it must
+  //    NOT trigger the "custom" fallback.
+  if (sig.workflowName || sig.entityName || sig.spanName) return "custom";
+  return "unknown";
 };

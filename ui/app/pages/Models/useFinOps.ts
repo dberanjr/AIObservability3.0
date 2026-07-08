@@ -1,27 +1,42 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
+import { useSampling } from "../../scope/SamplingContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import {
   canQueryScope,
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import {
-  buildDailyTokensQuery,
+  buildDailyTokensDayQuery,
   buildServiceCostBreakdownQuery,
 } from "./finopsQueries";
 import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
+import { computePossibleSavings } from "./finopsLogic";
 
 const num = (v: unknown): number => {
   const n = toNum(v);
   return Number.isFinite(n) ? n : 0;
 };
 
-interface DailyTokensRecord {
+/** Days rendered in the daily cost bar (oldest → newest). */
+const DAILY_DAYS = 7;
+
+/**
+ * Sampling floor for the per-day scans. A scope-filtered 24h window can still be
+ * multiple TB at full fidelity and blow the platform execution-time limit (the
+ * scan-limit selector doesn't help — the query times out before reaching it),
+ * which is what left older days empty. Running at 1-in-100 and extrapolating the
+ * token sums keeps every day populated; the toolbar ratio still wins if heavier.
+ * Mirrors Pulse's useDailySpend.
+ */
+const DAILY_MIN_SAMPLING = 100;
+
+interface DailyDayRecord {
   model?: string;
-  input_tokens?: (number | null)[] | null;
-  output_tokens?: (number | null)[] | null;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 interface ServiceCostRecord {
@@ -29,6 +44,7 @@ interface ServiceCostRecord {
   model?: string;
   input_tokens?: number;
   output_tokens?: number;
+  requests?: number;
 }
 
 export interface DailyModelSeries {
@@ -44,13 +60,29 @@ export interface DailyCostSummary {
   totals: number[];
 }
 
+/** One model's contribution to a service's spend (for the detail modal). */
+export interface ServiceModelBreakdown {
+  model: string;
+  tokens: number;
+  cost: number;
+  requests: number;
+}
+
 export interface ServiceCost {
   service: string;
   tokens: number;
   cost: number;
   costPerMTok: number;
+  /** Total LLM calls for this service over the timeframe. */
+  requests: number;
+  /** Cost ÷ requests — unit economics, $ per LLM call. */
+  costPerRequest: number;
+  /** (input + output tokens) ÷ requests — prompt-bloat indicator. */
+  tokensPerRequest: number;
   topModel: string | null;
   modelCount: number;
+  /** Per-model spend breakdown, sorted by cost desc. */
+  models: ServiceModelBreakdown[];
 }
 
 export interface FinOpsData {
@@ -70,6 +102,12 @@ export interface FinOpsData {
   costPerMTok: number;
   /** Estimated savings if expensive-model traffic shifted to its cheaper peer. */
   possibleSavings: number;
+  /**
+   * The sampling ratio the 24h / 7d / 30d per-day scans actually ran at (the
+   * floor, or the heavier toolbar ratio). Exposed so the spend tiles disclose
+   * the true ratio rather than a hardcoded one (scan-6).
+   */
+  dailyRatio: number;
   isLoading: boolean;
   error?: Error;
 }
@@ -87,13 +125,33 @@ const dayLabel = (offsetFromOldest: number, totalDays: number): string => {
 export const useFinOps = (): FinOpsData => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
+  const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
 
-  const dailyResult = useScopedDql<DailyTokensRecord>(
-    canQuery ? buildDailyTokensQuery(resolution.serviceIds, filters) : "",
-    { enabled: canQuery, staleTime: 5 * 60_000 },
-  );
+  // Per-day scans run at a sampling floor so each 24h window completes within
+  // the platform execution-time limit; the toolbar ratio wins if it's heavier.
+  const dailyRatio = Math.max(samplingRatio, DAILY_MIN_SAMPLING);
+  const dayQuery = (offset: number): string =>
+    canQuery ? buildDailyTokensDayQuery(resolution.serviceIds, offset) : "";
+  const dailyOpts = {
+    enabled: canQuery,
+    staleTime: 5 * 60_000,
+    samplingRatioOverride: dailyRatio,
+  } as const;
+
+  // Seven independent per-day scans (unrolled — React requires fixed hook order).
+  // d0 = most recent 24h … d6 = six days ago.
+  const d0 = useScopedDql<DailyDayRecord>(dayQuery(0), dailyOpts);
+  const d1 = useScopedDql<DailyDayRecord>(dayQuery(1), dailyOpts);
+  const d2 = useScopedDql<DailyDayRecord>(dayQuery(2), dailyOpts);
+  const d3 = useScopedDql<DailyDayRecord>(dayQuery(3), dailyOpts);
+  const d4 = useScopedDql<DailyDayRecord>(dayQuery(4), dailyOpts);
+  const d5 = useScopedDql<DailyDayRecord>(dayQuery(5), dailyOpts);
+  const d6 = useScopedDql<DailyDayRecord>(dayQuery(6), dailyOpts);
+  // Indexed by day offset (0 = most recent).
+  const dailyResults = [d0, d1, d2, d3, d4, d5, d6];
+
   const serviceResult = useScopedDql<ServiceCostRecord>(
     canQuery
       ? buildServiceCostBreakdownQuery(resolution.serviceIds, scope.timeframe, filters)
@@ -102,25 +160,29 @@ export const useFinOps = (): FinOpsData => {
   );
 
   return useMemo<FinOpsData>(() => {
-    // ---- Daily cost timeseries ----
-    const dailyRecords = dailyResult.data?.records ?? [];
-    const series: DailyModelSeries[] = [];
-    let dayCount = 7;
-    for (const r of dailyRecords) {
-      if (!r.model) continue;
-      const inputs = (r.input_tokens ?? []).map((v) => num(v));
-      const outputs = (r.output_tokens ?? []).map((v) => num(v));
-      const len = Math.max(inputs.length, outputs.length);
-      if (len > dayCount) dayCount = len;
-      const values = Array.from({ length: len }, (_, i) =>
-        costOf(inputs[i] ?? 0, outputs[i] ?? 0, r.model),
-      );
-      series.push({ model: r.model, values });
+    // ---- Daily cost timeseries (one scan per day, oldest → newest) ----
+    const dayCount = DAILY_DAYS;
+    // model → per-day cost array, position 0 = oldest, last = most recent 24h.
+    const byModelDay = new Map<string, number[]>();
+    for (let offset = 0; offset < DAILY_DAYS; offset++) {
+      const pos = DAILY_DAYS - 1 - offset; // offset 0 (newest) → last column
+      for (const r of dailyResults[offset].data?.records ?? []) {
+        if (!r.model) continue;
+        // Extrapolate the floored-sample token sums back to the full population
+        // before costing (sum-aggregates extrapolate cleanly).
+        const inTok = num(r.input_tokens) * dailyRatio;
+        const outTok = num(r.output_tokens) * dailyRatio;
+        let arr = byModelDay.get(r.model);
+        if (!arr) {
+          arr = new Array<number>(DAILY_DAYS).fill(0);
+          byModelDay.set(r.model, arr);
+        }
+        arr[pos] += costOf(inTok, outTok, r.model);
+      }
     }
-    // Pad every series to dayCount.
-    for (const s of series) {
-      while (s.values.length < dayCount) s.values.push(0);
-    }
+    const series: DailyModelSeries[] = Array.from(byModelDay.entries()).map(
+      ([model, values]) => ({ model, values }),
+    );
     // Top 6 by total cost; aggregate the rest into "Other".
     series.sort(
       (a, b) =>
@@ -156,7 +218,14 @@ export const useFinOps = (): FinOpsData => {
     // ---- Per-service rollup ----
     const byService = new Map<
       string,
-      { tokens: number; cost: number; models: Set<string>; topModel: string; topModelTokens: number }
+      {
+        tokens: number;
+        cost: number;
+        requests: number;
+        models: Map<string, ServiceModelBreakdown>;
+        topModel: string;
+        topModelTokens: number;
+      }
     >();
     for (const r of serviceResult.data?.records ?? []) {
       if (!r.service || !r.model) continue;
@@ -164,17 +233,31 @@ export const useFinOps = (): FinOpsData => {
       const outputTokens = num(r.output_tokens);
       const tokens = inputTokens + outputTokens;
       const cost = costOf(inputTokens, outputTokens, r.model);
+      const requests = num(r.requests);
       const entry =
         byService.get(r.service) ?? {
           tokens: 0,
           cost: 0,
-          models: new Set<string>(),
+          requests: 0,
+          models: new Map<string, ServiceModelBreakdown>(),
           topModel: r.model,
           topModelTokens: 0,
         };
       entry.tokens += tokens;
       entry.cost += cost;
-      entry.models.add(r.model);
+      entry.requests += requests;
+      // Accumulate this model's contribution to the service (a model can appear
+      // more than once across raw-name variants in the same service).
+      const mb = entry.models.get(r.model) ?? {
+        model: r.model,
+        tokens: 0,
+        cost: 0,
+        requests: 0,
+      };
+      mb.tokens += tokens;
+      mb.cost += cost;
+      mb.requests += requests;
+      entry.models.set(r.model, mb);
       if (tokens > entry.topModelTokens) {
         entry.topModel = r.model;
         entry.topModelTokens = tokens;
@@ -188,8 +271,14 @@ export const useFinOps = (): FinOpsData => {
         cost: entry.cost,
         costPerMTok:
           entry.tokens > 0 ? (entry.cost / entry.tokens) * 1_000_000 : 0,
+        requests: entry.requests,
+        costPerRequest: entry.requests > 0 ? entry.cost / entry.requests : 0,
+        tokensPerRequest: entry.requests > 0 ? entry.tokens / entry.requests : 0,
         topModel: entry.topModel,
         modelCount: entry.models.size,
+        models: Array.from(entry.models.values()).sort(
+          (a, b) => b.cost - a.cost,
+        ),
       }))
       .sort((a, b) => b.cost - a.cost);
 
@@ -204,22 +293,10 @@ export const useFinOps = (): FinOpsData => {
       totalTokens > 0 ? (totalCost / totalTokens) * 1_000_000 : 0;
 
     // ---- Possible savings ----
-    // For each service: if its blended $/MTok is more than 3× the cheapest
-    // service's $/MTok, assume it could halve its blended rate. Sum those
-    // half-savings across services as a rough "Possible savings" headline.
-    const pricedServices = services.filter((s) => s.costPerMTok > 0);
-    let possibleSavings = 0;
-    if (pricedServices.length >= 2) {
-      const cheapest = pricedServices.reduce((best, s) =>
-        s.costPerMTok < best.costPerMTok ? s : best,
-      );
-      for (const svc of pricedServices) {
-        if (svc.costPerMTok > cheapest.costPerMTok * 3) {
-          const targetCost = (svc.tokens / 1_000_000) * cheapest.costPerMTok * 2;
-          possibleSavings += Math.max(0, svc.cost - targetCost);
-        }
-      }
-    }
+    // Within-type only: an expensive generative service is compared to the
+    // cheapest generative peer, never to an embedding service (which is cheap by
+    // nature and would inflate the headline with an incoherent swap).
+    const possibleSavings = computePossibleSavings(services);
 
     return {
       daily: { dayLabels, series: trimmedSeries, totals },
@@ -230,14 +307,26 @@ export const useFinOps = (): FinOpsData => {
       concentrationPct,
       costPerMTok,
       possibleSavings,
+      dailyRatio,
       isLoading:
-        resolution.isLoading || dailyResult.isLoading || serviceResult.isLoading,
-      error: dailyResult.error ?? serviceResult.error ?? undefined,
+        resolution.isLoading ||
+        dailyResults.some((r) => r.isLoading) ||
+        serviceResult.isLoading,
+      error:
+        dailyResults.find((r) => r.error)?.error ??
+        serviceResult.error ??
+        undefined,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    dailyResult.data,
-    dailyResult.isLoading,
-    dailyResult.error,
+    d0.data,
+    d1.data,
+    d2.data,
+    d3.data,
+    d4.data,
+    d5.data,
+    d6.data,
+    dailyRatio,
     serviceResult.data,
     serviceResult.isLoading,
     serviceResult.error,

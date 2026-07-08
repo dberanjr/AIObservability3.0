@@ -6,11 +6,9 @@ import React, {
   useState,
 } from "react";
 import { usePersistedState } from "../state/usePersistedState";
+import { pickAccentForeground } from "../theme/palette";
 
 export type Theme = "light" | "dark";
-/** "minimal" strips chrome (shadows, borders, padding) for a data-first read. */
-export type Density = "comfortable" | "compact" | "minimal";
-export type TileStyle = "card" | "bordered" | "ghost";
 export type Accent =
   | "blue"
   | "purple"
@@ -56,18 +54,16 @@ export type ColorBlindFilter =
 export type ToolsMode = "strict" | "discovered";
 
 /**
- * How aggressively to cap the global filter's resolved trace-id set. The global
- * filter is trace-scoped: it resolves the matching trace.ids once and injects
- * them into every query. A very broad filter can match more traces than fit in
- * a DQL array literal, so the set is capped:
- *   - fast     — 5k traces (snappiest; truncates sooner)
- *   - balanced — 25k traces (default; best correctness/reliability balance)
- *   - exact    — no cap (always precise; can fail loud on very broad filters)
- * Truncated results are flagged in the filter strip ("approximate").
+ * DORMANT. The global filter previously resolved matching trace.ids and capped
+ * the injected set with this knob; it now applies conditions via DIRECT per-span
+ * injection (`injectGlobalFilters`), which is uncapped and exact, so nothing
+ * reads `traceMatchCap` / `TRACE_MATCH_CAPS` anymore. Retained only to keep the
+ * persisted pageConfig shape stable (no migration); the Tweaks UI control was
+ * removed. Safe to delete once a config migration is in place.
  */
 export type TraceMatchCap = "fast" | "balanced" | "exact";
 
-/** Trace-id cap for each TraceMatchCap option. `Infinity` = no cap. */
+/** Dormant — see TraceMatchCap. `Infinity` = no cap. */
 export const TRACE_MATCH_CAPS: Record<TraceMatchCap, number> = {
   fast: 5000,
   balanced: 25000,
@@ -83,7 +79,7 @@ export interface PageConfig {
   toolsMode: ToolsMode;
   /**
    * Agents tab: show the TTFT column. Off by default because
-   * gen_ai.usage.time_to_first_token is not instrumented in BOS (0 rows).
+   * gen_ai.response.ttft is not instrumented in BOS (0 rows).
    */
   agentsShowTtft: boolean;
   /**
@@ -99,12 +95,28 @@ export interface PageConfig {
   showRawModels: boolean;
   /** App-wide: how aggressively to cap the global filter's trace-id set. */
   traceMatchCap: TraceMatchCap;
+  /**
+   * App-wide: how much scan-cost telemetry to surface.
+   *   "off"    — nothing.
+   *   "totals" — the calm page-wide scanned / budget readout in the footer.
+   *   "tiles"  — the totals PLUS per-tile scan pills and the verbose page pill.
+   */
+  scanStats: ScanStatsMode;
+  /**
+   * App-wide: when enabled, restrict every span query to the named Grail
+   * buckets (OR) to prune scan cost by not scanning the default span bucket.
+   * `bucketFilterText` is a comma-separated list, preserved even while disabled
+   * so the user's chosen buckets aren't lost when they toggle it off.
+   */
+  bucketFilterEnabled: boolean;
+  bucketFilterText: string;
 }
+
+/** How much scan-cost telemetry the Tweaks panel surfaces (see PageConfig). */
+export type ScanStatsMode = "off" | "totals" | "tiles";
 
 export interface TweaksState {
   theme: Theme;
-  density: Density;
-  tileStyle: TileStyle;
   accent: Accent;
   /** Hex color stored for the "custom" accent — preserved across toggles. */
   customAccent: string;
@@ -118,8 +130,6 @@ export interface TweaksState {
 
 export const DEFAULT_TWEAKS: TweaksState = {
   theme: "light",
-  density: "minimal",
-  tileStyle: "card",
   accent: "blue",
   customAccent: "#1C5BE5",
   chartStyle: "area",
@@ -134,13 +144,14 @@ export const DEFAULT_TWEAKS: TweaksState = {
     showExampleData: false,
     showRawModels: false,
     traceMatchCap: "balanced",
+    scanStats: "totals",
+    bucketFilterEnabled: false,
+    bucketFilterText: "",
   },
 };
 
 export interface TweaksContextValue extends TweaksState {
   setTheme: (v: Theme) => void;
-  setDensity: (v: Density) => void;
-  setTileStyle: (v: TileStyle) => void;
   setAccent: (v: Accent) => void;
   setCustomAccent: (v: string) => void;
   setChartStyle: (v: ChartStyle) => void;
@@ -152,6 +163,9 @@ export interface TweaksContextValue extends TweaksState {
   setShowExampleData: (v: boolean) => void;
   setShowRawModels: (v: boolean) => void;
   setTraceMatchCap: (v: TraceMatchCap) => void;
+  setScanStats: (v: ScanStatsMode) => void;
+  setBucketFilterEnabled: (v: boolean) => void;
+  setBucketFilterText: (v: string) => void;
   resetTweaks: () => void;
   isPanelOpen: boolean;
   openPanel: () => void;
@@ -177,8 +191,6 @@ export const TweaksProvider = ({
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-aiobs-theme", tweaks.theme);
-    root.setAttribute("data-aiobs-density", tweaks.density);
-    root.setAttribute("data-aiobs-tile", tweaks.tileStyle);
     root.setAttribute("data-aiobs-accent", tweaks.accent);
     // Custom accent: write --blue inline on root, which beats the
     // CSS data-aiobs-accent selectors (those are :root scoped too, but
@@ -186,8 +198,16 @@ export const TweaksProvider = ({
     // tie-breaker rule).
     if (tweaks.accent === "custom") {
       root.style.setProperty("--blue", tweaks.customAccent);
+      // Derive an accessible pill/mark foreground for the picked hex too, so a
+      // light custom accent doesn't leave white-on-light text (UX report
+      // Chart-1). Named accents get this from the generated CSS in tokens.ts.
+      root.style.setProperty(
+        "--accent-fg",
+        pickAccentForeground(tweaks.customAccent),
+      );
     } else {
       root.style.removeProperty("--blue");
+      root.style.removeProperty("--accent-fg");
     }
     // Colorblind filter on the app body so SVG / canvas / IMG all get
     // remapped through the matrix.
@@ -223,8 +243,6 @@ export const TweaksProvider = ({
       ...tweaks,
       pageConfig,
       setTheme: merge("theme"),
-      setDensity: merge("density"),
-      setTileStyle: merge("tileStyle"),
       setAccent: merge("accent"),
       setCustomAccent: merge("customAccent"),
       setChartStyle: merge("chartStyle"),
@@ -236,6 +254,9 @@ export const TweaksProvider = ({
       setShowExampleData: mergePage("showExampleData"),
       setShowRawModels: mergePage("showRawModels"),
       setTraceMatchCap: mergePage("traceMatchCap"),
+      setScanStats: mergePage("scanStats"),
+      setBucketFilterEnabled: mergePage("bucketFilterEnabled"),
+      setBucketFilterText: mergePage("bucketFilterText"),
       resetTweaks: () => setTweaks(DEFAULT_TWEAKS),
       isPanelOpen,
       openPanel: () => setPanelOpen(true),

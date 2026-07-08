@@ -179,7 +179,7 @@ export const SLAConfigDrawer = ({
                 disabled={isTTFT}
                 hint={
                   isTTFT
-                    ? "Disabled until gen_ai.usage.time_to_first_token is instrumented."
+                    ? "Disabled until gen_ai.response.ttft is instrumented."
                     : undefined
                 }
               />

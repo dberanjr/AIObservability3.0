@@ -1,13 +1,14 @@
 import React, { useMemo } from "react";
-import { Flex } from "@dynatrace/strato-components/layouts";
-import { Text } from "@dynatrace/strato-components/typography";
 import { FindingCard } from "../../components/FindingCard";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 import {
   DEFAULT_FINDING_INTENTS,
   type Finding,
 } from "../../components/drawers/types";
 import { fmtPercent, fmtUSD, fmtUSDCompact } from "../../data/format";
 import type { ModelRow } from "./useModels";
+import { MODEL_TYPE_LABEL } from "./useModels";
+import { pickWithinTypeDowngrade } from "./finopsLogic";
 import type { FinOpsData } from "./useFinOps";
 
 export interface FinOpsFindingsProps {
@@ -46,32 +47,21 @@ export const FinOpsFindings = ({
       }
     }
 
-    // Downgrade win — most-expensive priced model ≥ 3× cheapest peer.
-    const priced = models.filter(
-      (m) => !m.pricingUnknown && m.costPerMTok > 0,
-    );
-    if (priced.length >= 2) {
-      const expensive = priced.reduce((best, m) =>
-        m.costPerMTok > best.costPerMTok ? m : best,
-      );
-      const cheap = priced.reduce((best, m) =>
-        m.costPerMTok < best.costPerMTok ? m : best,
-      );
-      if (
-        expensive.modelKey !== cheap.modelKey &&
-        expensive.costPerMTok > cheap.costPerMTok * 3
-      ) {
-        const ratio = expensive.costPerMTok / cheap.costPerMTok;
-        out.push({
-          id: "downgrade-win",
-          severity: "info",
-          category: "Downgrade win",
-          entity: expensive.model,
-          metric: fmtUSD(expensive.costPerMTok),
-          context: `${expensive.model} runs ${ratio.toFixed(1)}× the $/1M of ${cheap.model}. Pilot a tier swap on lower-stakes prompts.`,
-          intents: DEFAULT_FINDING_INTENTS,
-        });
-      }
+    // Downgrade win — most-expensive priced model ≥ 3× the cheapest *same-type*
+    // peer. Restricting to one ModelType stops the incoherent embedding-vs-Opus
+    // swap the naive fleet-wide max/min produced.
+    const downgrade = pickWithinTypeDowngrade(models);
+    if (downgrade) {
+      const { expensive, cheap, ratio } = downgrade;
+      out.push({
+        id: "downgrade-win",
+        severity: "info",
+        category: "Downgrade win",
+        entity: expensive.model,
+        metric: fmtUSD(expensive.costPerMTok),
+        context: `${expensive.model} runs ${ratio.toFixed(1)}× the $/1M of ${cheap.model} (both ${MODEL_TYPE_LABEL[expensive.type].toLowerCase()}). Pilot a tier swap on lower-stakes prompts.`,
+        intents: DEFAULT_FINDING_INTENTS,
+      });
     }
 
     // Cache opportunity — proxied by repeated high-volume short prompts.
@@ -128,12 +118,21 @@ export const FinOpsFindings = ({
   }, [data, models]);
 
   if (findings.length === 0) {
+    // STATE-2: a failed FinOps query must read as an error, not "no data". The
+    // spend/service data flows in via `data`, which carries the query error.
+    // (useFinOps doesn't expose a scan-limit signal, so STATE-4/truncated stays
+    // a page-level concern — see the scan footer.)
+    const cause = emptyCause({ error: data.error });
     return (
-      <Flex style={{ padding: "4px 4px" }}>
-        <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-          No FinOps findings surfaced in the current scope.
-        </Text>
-      </Flex>
+      <EmptyState
+        bare
+        cause={cause}
+        title={
+          cause === "no-activity"
+            ? "No FinOps findings surfaced in the current scope."
+            : undefined
+        }
+      />
     );
   }
 

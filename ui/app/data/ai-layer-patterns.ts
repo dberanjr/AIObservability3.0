@@ -37,10 +37,51 @@ export type LayerKey =
  */
 export type PatternTier = "live" | "enrichment" | "card";
 
+/**
+ * Drawer-facing status, DERIVED from {@link PatternTier} (do not store it
+ * separately — `tier` is the source of truth and already drives the drawer
+ * badge). Only `detected` patterns are clickable; `reference` /
+ * `needs-enrichment` are listed shown-but-disabled.
+ */
+export type PatternStatus = "detected" | "reference" | "needs-enrichment";
+
+/** Map a pattern's detectability tier to its drawer status. */
+export const patternStatus = (tier: PatternTier): PatternStatus =>
+  tier === "live" ? "detected" : tier === "card" ? "reference" : "needs-enrichment";
+
+/**
+ * "Why not clickable" tooltip for a non-detected pattern. `detected` patterns
+ * are actionable (drill links) and have no disabled-reason, so this returns
+ * undefined for them.
+ */
+export const patternDisabledReason = (status: PatternStatus): string | undefined =>
+  status === "reference"
+    ? "Not derivable from spans — reference only"
+    : status === "needs-enrichment"
+      ? "Needs evaluation enrichment (emit gen_ai.evaluation.*)"
+      : undefined;
+
+/**
+ * A clickable drill target for a detected pattern: open a destination tab with
+ * `?focus=<focus>`, which the tab interprets as a page-local query preset.
+ * Empty for non-detected patterns.
+ */
+export interface PatternDrill {
+  tab: "prompts" | "agents";
+  /** URL `?focus=` id the destination tab maps to a query predicate. */
+  focus: string;
+  label: string;
+}
+
+/** Destination pathname for a drill (the tab route the drawer navigates to). */
+export const drillRoute = (drill: PatternDrill): string => `/${drill.tab}`;
+
 export interface LayerPattern {
   title: string;
   detail: string;
   tier: PatternTier;
+  /** Drill targets for detected patterns; empty for reference/needs-enrichment. */
+  drills: PatternDrill[];
 }
 
 export interface AiLayer {
@@ -80,12 +121,14 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "Malicious instructions smuggled in user input. Not in raw GenAI telemetry — detectable only when an upstream OpenPipeline security/PII rule flags the span. Enable that enrichment to light this up.",
         tier: "enrichment",
+        drills: [],
       },
       {
         title: "Multimodal attachment bloat",
         detail:
           "Large images/audio/files inflate token and byte cost before the model is even called. Not practically detectable from spans today.",
         tier: "card",
+        drills: [],
       },
     ],
     otel: "No native OTel GenAI spans. Identity (session.id, gen_ai.user) must be propagated from here for per-user attribution.",
@@ -106,12 +149,14 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "429s and throttling at the provider/gateway boundary, often with exponential-backoff retries. Detectable at the llm boundary when status/error fields are emitted.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "llm-rate-limit", label: "View in Prompts" }],
       },
       {
         title: "PII / injection enrichment point",
         detail:
           "The natural place to run an OpenPipeline security/PII rule that writes gen_ai.privacy.* / injection flags onto the span for downstream detection.",
         tier: "enrichment",
+        drills: [],
       },
     ],
     otel: "No native OTel GenAI spans; HTTP/proxy spans only. Best place to enrich spans with security/identity context.",
@@ -133,12 +178,14 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "The agent revisits the same nodes/steps without converging. Detected from LangGraph node-revisit ratio and step depth (gen_ai.agent.iteration / langgraph_*).",
         tier: "live",
+        drills: [{ tab: "agents", focus: "orch-reasoning-loop", label: "View in Agents" }],
       },
       {
         title: "Within-trace token growth (scratchpad / history bloat)",
         detail:
           "Billable tokens climb iteration over iteration as the scratchpad and history are re-sent. Costed on billableTokens so a cached prefix is correctly seen as cheap.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "orch-token-growth", label: "View in Prompts" }],
       },
     ],
     otel: "traceloop.workflow.name, traceloop.association.properties.langgraph_*, gen_ai.agent.iteration / max_iterations.",
@@ -159,12 +206,17 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "A single agent calls one tool far more than expected within a trace/timeframe — the AI analogue of an N+1 query. Detected from per-agent per-tool call counts.",
         tier: "live",
+        drills: [
+          { tab: "agents", focus: "agent-n1-tool-calls", label: "View in Agents" },
+          { tab: "prompts", focus: "agent-n1-tool-calls", label: "View in Prompts" },
+        ],
       },
       {
         title: "Agent error / degradation",
         detail:
           "Rising per-agent error rate or latency against its own trend.",
         tier: "live",
+        drills: [{ tab: "agents", focus: "agent-degradation", label: "View in Agents" }],
       },
     ],
     otel: "gen_ai.agent.name, gen_ai.agent.id, gen_ai.agent.iteration / max_iterations.",
@@ -185,18 +237,27 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "A tool fails and is retried repeatedly within a trace, burning latency and tokens. Detected from tool error % and retry counts.",
         tier: "live",
+        drills: [
+          { tab: "agents", focus: "tool-retry-storm", label: "View in Agents" },
+          { tab: "prompts", focus: "tool-retry-storm", label: "View in Prompts" },
+        ],
       },
       {
         title: "Tool-output → token spike",
         detail:
           "A large tool result balloons the next LLM call's billable tokens. Attributed by correlating a tool span to the next LLM call in the trace.",
         tier: "live",
+        drills: [
+          { tab: "prompts", focus: "tool-token-spike", label: "View in Prompts" },
+          { tab: "agents", focus: "tool-token-spike", label: "View in Agents" },
+        ],
       },
       {
         title: "Parallel tool race conditions",
         detail:
           "Concurrent tools mutating shared state with order-dependent results. Not detectable from spans.",
         tier: "card",
+        drills: [],
       },
     ],
     otel: "gen_ai.tool.name, traceloop.span.kind == \"tool\", mcp.* (or mcp.server span name).",
@@ -219,39 +280,45 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "Generation truncated for length (finish_reason \"max_tokens\"/\"length\"). Detected from gen_ai.response.finish_reasons.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "llm-ctx-exhaustion", label: "View in Prompts" }],
       },
       {
         title: "Logical errors",
         detail:
           "Refusals and content-filter blocks return HTTP 200 but no useful answer. Detected from finish_reasons / error fields.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "llm-logical-errors", label: "View in Prompts" }],
       },
       {
         title: "TTFT degradation",
         detail:
-          "Streaming time-to-first-token regresses against its rolling baseline. Capability-gated on gen_ai.usage.time_to_first_token.",
+          "Streaming time-to-first-token regresses against its rolling baseline. Capability-gated on gen_ai.response.ttft.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "llm-ttft-degradation", label: "View in Prompts" }],
       },
       {
         title: "Model fallback / request-vs-response mismatch",
         detail:
           "Provider served a different model than requested (gen_ai.request.model != gen_ai.response.model), after version-suffix normalization.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "llm-model-mismatch", label: "View in Prompts" }],
       },
       {
         title: "Provider rate-limit / backoff",
         detail:
           "429/throttling with growing inter-attempt gaps (exponential backoff) at the LLM boundary.",
         tier: "live",
+        drills: [{ tab: "prompts", focus: "llm-rate-limit", label: "View in Prompts" }],
       },
       {
         title: "Retrieval hallucination",
         detail:
           "Ungrounded output despite retrieved context. Detectable only when an evaluator emits gen_ai.evaluation.* (groundedness/hallucination) — else card-only.",
         tier: "enrichment",
+        drills: [],
       },
     ],
-    otel: "gen_ai.request/response.model, gen_ai.usage.* (input/output/cache tokens, cost, ttft), gen_ai.response.finish_reasons.",
+    otel: "gen_ai.request/response.model, gen_ai.usage.* (input/output/cache tokens, cost), gen_ai.response.ttft, gen_ai.response.finish_reasons.",
     otelGap: false,
     relatedSpanKinds: ["llm"],
     relatedDbSystems: [],
@@ -269,18 +336,24 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "An oversized top-k pulls more chunks than needed, inflating input tokens and cost. Detected from vector_db.query.top_k where emitted.",
         tier: "live",
+        drills: [
+          { tab: "agents", focus: "vdb-topk-over-retrieval", label: "View in Agents" },
+          { tab: "prompts", focus: "vdb-topk-over-retrieval", label: "View in Prompts" },
+        ],
       },
       {
         title: "Missing metadata-filter scope errors",
         detail:
           "Retrieval without the right metadata filter returns out-of-scope documents. Not reliably detectable from spans.",
         tier: "card",
+        drills: [],
       },
       {
         title: "Embedding-model mismatch",
         detail:
           "Query embedded with a different model than the index was built with, silently degrading recall. Not detectable from spans.",
         tier: "card",
+        drills: [],
       },
     ],
     otel: "db.system (a dedicated vector store value, e.g. pinecone), vector_db.query.text / results / top_k.",
@@ -308,18 +381,24 @@ export const AI_LAYERS: AiLayer[] = [
         detail:
           "Conversation/thread state grows unbounded, re-sent every turn — a steady upstream driver of token cost. Detected where conversation/thread identifiers are emitted.",
         tier: "live",
+        drills: [
+          { tab: "agents", focus: "mem-history-growth", label: "View in Agents" },
+          { tab: "prompts", focus: "mem-history-growth", label: "View in Prompts" },
+        ],
       },
       {
         title: "Stale-TTL context loss",
         detail:
           "State expires mid-conversation, so the agent loses context and repeats work. Not detectable from spans.",
         tier: "card",
+        drills: [],
       },
       {
         title: "Multi-agent state write conflicts",
         detail:
           "Concurrent agents write conflicting state; last-writer-wins corrupts shared memory. Not detectable from spans.",
         tier: "card",
+        drills: [],
       },
     ],
     otel: "gen_ai.conversation.id, traceloop.association.properties.thread_id / langgraph_checkpoint_ns.",

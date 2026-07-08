@@ -15,6 +15,10 @@ import {
 import { canonicalizeModel } from "../../detection/attributes";
 import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
+import { injectTraceScope } from "../../scope/queries";
+import { useFocusTraceScope } from "./useFocusTraceScope";
+import { matchEvalFilter, type EvalFilter } from "./evalTable";
+import { serverSortClause, type PromptSort } from "./promptsSort";
 
 /** True when `val` satisfies a numeric range filter (>, <, between). */
 const matchRange = (val: number, r?: LatencyFilter): boolean => {
@@ -42,7 +46,7 @@ const str = (v: unknown): string => {
   try {
     return JSON.stringify(v, null, 2);
   } catch {
-    return String(v);
+    return "[unserializable value]";
   }
 };
 
@@ -137,6 +141,12 @@ export interface PromptsFilter {
   /** Cost range filters, in dollars (applied client-side over loaded rows). */
   inCost?: LatencyFilter;
   outCost?: LatencyFilter;
+  /**
+   * Eval-score range filter (Prompts-4). Set by clicking a quality-panel metric
+   * tile to drill into the spans failing that metric. Applied client-side over
+   * the loaded rows (the eval scores are already on every PromptRow).
+   */
+  eval?: EvalFilter;
 }
 
 export interface FacetValue {
@@ -183,12 +193,34 @@ const countBy = <T>(
   return counts;
 };
 
-export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
+export const usePrompts = (
+  filter: PromptsFilter = {},
+  /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-3). */
+  focus?: string | null,
+  /**
+   * Active table sort. A heavy numeric column (tokens / duration) is lifted
+   * server-side so the fetched 200-row sample is the TRUE top-N (Prompts-9);
+   * cost / temperature / timestamp sorts leave the query unchanged and are
+   * reordered over the sample client-side.
+   */
+  sort?: PromptSort,
+): UsePromptsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // CROSS-SPAN focus (PP-4): tool-retry-storm / agent-n1-tool-calls /
+  // vdb-topk-over-retrieval / mem-history-growth define their pattern on the
+  // tool/state span, not the LLM/prompt span this page reads. Resolve the
+  // matching trace.ids and scope the list to those traces (injectTraceScope).
+  // Same-span focuses (the LLM ones + tool-token-spike) leave this inert and
+  // use the synchronous predicate path in buildPromptsListQuery.
+  const focusScope = useFocusTraceScope(focus);
+  // While a cross-span focus is resolving its trace.ids, gate the list query:
+  // firing it before resolution would scope to a stale/empty id set.
+  const focusGated = focusScope.active && focusScope.isResolving;
 
   const refetch = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -211,21 +243,39 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     latency: filter.latency,
     temperature: filter.temperature,
   };
+  // A heavy-numeric user sort is lifted into the DQL ORDER BY (before the cap);
+  // sample-only sorts resolve to null and leave the query byte-identical, so
+  // toggling them triggers no refetch.
+  const serverSort = serverSortClause(sort);
   const query = useMemo(
-    () =>
-      canQuery
-        ? buildPromptsListQuery(
-            resolution.serviceIds,
-            scope.timeframe,
-            filters,
-            sidebar,
-          ) + ` /* r${refreshKey} */`
-        : "",
+    () => {
+      if (!canQuery) return "";
+      const base = buildPromptsListQuery(
+        resolution.serviceIds,
+        scope.timeframe,
+        filters,
+        sidebar,
+        focus,
+        serverSort,
+      );
+      // For a cross-span focus, scope the list to the resolved trace.ids. An
+      // empty array injects the no-match sentinel so the list renders empty
+      // (the correct result when the pattern matched no traces). Inactive ⇒
+      // base query unchanged.
+      const scoped = focusScope.active
+        ? injectTraceScope(base, focusScope.traceIds)
+        : base;
+      return scoped + ` /* r${refreshKey} */`;
+    },
     [
       canQuery,
       resolution.serviceIds,
       scope.timeframe,
       refreshKey,
+      focus,
+      serverSort,
+      focusScope.active,
+      focusScope.traceIds,
       filter.services?.join(","),
       filter.kinds?.join(","),
       filter.search,
@@ -246,7 +296,11 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
   );
 
   const { data, isLoading, error } = useScopedDql<PromptRecord>(query, {
-    enabled: canQuery,
+    // Don't fire the list until a cross-span focus has resolved its trace.ids
+    // (firing early would scope to a stale/empty set). The global attribute
+    // filter still applies and ANDs with the focus scope — both inject a
+    // `| filter in(trace.id, …)` and a span must satisfy every one.
+    enabled: canQuery && !focusGated,
     staleTime: 60_000,
   });
 
@@ -399,6 +453,9 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       // Cost filters are in dollars; PromptRow stores cents.
       if (!matchRange(p.inCost / 100, filter.inCost)) return false;
       if (!matchRange(p.outCost / 100, filter.outCost)) return false;
+      // Eval-score drill-down from a quality tile (Prompts-4): keep only spans
+      // failing the clicked metric; unscored spans drop out.
+      if (filter.eval && !matchEvalFilter(p, filter.eval)) return false;
       if (search) {
         const hay =
           `${p.promptText} ${p.responseText} ${p.service} ${p.model ?? ""} ${p.agent ?? ""}`.toLowerCase();
@@ -423,8 +480,10 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
       },
       hasContent,
       hasEval,
-      isLoading: resolution.isLoading || isLoading,
-      error: error ?? undefined,
+      // Surface the cross-span focus resolution as loading too, so the table
+      // shows its spinner (not an empty state) while the trace.ids resolve.
+      isLoading: resolution.isLoading || isLoading || focusGated,
+      error: (error ?? undefined) ?? focusScope.error,
       refetch,
     };
   }, [
@@ -434,6 +493,8 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     isLoading,
     error,
     resolution.isLoading,
+    focusGated,
+    focusScope.error,
     filter?.search,
     filter?.kinds?.join(","),
     filter?.services?.join(","),
@@ -445,6 +506,9 @@ export const usePrompts = (filter: PromptsFilter = {}): UsePromptsResult => {
     filter?.outCost?.op,
     filter?.outCost?.min,
     filter?.outCost?.max,
+    filter?.eval?.metric,
+    filter?.eval?.op,
+    filter?.eval?.threshold,
     refetch,
   ]);
 };

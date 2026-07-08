@@ -36,7 +36,9 @@ import { dqlTimeArg, LOGICAL_ERROR_EXPR } from "../../../scope/queries";
 import { AI_SPAN_POPULATION, dbSystemIsVectorStore } from "../../../detection/attributeFields";
 import { fmtCount, fmtTokens, fmtMs, fmtUSD, fmtPercent, toNum } from "../../../data/format";
 import { usePulseSeries, type PulseSeries } from "./usePulseSeries";
+import { perceptualEdgeWeight } from "./edgeScale";
 import { useSpendBreakdown } from "../useSpendBreakdown";
+import { useClientUpstream, type ClientUpstream } from "./useClientUpstream";
 import type { Finding } from "../../../components/drawers/types";
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import type { LensId } from "../architectureLenses";
@@ -80,6 +82,8 @@ export interface ArchData {
   loopPct: number | null;
   loopRate: string | null;
   loopEntity: string | null;
+  /** Upstream caller services for the Client node + its drawer drill-down. */
+  clientUpstream: ClientUpstream;
   findings: Finding[];
   counts: { services: number | null; agents: number | null; tools: number | null };
   breakdown: { critical: number; warning: number; info: number };
@@ -89,6 +93,8 @@ export interface ArchData {
   empty: boolean;
   isLoading: boolean;
   error?: Error;
+  /** Re-run the map's own summarize (surfaced on the inline error state). */
+  refetch: () => void;
 }
 
 interface Rec {
@@ -124,7 +130,6 @@ const WARN_LOOP_PCT = 5;
 const CRIT_LOOP_PCT = 20;
 const WARN_MS = 2000;
 const CRIT_MS = 5000;
-const EDGE_FLOOR = 0.12;
 
 const rateStatus = (r: number): NodeStatus =>
   r >= CRIT_ERR ? "critical" : r >= WARN_ERR ? "warning" : "healthy";
@@ -203,8 +208,9 @@ export const useArchitectureData = (): ArchData => {
   const highFreq = useHighFrequencyAgents();
   const counts = useResolvedCounts();
   const { anomalies, isLoading: anomLoading } = useAnomalies();
+  const clientUpstream = useClientUpstream();
 
-  const { data, isLoading, error } = useScopedDql<Rec>(
+  const { data, isLoading, error, refetch } = useScopedDql<Rec>(
     buildQuery(scope.timeframe.from, scope.timeframe.to ?? "now()"),
     { staleTime: 60_000 },
   );
@@ -312,12 +318,22 @@ export const useArchitectureData = (): ArchData => {
       };
 
       // ── orchestrator ─────────────────────────────────────
+      // The orchestrator tier no longer carries a throughput headline — its
+      // runtime (workflow) spans are folded into the Agent tier below, and this
+      // tier instead surfaces the detected frameworks as separate nodes (driven
+      // by useFrameworkNodes). We still keep p90 + error count for the health
+      // dot, and the loop-rate badge / cells.
       const wf = num(rec.workflowSpans);
       const wfErr = pct(num(rec.workflowErr), wf);
       const wfP90 = ms(num(rec.workflowP90Ns));
-      count.orchestrator = wf;
       p90.orchestrator = wfP90;
       errCount.orchestrator = num(rec.workflowErr);
+      // The orchestrator no longer shows a throughput headline, but its inbound
+      // workflow-span volume is still the correct weight for the gateway →
+      // orchestrator edge (the edge loop reads count[e.to]). Keep this count-map
+      // entry for edge weighting only — it does NOT drive the suppressed headline,
+      // and the `empty` check below intentionally ignores count.orchestrator.
+      count.orchestrator = wf;
       if (wf > 0 || !loops.isEmpty) {
         const loopBadge: Badge[] =
           loopPct != null
@@ -332,14 +348,12 @@ export const useArchitectureData = (): ArchData => {
         nodes.orchestrator = {
           status: loops.isEmpty ? "muted" : loopStatus,
           state: "live",
-          headline: fmtCount(ex(wf)),
-          sub: "workflow spans",
+          sub: "frameworks detected",
           badges: loopBadge,
           findings: findingBadge("orchestrator").n,
           findingTone: findingBadge("orchestrator").tone,
           reason: loops.isEmpty ? "No LangGraph runs in scope" : `Loop rate ${loopPct?.toFixed(0)}%`,
           cells: {
-            throughput: { status: "healthy", headline: fmtCount(ex(wf)), sub: "workflow spans", badges: [] },
             latency: { status: latStatus(wfP90), headline: fmtMs(wfP90), sub: "p90 wall-clock", badges: [] },
             errors: { status: rateStatus(wfErr), headline: fmtPercent(wfErr * 100), sub: "workflow errors", badges: [] },
             loop:
@@ -354,15 +368,23 @@ export const useArchitectureData = (): ArchData => {
       }
 
       // ── agent ────────────────────────────────────────────
+      // The orchestrator's runtime (workflow) spans fold into this tier's
+      // headline: the orchestrator tier now shows frameworks instead of a
+      // throughput number, so its runtime volume is counted here as part of the
+      // agent runtime. Error rate / p90 stay agent-span metrics (the workflow
+      // p90/errors remain on the orchestrator health dot).
       const aS = num(rec.agentSpans);
+      const agentRuntime = aS + wf;
       const aErr = pct(num(rec.agentErr), aS);
       const aP90 = ms(num(rec.agentP90Ns));
-      count.agent = aS;
+      count.agent = agentRuntime;
       p90.agent = aP90;
       errCount.agent = num(rec.agentErr);
-      if (aS > 0) {
+      if (agentRuntime > 0) {
+        // The headline colour already conveys error status (Pulse-6 status tag +
+        // tinted number), so the plain "err%" pill is dropped from the card; the
+        // rate stays available in the drawer's Errors chart and the Errors lens.
         const baseBadges: Badge[] = [
-          { text: `${fmtPercent(aErr * 100)} err`, tone: aErr >= WARN_ERR ? "warning" : "neutral" },
           { text: `p90 ${fmtMs(aP90)}`, tone: "neutral" },
         ];
         const runaway = finding("agent", ["runaway-agent"]);
@@ -370,14 +392,14 @@ export const useArchitectureData = (): ArchData => {
         nodes.agent = {
           status: worse(rateStatus(aErr), loops.isEmpty ? "healthy" : loopStatus),
           state: "live",
-          headline: fmtCount(ex(aS)),
-          sub: "agent spans",
+          headline: fmtCount(ex(agentRuntime)),
+          sub: "agent + workflow spans",
           badges: baseBadges,
           findings: findingBadge("agent").n,
           findingTone: findingBadge("agent").tone,
           reason: `Error ${fmtPercent(aErr * 100)}`,
           cells: {
-            throughput: { status: "healthy", headline: fmtCount(ex(aS)), sub: "agent spans", badges: [] },
+            throughput: { status: "healthy", headline: fmtCount(ex(agentRuntime)), sub: "agent + workflow spans", badges: [] },
             latency: { status: latStatus(aP90), headline: fmtMs(aP90), sub: "p90 self-time", badges: [] },
             errors: { status: rateStatus(aErr), headline: fmtPercent(aErr * 100), sub: "agent error rate", badges: [] },
             loop: muted("amplified by orchestrator loops"),
@@ -401,8 +423,8 @@ export const useArchitectureData = (): ArchData => {
           state: "live",
           headline: fmtCount(ex(tS)),
           sub: "tool calls",
+          // "err%" pill dropped — the headline colour + status tag convey it (Pulse-6).
           badges: [
-            { text: `${fmtPercent(tErr * 100)} err`, tone: tErr >= WARN_ERR ? "warning" : "neutral" },
             { text: `p90 ${fmtMs(tP90)}`, tone: "neutral" },
           ],
           findings: findingBadge("tools").n,
@@ -434,10 +456,11 @@ export const useArchitectureData = (): ArchData => {
       if (lS > 0) {
         let s = rateStatus(lErr);
         if (has429 || truncRate >= WARN_ERR) s = worse(s, "warning");
+        // Card badges are capped to the headline cost figure plus any anomalous
+        // signals (truncation / 429s, appended below). Raw tokens + p90 move to
+        // the drawer's Tokens / Latency charts so the busiest tile stays legible.
         const baseBadges: Badge[] = [
           { text: `≈ ${usd}`, tone: "cost" },
-          { text: `${fmtTokens(tokens)} tok`, tone: "neutral" },
-          { text: `p90 ${fmtMs(lP90)}`, tone: "neutral" },
         ];
         const errBadges: Badge[] = [];
         if (truncRate > 0) {
@@ -539,6 +562,41 @@ export const useArchitectureData = (): ArchData => {
       }
     }
 
+    // ── client tier (upstream callers from Smartscape topology) ──
+    // The Client tier has no native gen_ai spans, but the services that CALL the
+    // AI services are in Smartscape — so we surface their count + RED metrics
+    // here instead of the static "no native OTel" note. The drawer lists them
+    // (each filters the whole app on click).
+    if (clientUpstream.count > 0) {
+      const cErr = clientUpstream.errPct; // percent
+      const cStatus = rateStatus(cErr / 100);
+      const aggSeries = clientUpstream.services.reduce<number[]>((acc, s) => {
+        s.series.forEach((v, i) => {
+          acc[i] = (acc[i] ?? 0) + v;
+        });
+        return acc;
+      }, []);
+      nodes.client = {
+        status: cStatus,
+        state: "live",
+        headline: fmtCount(clientUpstream.count),
+        sub: clientUpstream.count === 1 ? "upstream service" : "upstream services",
+        badges: [
+          { text: `${fmtPercent(cErr)} err`, tone: cErr >= WARN_ERR * 100 ? "warning" : "neutral" },
+          { text: `p90 ${fmtMs(clientUpstream.p90Ms)}`, tone: "neutral" },
+        ],
+        findings: findingBadge("client").n,
+        findingTone: findingBadge("client").tone,
+        series: aggSeries.length >= 2 ? aggSeries : undefined,
+        reason: `${clientUpstream.count} upstream caller service${clientUpstream.count === 1 ? "" : "s"} · ${fmtPercent(cErr)} error rate`,
+        cells: {
+          throughput: { status: "healthy", headline: fmtCount(clientUpstream.count), sub: "upstream services", badges: [] },
+          latency: { status: latStatus(clientUpstream.p90Ms), headline: fmtMs(clientUpstream.p90Ms), sub: "p90 (worst caller)", badges: [] },
+          errors: { status: cStatus, headline: fmtPercent(cErr), sub: "caller error rate", badges: [] },
+        },
+      };
+    }
+
     // ── per-tier sparklines (attach to live tiers only) ───
     // The node sparkline switches metric with the active lens (handled in
     // MapNode): throughput by default, p90 latency / error count / tokens
@@ -584,7 +642,9 @@ export const useArchitectureData = (): ArchData => {
       const key = edgeKey(e.from, e.to);
       const c = count[e.to];
       if (c != null && maxCount > 0) {
-        edgeWeight[key] = c > 0 ? Math.max(EDGE_FLOOR, c / maxCount) : EDGE_FLOOR;
+        // √-scaled so mid-volume edges stay distinguishable from the busiest one
+        // instead of all collapsing to the floor (see edgeScale.ts).
+        edgeWeight[key] = perceptualEdgeWeight(c, maxCount);
         edgeRate[key] = c > 0 ? `${fmtCount(ex(c))} ${noun[e.to] ?? "spans"}` : "no spans in scope";
       } else {
         edgeWeight[key] = e.baseW;
@@ -632,7 +692,7 @@ export const useArchitectureData = (): ArchData => {
 
     const empty =
       !!rec &&
-      [count.orchestrator, count.agent, count.tools, count.llm, count.vectordb, count.memory].every(
+      [count.agent, count.tools, count.llm, count.vectordb, count.memory].every(
         (n) => !n,
       );
 
@@ -646,6 +706,7 @@ export const useArchitectureData = (): ArchData => {
       loopPct,
       loopRate,
       loopEntity: fleetLoop.entity,
+      clientUpstream,
       findings: anomalies,
       counts: { services: counts.services, agents: counts.agents, tools: counts.tools },
       breakdown,
@@ -654,11 +715,16 @@ export const useArchitectureData = (): ArchData => {
       empty,
       isLoading: isLoading || loops.isLoading || anomLoading,
       error: error ?? undefined,
+      refetch: () => {
+        void refetch();
+      },
     };
   }, [
     data,
+    refetch,
     pulse,
     spendBreakdown.total,
+    clientUpstream,
     samplingRatio,
     loops.isEmpty,
     loops.isLoading,

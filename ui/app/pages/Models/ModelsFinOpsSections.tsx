@@ -6,9 +6,14 @@
  */
 import React, { useMemo } from "react";
 import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import type { Finding } from "../../components/drawers/types";
 import { CollapsibleSection } from "../../components/CollapsibleSection";
+import { MODEL_TYPE_LABEL } from "./useModels";
+import type { ModelTypeFilter } from "./ModelTypeSegmented";
 import { CapabilityGate } from "../../components/CapabilityGate";
+import { ScanScopedTile } from "../../scope/ScanScopedTile";
+import { useUpstreamServices } from "../Agents/useUpstreamServices";
 import type { ModelRow } from "./useModels";
 import { useFinOps } from "./useFinOps";
 import { FinOpsTilesRow } from "./FinOpsTilesRow";
@@ -22,34 +27,55 @@ import { SessionUserCostPanel } from "./SessionUserCostPanel";
 
 export interface ModelsFinOpsSectionsProps {
   models: ModelRow[];
+  /** The page's active model-type filter, for the scope-mismatch caption. */
+  typeFilter?: ModelTypeFilter;
   onSelectFinding: (f: Finding) => void;
 }
 
 export const ModelsFinOpsSections = ({
   models,
+  typeFilter = "all",
   onSelectFinding,
 }: ModelsFinOpsSectionsProps) => {
   const finOps = useFinOps();
+  const upstream = useUpstreamServices();
 
-  const monthlyRequests = useMemo(() => {
-    const fleetRequests = models.reduce((acc, m) => acc + m.requests, 0);
-    if (fleetRequests === 0) return 0;
-    return Math.round(fleetRequests * (30 / 7));
-  }, [models]);
-
-  const observedUpstream = useMemo(
-    () => finOps.services.slice(0, 6).map((s) => s.service),
+  // AI service names for the A/B "service being compared" dropdown.
+  const serviceNames = useMemo(
+    () => finOps.services.map((s) => s.service),
     [finOps.services],
+  );
+  // Real upstream caller services (Smartscape topology) for the A/B "driving
+  // upstream" dropdown.
+  const upstreamOptions = useMemo(
+    () => upstream.rows.map((r) => r.upstream),
+    [upstream.rows],
   );
 
   return (
     <Flex flexDirection="column" gap={12}>
       <CollapsibleSection
         title="Cost & spend overview"
-        subtitle="24h · 7d · projected 30d"
+        subtitle="24h · 7d · projected 30d · fleet · all model types"
         defaultOpen
       >
         <Flex flexDirection="column" gap={16}>
+          {typeFilter !== "all" && (
+            <Text
+              style={{
+                fontSize: 11.5,
+                color: "var(--text-3)",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "6px 10px",
+              }}
+            >
+              Showing fleet spend across <strong>all model types</strong>. The
+              &ldquo;{MODEL_TYPE_LABEL[typeFilter]}&rdquo; filter above applies to
+              the model inventory only, not to these cost rollups.
+            </Text>
+          )}
           <FinOpsTilesRow data={finOps} />
           <FinOpsFindings
             data={finOps}
@@ -59,12 +85,25 @@ export const ModelsFinOpsSections = ({
         </Flex>
       </CollapsibleSection>
 
-      <CapabilityGate id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}>
+      <CapabilityGate
+        id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}
+        label="Prompt cache & reported cost — available with instrumentation"
+        hint={
+          <>
+            Emit <code>gen_ai.usage.cached_tokens</code>,{" "}
+            <code>cache_creation_input_tokens</code>, or{" "}
+            <code>gen_ai.usage.cost</code> to surface prompt-cache hit rate and
+            provider-reported spend here.
+          </>
+        }
+      >
         <CollapsibleSection
           title="Prompt cache & reported cost"
           subtitle="auto-detected"
         >
-          <CacheCostPanel />
+          <ScanScopedTile name="Prompt cache & cost">
+            <CacheCostPanel />
+          </ScanScopedTile>
         </CollapsibleSection>
       </CapabilityGate>
 
@@ -88,11 +127,12 @@ export const ModelsFinOpsSections = ({
       </CollapsibleSection>
 
       <CollapsibleSection title="Model A/B swap comparison">
-        <ModelComparisonPanel
-          models={models}
-          observedUpstream={observedUpstream}
-          monthlyRequests={monthlyRequests}
-        />
+        <ScanScopedTile name="Model A/B comparison">
+          <ModelComparisonPanel
+            services={serviceNames}
+            upstreamOptions={upstreamOptions}
+          />
+        </ScanScopedTile>
       </CollapsibleSection>
 
       <CollapsibleSection title="Cost efficiency by service">
@@ -106,7 +146,9 @@ export const ModelsFinOpsSections = ({
         title="Session & user cost"
         subtitle="multi-turn spend per session / user"
       >
-        <SessionUserCostPanel />
+        <ScanScopedTile name="Session & user cost">
+          <SessionUserCostPanel />
+        </ScanScopedTile>
       </CollapsibleSection>
     </Flex>
   );

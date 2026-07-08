@@ -34,6 +34,10 @@ import { AreaChart } from "../../components/charts/AreaChart";
 import { fmtCount, fmtMs, fmtPercent, toNum } from "../../data/format";
 import { EmptyState } from "../../components/EmptyState";
 import { HIGH_FREQUENCY_TOOL_THRESHOLD, isHighFrequency } from "./constants";
+import { useAgentToolTraces } from "./useAgentToolTraces";
+import type { RepTrace } from "./representativeTraces";
+import { TraceModal } from "../Prompts/TraceModal";
+import { useTraceSpans } from "../Prompts/useTraceSpans";
 
 interface ToolRec {
   tool?: string;
@@ -58,6 +62,29 @@ interface ToolRow {
 const num = (v: unknown): number => {
   const n = toNum(v);
   return Number.isFinite(n) ? n : 0;
+};
+
+/** Compact relative time ("2m ago", "3h ago") from an epoch-ms timestamp. */
+const relTime = (ms: number): string => {
+  if (!Number.isFinite(ms) || ms <= 0) return "—";
+  const sec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.round(hr / 24)}d ago`;
+};
+
+/** Human label + accent color for a representative-trace reason. */
+const LABEL_TEXT: Record<RepTrace["label"], string> = {
+  slowest: "slowest",
+  fastest: "fastest",
+  errored: "errored",
+  median: "median",
+  recent: "recent",
+  oldest: "oldest",
+  spread: "sample",
 };
 
 type SortKey = "tool" | "calls" | "avgMs" | "p90Ms" | "errorPct" | "retryPct";
@@ -145,28 +172,146 @@ const ToolDetail = ({
   const calls = (rec?.calls ?? []).map((v) => (typeof v === "number" ? v * samplingRatio : 0));
   const p90Ms = (rec?.p90_ns ?? []).map((v) => (typeof v === "number" ? v / 1_000_000 : 0));
 
-  if (isLoading) return <Skeleton style={{ height: 170 }} />;
-  if (calls.length <= 1)
-    return (
-      <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-        Not enough data points to plot a trend for this tool in the current window.
-      </Text>
-    );
+  return (
+    <Flex flexDirection="column" gap={12}>
+      {isLoading ? (
+        <Skeleton style={{ height: 170 }} />
+      ) : calls.length <= 1 ? (
+        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+          Not enough data points to plot a trend for this tool in the current window.
+        </Text>
+      ) : (
+        <Flex flexDirection="column" gap={4}>
+          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+            Calls (area, left) &amp; p90 latency (line, right) · per{" "}
+            {intervalPhraseFromMs(intervalSec * 1000)}
+          </Text>
+          <AreaChart
+            height={170}
+            formatLeft={(n) => fmtCount(Math.round(n))}
+            formatRight={(n) => fmtMs(n)}
+            series={[
+              { label: "Calls", color: "var(--blue)", values: calls, axis: "left" },
+              { label: "p90 latency", color: "var(--purple-2)", values: p90Ms, axis: "right" },
+            ]}
+          />
+        </Flex>
+      )}
+      <RepresentativeTraces agentName={agentName} toolName={toolName} strict={strict} />
+    </Flex>
+  );
+};
+
+/**
+ * Up to 10 "interesting" representative traces for the expanded agent+tool.
+ * Clicking a row opens the SAME full-trace waterfall the Prompts tab uses
+ * (TraceModal), fed by useTraceSpans for the clicked trace. Only one modal is
+ * mounted at a time; closing returns to the list.
+ */
+const RepresentativeTraces = ({
+  agentName,
+  toolName,
+  strict,
+}: {
+  agentName: string;
+  toolName: string;
+  strict: boolean;
+}) => {
+  const { traces, isLoading } = useAgentToolTraces(agentName, toolName, strict);
+  const [selected, setSelected] = useState<{ traceId: string; startMs: number } | null>(null);
+
+  const { spans, isLoading: spansLoading } = useTraceSpans(
+    selected?.traceId ?? null,
+    selected?.startMs,
+  );
 
   return (
-    <Flex flexDirection="column" gap={4}>
-      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
-        Calls (area, left) &amp; p90 latency (line, right) · per{" "}
-        {intervalPhraseFromMs(intervalSec * 1000)}
+    <Flex flexDirection="column" gap={6}>
+      <Text style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-3)" }}>
+        Representative traces
       </Text>
-      <AreaChart
-        height={170}
-        formatLeft={(n) => fmtCount(Math.round(n))}
-        formatRight={(n) => fmtMs(n)}
-        series={[
-          { label: "Calls", color: "var(--blue)", values: calls, axis: "left" },
-          { label: "p90 latency", color: "var(--purple-2)", values: p90Ms, axis: "right" },
-        ]}
+      {isLoading ? (
+        <Flex flexDirection="column" gap={4}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} style={{ height: 24 }} />
+          ))}
+        </Flex>
+      ) : traces.length === 0 ? (
+        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>No traces in scope</Text>
+      ) : (
+        <Flex flexDirection="column" gap={2}>
+          {traces.map((t) => (
+            <button
+              key={t.traceId}
+              type="button"
+              onClick={() => setSelected({ traceId: t.traceId, startMs: t.startMs })}
+              title={`Open trace ${t.traceId}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                width: "100%",
+                textAlign: "left",
+                padding: "5px 8px",
+                background: "transparent",
+                border: "1px solid var(--surface-3)",
+                borderRadius: 5,
+                cursor: "pointer",
+                fontSize: 12,
+                color: "var(--text-1)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <span
+                style={{
+                  flex: "0 0 auto",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.03em",
+                  textTransform: "uppercase",
+                  color: t.label === "errored" ? "var(--red)" : "var(--text-3)",
+                  border: `1px solid ${t.label === "errored" ? "var(--red)" : "var(--surface-3)"}`,
+                  borderRadius: 4,
+                  padding: "0 5px",
+                  minWidth: 56,
+                  textAlign: "center",
+                }}
+              >
+                {LABEL_TEXT[t.label]}
+              </span>
+              <span style={{ flex: "0 0 auto", fontVariantNumeric: "tabular-nums", minWidth: 58 }}>
+                {fmtMs(t.durMs)}
+              </span>
+              {t.isError && (
+                <span style={{ flex: "0 0 auto", color: "var(--red)", fontSize: 11 }}>errored</span>
+              )}
+              <span style={{ flex: "0 0 auto", color: "var(--text-3)", fontSize: 11 }}>
+                {relTime(t.startMs)}
+              </span>
+              <span
+                style={{
+                  flex: 1,
+                  color: "var(--text-4)",
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono, monospace)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {t.traceId}
+              </span>
+            </button>
+          ))}
+        </Flex>
+      )}
+      <TraceModal
+        show={selected !== null}
+        onClose={() => setSelected(null)}
+        ctx={{ traceId: selected?.traceId, startMs: selected?.startMs }}
+        spans={spans}
+        isLoading={spansLoading}
       />
     </Flex>
   );

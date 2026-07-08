@@ -45,6 +45,40 @@ export const fmtUSDCompact = (n: unknown): string => {
   return fmtUSD(num);
 };
 
+/**
+ * Format a per-row cost expressed in CENTS so sub-cent micro-values stay
+ * comparable at a glance. Typical costs are a fraction of a cent, where a raw
+ * `$0.00042` is unreadable — show fractional cents (5-decimal-place
+ * micro-dollars, e.g. `0.042¢` = `$0.00042`) instead, and only fall back to
+ * dollars once a row crosses $1.
+ *
+ * This is the canonical implementation of the Prompts table's `fmtCentsCost`;
+ * that helper delegates here, so the two MUST stay byte-identical (its tests
+ * pin `0.042 → "0.042¢"`, `0.51 → "0.510¢"`, `250 → "$2.50"`, `0/NaN → "—"`).
+ */
+export const fmtUSDCents = (cents: number): string => {
+  if (!Number.isFinite(cents) || cents <= 0) return "—";
+  if (cents >= 100) return `$${(cents / 100).toFixed(2)}`;
+  if (cents >= 1) return `${cents.toFixed(2)}¢`;
+  return `${cents.toFixed(3)}¢`;
+};
+
+/**
+ * Fixed-precision USD for exact readouts (unit prices, per-token rates) where
+ * the magnitude-adaptive rounding of {@link fmtUSD} would hide meaningful
+ * digits. `dp` decimal places (default 2), with locale grouping and the sign
+ * kept outside the currency symbol (e.g. `-$2.50`). Invalid input → "—".
+ */
+export const fmtUSDPrecise = (value: unknown, dp = 2): string => {
+  const num = finite(value);
+  if (num == null) return "—";
+  const sign = num < 0 ? "-" : "";
+  return `${sign}$${Math.abs(num).toLocaleString(undefined, {
+    minimumFractionDigits: dp,
+    maximumFractionDigits: dp,
+  })}`;
+};
+
 export const fmtMs = (n: unknown): string => {
   const num = finite(n);
   if (num == null) return "—";
@@ -66,6 +100,73 @@ export const fmtCount = (n: unknown): string => {
 };
 
 /**
+ * Scanned-bytes in the same decimal (1000-based) units Grail's
+ * `scanLimitGBytes` uses, so a "5 TB" limit reads as "5.0 TB" here. One
+ * decimal place; sub-MB scans round up to "0.1 MB" so a real query never reads
+ * as "0 MB".
+ */
+export const fmtScanBytes = (n: unknown): string => {
+  const num = finite(n);
+  if (num == null) return "—";
+  if (num >= 1e12) return `${(num / 1e12).toFixed(1)} TB`;
+  if (num >= 1e9) return `${(num / 1e9).toFixed(1)} GB`;
+  const mb = num / 1e6;
+  return `${(mb < 0.1 && num > 0 ? 0.1 : mb).toFixed(1)} MB`;
+};
+
+/** Seconds with a single decimal (e.g. "1.4s") — for query response times. */
+export const fmtSecs1 = (ms: unknown): string => {
+  const num = finite(ms);
+  if (num == null) return "—";
+  return `${(num / 1000).toFixed(1)}s`;
+};
+
+/**
+ * A page's scan budget is the per-fetch scan limit (GB, decimal) times the
+ * number of DQL queries the page ran — every query is injected with the same
+ * per-fetch cap, so the page's aggregate budget scales with the query count.
+ * Returns the FRACTION of that budget the page actually scanned, or null when
+ * the budget is unlimited (`scanLimitGb <= 0`) or nothing has run yet.
+ *
+ * NOTE: this is a coarse page-level severity signal, not an exact per-query
+ * truncation measure — a single multi-fetch query (e.g. a join) can legitimately
+ * scan more than one per-fetch cap, so the fraction can exceed 1.
+ */
+export const scanBudgetFraction = (
+  scannedBytes: unknown,
+  scanLimitGb: number,
+  queryCount: number,
+): number | null => {
+  const scanned = finite(scannedBytes);
+  if (scanned == null) return null;
+  if (!(scanLimitGb > 0) || !(queryCount > 0)) return null;
+  const budgetBytes = scanLimitGb * 1e9 * queryCount;
+  if (!(budgetBytes > 0)) return null;
+  return scanned / budgetBytes;
+};
+
+export type ScanBudgetSeverity = "ok" | "warn" | "crit";
+
+/**
+ * Coarse severity band for a page's scan-vs-budget fraction. Drives the calm
+ * neutral → amber coloring of the status-line scan readout (both warn and crit
+ * render amber; the split is kept so callers can escalate further if needed). A
+ * null fraction (unlimited budget) reads as "ok".
+ */
+export const scanBudgetSeverity = (
+  fraction: number | null,
+): ScanBudgetSeverity => {
+  if (fraction == null) return "ok";
+  if (fraction >= 1) return "crit";
+  if (fraction >= 0.8) return "warn";
+  return "ok";
+};
+
+/** Whole-percent label for a budget fraction, e.g. "34%" (empty for null). */
+export const fmtBudgetPct = (fraction: number | null): string =>
+  fraction == null ? "" : `${Math.round(fraction * 100)}%`;
+
+/**
  * Short-form count (e.g. 77.01M, 2.68M, 1.5k) for tight spaces like donut
  * centers and tile values where the full comma-separated number would
  * overflow.
@@ -77,4 +178,16 @@ export const fmtCountCompact = (n: unknown): string => {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
   return Math.round(num).toLocaleString();
+};
+
+/**
+ * Compact a rate (a count paired with a per-something unit) into a tight
+ * label, reusing {@link fmtCountCompact} for the magnitude so throughput reads
+ * consistently with the rest of the app, e.g. `fmtRate(1234, "tok/s")` →
+ * `"1.2k tok/s"`. Invalid input renders as a bare "—" (no unit).
+ */
+export const fmtRate = (value: unknown, unit: string): string => {
+  const num = finite(value);
+  if (num == null) return "—";
+  return `${fmtCountCompact(num)} ${unit}`;
 };

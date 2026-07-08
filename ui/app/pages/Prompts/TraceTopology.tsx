@@ -4,6 +4,7 @@ import { Modal } from "@dynatrace/strato-components/overlays";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Checkbox } from "@dynatrace/strato-components/forms";
+import { Skeleton } from "@dynatrace/strato-components/content";
 import {
   ServicesIcon,
   AgentIcon,
@@ -16,14 +17,16 @@ import {
   MaximizeIcon,
   ImageIcon,
 } from "@dynatrace/strato-icons";
-import { fmtTokens, fmtMs } from "../../data/format";
+import { fmtTokens, fmtMs, fmtCount } from "../../data/format";
 import { costOf } from "../../data/pricing";
+import { fmtCentsCost } from "./promptCells";
 import {
   spanCategory,
   CAT_COLOR,
   type SpanCategory,
   type IndicatorState,
 } from "./TraceTree";
+import { handleRadioGroupKeyDown, radioTabIndex } from "./radioNav";
 import type { TraceSpan } from "./useTraceSpans";
 
 /**
@@ -45,6 +48,7 @@ interface NodeAgg {
   durationMs: number;
   cost: number; // cents
   isEntry: boolean;
+  isError: boolean;
 }
 interface TopoNode extends NodeAgg {
   key: string;
@@ -106,6 +110,9 @@ interface Layout {
   width: number;
   height: number;
   totals: TraceTotals;
+  /** Keys of the node(s) containing the true trace root (null parent / isRoot).
+   *  Only these display trace-wide totals; every other node shows its own. */
+  rootKeys: Set<string>;
 }
 
 /** Trace-wide totals (all spans, regardless of category filter). Duration is
@@ -158,10 +165,15 @@ export const buildLayout = (
 
   const keyOf = new Map<string, string>();
   const nodes = new Map<string, NodeAgg>();
+  // Keys of nodes containing the trace's true root span (null parent OR
+  // isRoot). Only these show trace-wide totals in the render layer.
+  const rootKeys = new Set<string>();
   for (const s of spans) {
     if (!visible(s)) continue;
     const n = nodeOf(s);
     keyOf.set(s.spanId, n.key);
+    const isRoot = s.parentSpanId == null || s.isRoot === true;
+    if (isRoot) rootKeys.add(n.key);
     const cost =
       (s.inTokens > 0 ? costOf(s.inTokens, 0, s.model) : 0) +
       (s.outTokens > 0 ? costOf(0, s.outTokens, s.model) : 0);
@@ -172,6 +184,7 @@ export const buildLayout = (
       agg.outTok += s.outTokens;
       agg.durationMs += s.durationMs;
       agg.cost += cost;
+      agg.isError = agg.isError || s.isError === true;
     } else {
       nodes.set(n.key, {
         label: n.label,
@@ -182,34 +195,45 @@ export const buildLayout = (
         durationMs: s.durationMs,
         cost,
         isEntry: false,
+        isError: s.isError === true,
       });
     }
   }
 
+  // Build the edge set FIRST. An edge parentKey→childKey is created for every
+  // span whose nearest visible ancestor resolves to a different node (self-
+  // loops skipped). Spans that are genuine data-orphans (parentSpanId doesn't
+  // resolve to a fetched span) contribute no incoming edge for their node.
   const edgeSet = new Set<string>();
   const adj = new Map<string, Set<string>>();
+  const hasIncoming = new Set<string>();
   for (const s of spans) {
     if (!visible(s)) continue;
     const childKey = keyOf.get(s.spanId)!;
     const ancId = nearestVisibleAncestor(s);
-    if (!ancId) {
-      const n = nodes.get(childKey);
-      if (n) n.isEntry = true;
-      continue;
-    }
+    if (!ancId) continue; // orphan span: no edge into its node from here
     const parentKey = keyOf.get(ancId)!;
-    if (parentKey === childKey) continue;
+    if (parentKey === childKey) continue; // self-loop (recursion within a node)
     const id = `${parentKey}__${childKey}`;
     if (!edgeSet.has(id)) {
       edgeSet.add(id);
       if (!adj.has(parentKey)) adj.set(parentKey, new Set());
       adj.get(parentKey)!.add(childKey);
     }
+    hasIncoming.add(childKey);
   }
   const edges: TopoEdge[] = Array.from(edgeSet).map((id) => {
     const [from, to] = id.split("__");
     return { from, to };
   });
+
+  // A node is an ENTRY iff it has no incoming edge. This is the fix: a node
+  // that is reached by some edge (e.g. tools.task → search_aims_issues) is NOT
+  // an entry even if some of its grouped spans are orphans — so it gets a
+  // proper downstream depth instead of being seeded at the far-left tier.
+  for (const [key, n] of nodes) {
+    n.isEntry = !hasIncoming.has(key);
+  }
 
   // Tier each node by its distance from an entry via plain BFS. Each node is
   // assigned a depth exactly once (the first time it's reached) and never
@@ -284,15 +308,13 @@ export const buildLayout = (
       });
     });
   }
-  return { nodes: out, edges, width, height, totals: traceTotals(spans) };
+  return { nodes: out, edges, width, height, totals: traceTotals(spans), rootKeys };
 };
 
 const edgePath = (x1: number, y1: number, x2: number, y2: number): string => {
   const mx = (x1 + x2) / 2;
   return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
 };
-
-const fmtCost = (cents: number): string => `$${(cents / 100).toFixed(5)}`;
 
 /**
  * Pick a distinct icon per node type: agent, LLM, tool, MCP server (detected by
@@ -313,7 +335,7 @@ const sublabel = (n: TopoNode, by: SizeBy): string => {
   if (by === "inTok") return `${fmtTokens(n.inTok)} in`;
   if (by === "outTok") return `${fmtTokens(n.outTok)} out`;
   if (by === "duration") return fmtMs(n.durationMs);
-  if (by === "cost") return fmtCost(n.cost);
+  if (by === "cost") return fmtCentsCost(n.cost);
   return n.count > 1 ? `${n.category} · ${n.count}` : n.category;
 };
 
@@ -354,6 +376,7 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
   const textc = resolveVar("var(--text)");
   const text3 = resolveVar("var(--text-3)");
   const blue = resolveVar("var(--blue)");
+  const red = resolveVar("var(--red)");
   const byKey = new Map(layout.nodes.map((n) => [n.key, n]));
   const W = layout.width;
   const H = layout.height;
@@ -372,8 +395,9 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
   }
   for (const n of layout.nodes) {
     const color = resolveVar(CAT_COLOR[n.category]);
+    const stroke = n.isError ? red : color;
     p.push(
-      `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${surface}" stroke="${color}" stroke-width="${n.isEntry ? 3 : 2}"/>`,
+      `<circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${surface}" stroke="${stroke}" stroke-width="${n.isEntry || n.isError ? 3 : 2}"/>`,
     );
     // 3-cube cluster glyph
     const s = Math.max(5, n.r * 0.34);
@@ -385,10 +409,10 @@ const buildExportSvg = (layout: Layout, by: SizeBy): string => {
     p.push(
       `<text x="${n.x}" y="${n.y + n.r + 15}" text-anchor="middle" font-size="11" font-weight="600" fill="${textc}">${escapeXml(trunc(n.label, 24))}</text>`,
     );
-    if (n.isEntry) {
+    if (layout.rootKeys.has(n.key)) {
       const t = layout.totals;
       p.push(
-        `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" font-weight="600" fill="${textc}">${escapeXml(`${fmtMs(t.durationMs)} · ${fmtCost(t.cost)}`)}</text>`,
+        `<text x="${n.x}" y="${n.y + n.r + 28}" text-anchor="middle" font-size="10" font-weight="600" fill="${textc}">${escapeXml(`${fmtMs(t.durationMs)} · ${fmtCentsCost(t.cost)}`)}</text>`,
       );
       p.push(
         `<text x="${n.x}" y="${n.y + n.r + 40}" text-anchor="middle" font-size="10" fill="${text3}">${escapeXml(`${fmtTokens(t.inTok)} in · ${fmtTokens(t.outTok)} out`)}</text>`,
@@ -521,7 +545,7 @@ const TopologyGraph = ({
           type="button"
           style={{ ...iconBtnStyle, width: pngState === "idle" ? 26 : 64, color: pngState !== "idle" ? "var(--green-2)" : "var(--text-2)", gap: 4 }}
           title="Copy graph as PNG"
-          onClick={copyPng}
+          onClick={() => void copyPng()}
         >
           <ImageIcon size={15} />
           {pngState === "copied" ? <span style={{ fontSize: 11 }}>Copied</span> : pngState === "saved" ? <span style={{ fontSize: 11 }}>Saved</span> : null}
@@ -577,10 +601,15 @@ const TopologyGraph = ({
                 const color = CAT_COLOR[n.category];
                 const d = n.r * 2;
                 const NodeIcon = iconForNode(n.label, n.category);
+                const isRoot = layout.rootKeys.has(n.key);
+                // The trace root carries the trace-wide totals; every other
+                // node (including any orphan-only entry) shows its own metrics.
+                const ringColor = n.isError ? "var(--red)" : color;
                 return (
                   <div
                     key={n.key}
-                    title={`${n.label} · ${n.count} span${n.count === 1 ? "" : "s"} · ${fmtTokens(n.inTok)} in / ${fmtTokens(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCost(n.cost)}`}
+                    title={`${n.label}${n.isError ? " · errored" : ""} · ${fmtCount(n.count)} span${n.count === 1 ? "" : "s"} · ${fmtCount(n.inTok)} in / ${fmtCount(n.outTok)} out · ${fmtMs(n.durationMs)} · ${fmtCentsCost(n.cost)}`}
+                    aria-label={n.isError ? `${n.label} (errored)` : n.label}
                     style={{ position: "absolute", left: n.x - n.r, top: n.y - n.r, width: d, height: d }}
                   >
                     <div
@@ -589,10 +618,12 @@ const TopologyGraph = ({
                         height: d,
                         borderRadius: "50%",
                         background: "var(--surface)",
-                        border: `${n.isEntry ? 3 : 2}px solid ${color}`,
-                        boxShadow: n.isEntry
-                          ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
-                          : "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
+                        border: `${n.isEntry || n.isError ? 3 : 2}px solid ${ringColor}`,
+                        boxShadow: n.isError
+                          ? `0 0 0 4px color-mix(in oklab, var(--red) 22%, transparent)`
+                          : n.isEntry
+                            ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
+                            : "var(--shadow, 0 2px 8px rgba(0,0,0,0.06))",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -624,12 +655,12 @@ const TopologyGraph = ({
                       >
                         {n.label}
                       </Text>
-                      {n.isEntry ? (
+                      {isRoot ? (
                         <>
                           <Text
                             style={{ display: "block", fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}
                           >
-                            {`${fmtMs(layout.totals.durationMs)} · ${fmtCost(layout.totals.cost)}`}
+                            {`${fmtMs(layout.totals.durationMs)} · ${fmtCentsCost(layout.totals.cost)}`}
                           </Text>
                           <Text style={{ display: "block", fontSize: 10, color: "var(--text-3)" }}>
                             {`${fmtTokens(layout.totals.inTok)} in · ${fmtTokens(layout.totals.outTok)} out`}
@@ -656,6 +687,66 @@ const TopologyGraph = ({
         )}
       </div>
     </div>
+  );
+};
+
+const fmtMetric = (v: number, by: SizeBy): string =>
+  by === "duration" ? fmtMs(v) : by === "cost" ? fmtCentsCost(v) : fmtTokens(v);
+
+/**
+ * Quantitative key for the graph (Prompts-13): what the blue entry ring/edges
+ * and red error ring mean, plus — when Size-by is active — the magnitude range
+ * a circle's size encodes, so a large node has a stated scale.
+ */
+const TopoLegend = ({ layout, sizeBy }: { layout: Layout; sizeBy: SizeBy }) => {
+  const metricLabel =
+    SIZE_OPTIONS.find((o) => o.value === sizeBy)?.label ?? "";
+  let sizeNote: string | null = null;
+  if (sizeBy !== "none") {
+    const vals = layout.nodes
+      .map((n) => metricOf(n, sizeBy))
+      .filter((v) => v > 0);
+    if (vals.length) {
+      sizeNote = `size ∝ ${metricLabel.toLowerCase()}: ${fmtMetric(
+        Math.min(...vals),
+        sizeBy,
+      )}–${fmtMetric(Math.max(...vals), sizeBy)}`;
+    }
+  }
+  const Ring = ({ color }: { color: string }) => (
+    <span
+      aria-hidden
+      style={{
+        width: 11,
+        height: 11,
+        borderRadius: "50%",
+        border: `2px solid ${color}`,
+        background: "var(--surface)",
+        flex: "0 0 auto",
+      }}
+    />
+  );
+  return (
+    <Flex
+      alignItems="center"
+      gap={12}
+      flexWrap="wrap"
+      style={{ fontSize: 11, color: "var(--text-3)" }}
+    >
+      <Flex alignItems="center" gap={6}>
+        <Ring color="var(--blue)" />
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+          trace entry (blue ring &amp; edges)
+        </Text>
+      </Flex>
+      <Flex alignItems="center" gap={6}>
+        <Ring color="var(--red)" />
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>errored node</Text>
+      </Flex>
+      {sizeNote && (
+        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{sizeNote}</Text>
+      )}
+    </Flex>
   );
 };
 
@@ -711,6 +802,7 @@ const BottomControls = ({
       <div
         role="radiogroup"
         aria-label="Size nodes by"
+        onKeyDown={handleRadioGroupKeyDown}
         style={{ display: "inline-flex", padding: 2, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 999 }}
       >
         {SIZE_OPTIONS.map((o) => {
@@ -721,6 +813,7 @@ const BottomControls = ({
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={radioTabIndex(active)}
               onClick={() => setSizeBy(o.value)}
               style={{
                 all: "unset",
@@ -764,9 +857,10 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
 
   if (isLoading) {
     return (
-      <div style={{ padding: 12, textAlign: "center" }}>
-        <Text style={{ fontSize: 12, color: "var(--text-3)" }}>Loading topology…</Text>
-      </div>
+      <Flex flexDirection="column" gap={8} style={{ padding: 12 }}>
+        <Skeleton style={{ height: 200, borderRadius: 8 }} />
+        <Skeleton style={{ height: 16, width: "40%" }} />
+      </Flex>
     );
   }
   if (spans.length === 0) {
@@ -794,6 +888,7 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
         height={440}
         onMaximize={() => setMaximized(true)}
       />
+      <TopoLegend layout={layout} sizeBy={sizeBy} />
       {controls}
 
       <Modal
@@ -813,6 +908,7 @@ export const TraceTopology = ({ spans, isLoading }: TraceTopologyProps) => {
             sizeBy={sizeBy}
             height={Math.round(window.innerHeight * 0.62)}
           />
+          <TopoLegend layout={layout} sizeBy={sizeBy} />
           {controls}
         </Flex>
       </Modal>

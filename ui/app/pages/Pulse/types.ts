@@ -27,6 +27,8 @@ export interface PulseHealth {
   cost: Pillar;
   isLoading: boolean;
   error?: Error;
+  /** Re-run every underlying health query (bound to the useDql refetches). */
+  refetch: () => void;
 }
 
 export const QUALITY_EVAL_SETUP_GUIDE =

@@ -30,14 +30,13 @@ const Metric = ({
   </Flex>
 );
 
-const WinnerBadge = ({ accent }: { accent: string }) => (
+/** Inline (non-absolute) recommended pill so it never overlaps the weighted
+ *  score. Sits above the score in the header's right column. */
+const RecommendedBadge = ({ accent }: { accent: string }) => (
   <Flex
     alignItems="center"
     gap={4}
     style={{
-      position: "absolute",
-      top: 12,
-      right: 12,
       padding: "3px 10px",
       borderRadius: 999,
       background: `color-mix(in oklab, ${accent} 18%, transparent)`,
@@ -47,6 +46,7 @@ const WinnerBadge = ({ accent }: { accent: string }) => (
       fontWeight: 700,
       letterSpacing: "0.06em",
       textTransform: "uppercase",
+      whiteSpace: "nowrap",
     }}
   >
     ★ Recommended
@@ -99,9 +99,8 @@ export const ComparisonCard = ({
       border: isWinner ? `2px solid ${accent}` : undefined,
     }}
   >
-    {isWinner && <WinnerBadge accent={accent} />}
     <Flex flexDirection="column" gap={12}>
-      <Flex alignItems="center" gap={8}>
+      <Flex alignItems="flex-start" gap={8}>
         <div
           aria-hidden
           style={{
@@ -145,22 +144,32 @@ export const ComparisonCard = ({
             ))}
           </select>
         </Flex>
-        {weightedScore != null && (
-          <Flex flexDirection="column" alignItems="flex-end" gap={2}>
-            <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
-              Weighted
-            </Text>
-            <Text
-              style={{
-                fontSize: 20,
-                fontWeight: 700,
-                color: accent,
-                fontVariantNumeric: "tabular-nums",
-                lineHeight: 1,
-              }}
-            >
-              {weightedScore.toFixed(0)}
-            </Text>
+        {(isWinner || weightedScore != null) && (
+          <Flex
+            flexDirection="column"
+            alignItems="flex-end"
+            gap={6}
+            style={{ flex: "0 0 auto" }}
+          >
+            {isWinner && <RecommendedBadge accent={accent} />}
+            {weightedScore != null && (
+              <Flex flexDirection="column" alignItems="flex-end" gap={2}>
+                <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                  Weighted
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: accent,
+                    fontVariantNumeric: "tabular-nums",
+                    lineHeight: 1,
+                  }}
+                >
+                  {weightedScore.toFixed(0)}
+                </Text>
+              </Flex>
+            )}
           </Flex>
         )}
       </Flex>

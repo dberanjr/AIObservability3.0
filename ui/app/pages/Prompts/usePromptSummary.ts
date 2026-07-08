@@ -7,6 +7,8 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildPromptsSummaryQuery } from "./queries";
+import { toSidebar } from "./filterScope";
+import type { PromptsFilter } from "./usePrompts";
 import { toNum } from "../../data/format";
 
 const num = (v: unknown): number => {
@@ -42,14 +44,25 @@ export interface PromptSummary {
 
 export const SAMPLE_SIZE = 200;
 
-export const usePromptSummary = (): PromptSummary => {
+export const usePromptSummary = (
+  filter?: PromptsFilter,
+  focus?: string | null,
+): PromptSummary => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<SummaryRecord>(
-    canQuery ? buildPromptsSummaryQuery(resolution.serviceIds, scope.timeframe, filters) : "",
+    canQuery
+      ? buildPromptsSummaryQuery(
+          resolution.serviceIds,
+          scope.timeframe,
+          filters,
+          toSidebar(filter),
+          focus,
+        )
+      : "",
     { enabled: canQuery, staleTime: 60_000 },
   );
 

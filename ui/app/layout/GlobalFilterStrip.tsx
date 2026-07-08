@@ -3,9 +3,10 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { SegmentSelector, useSegments } from "@dynatrace/strato-components/filters";
-import { ResetIcon } from "@dynatrace/strato-icons";
+import { ResetIcon, RefreshIcon } from "@dynatrace/strato-icons";
 import { filterSegmentsClient } from "@dynatrace-sdk/client-filter-segment-management";
-import { useEffect, useState } from "react";
+import { _UseDqlQueryClientContext } from "@dynatrace-sdk/react-hooks";
+import { useContext, useEffect, useState } from "react";
 import { useScope } from "../scope/ScopeContext";
 import { useGlobalFilters } from "../scope/GlobalFilterContext";
 import { useTraceScope } from "../scope/TraceScopeContext";
@@ -33,6 +34,50 @@ const LabeledField = ({ label, children }: LabeledFieldProps) => (
       {label}
     </Text>
     {children}
+  </Flex>
+);
+
+/**
+ * Secondary, de-emphasised variant of LabeledField for the power-user
+ * Grail-cost knobs (Sampling / Scan limit). Same control at full contrast, but
+ * a smaller, dimmer label and tighter min-width so it reads as subordinate to
+ * the primary Segments / Filters scope controls (IA — Information-10). The
+ * control itself is untouched (native <select>, so it stays in the tab order).
+ */
+const AdvancedField = ({
+  label,
+  hint,
+  children,
+}: LabeledFieldProps & { hint?: string }) => (
+  <Flex flexDirection="column" gap={2} style={{ minWidth: 90 }}>
+    <Text
+      style={{
+        fontSize: 9,
+        fontWeight: 600,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        color: "var(--text-3)",
+        opacity: 0.75,
+      }}
+    >
+      {label}
+    </Text>
+    {children}
+    {/* scan-1: one-line cost-vs-fidelity trade-off so the two Grail-cost levers
+        aren't set blind — what each direction costs vs what it buys. */}
+    {hint && (
+      <Text
+        style={{
+          fontSize: 9,
+          lineHeight: 1.3,
+          color: "var(--text-3)",
+          opacity: 0.85,
+          maxWidth: 156,
+        }}
+      >
+        {hint}
+      </Text>
+    )}
   </Flex>
 );
 
@@ -106,31 +151,33 @@ const SelectedSegmentNames = () => {
 };
 
 /**
- * Compact readout of the resolved global-filter trace scope: how many traces
- * the active filter matched, whether the result is approximate (capped), and a
- * resolving / empty / error state. Renders nothing when no filter is active.
+ * Compact readout of the resolved CROSS-SPAN (agent/tool) trace scope. Renders
+ * ONLY when a trace-scoped condition is active — the direct subset
+ * (model/service/…) is exact + uncapped and shows no count. Reports how many
+ * traces the entity filter matched, a resolving / empty / error state, and an
+ * "approximate" note when the match set hit SAFE_TRACE_CAP.
  */
 const TraceScopeIndicator = () => {
-  const { isActive, isLoading, isTruncated, matchedCount, cap, error } =
+  const { hasScopeConditions, isResolving, isTruncated, matchedCount, cap, error } =
     useTraceScope();
-  if (!isActive) return null;
+  if (!hasScopeConditions) return null;
 
   let text: string;
   let color = "var(--text-2)";
   if (error) {
-    text = "filter failed — narrow it or lower the trace cap";
+    text = "entity filter failed — narrow it";
     color = "var(--red, #c4314b)";
-  } else if (isLoading) {
+  } else if (isResolving) {
     text = "resolving matching traces…";
   } else if (matchedCount === 0) {
     text = "no matching traces";
     color = "var(--amber, #ab6400)";
+  } else if (isTruncated) {
+    text = `approximate · first ${cap.toLocaleString()} traces`;
+    color = "var(--amber, #ab6400)";
   } else {
     const n = matchedCount.toLocaleString();
-    text = isTruncated
-      ? `approximate · first ${n} of ${cap.toLocaleString()}+ traces`
-      : `${n} matching trace${matchedCount === 1 ? "" : "s"}`;
-    if (isTruncated) color = "var(--amber, #ab6400)";
+    text = `scoped to ${n} trace${matchedCount === 1 ? "" : "s"}`;
   }
 
   return (
@@ -138,7 +185,7 @@ const TraceScopeIndicator = () => {
       style={{ fontSize: 11, color, whiteSpace: "nowrap" }}
       title={
         isTruncated
-          ? "Too many traces match — only the first N are applied. Raise the cap in Tweaks › Global filter, or narrow the filter."
+          ? `Too many traces match this agent/tool — only the first ${cap.toLocaleString()} are applied. Narrow the filter or shorten the timeframe.`
           : undefined
       }
     >
@@ -148,15 +195,26 @@ const TraceScopeIndicator = () => {
 };
 
 export const GlobalFilterStrip = () => {
-  const { scope, reset } = useScope();
-  const { hasFilters, clearAll } = useGlobalFilters();
-
-  const isDefaultScope =
-    scope.timeframe.from === "now()-24h" && !scope.timeframe.to;
+  const { reset } = useScope();
+  const { clearAll, runResetHandlers } = useGlobalFilters();
+  // useDql runs all page queries on this client (the SDK's default client,
+  // exposed via _UseDqlQueryClientContext — the app installs no QueryClientProvider
+  // of its own). Invalidating it forces every active query to refetch.
+  const queryClient = useContext(_UseDqlQueryClientContext);
+  const [isReloading, setIsReloading] = useState(false);
 
   const resetAll = () => {
     reset();
     clearAll();
+    // Clear page-local filters (e.g. Explorer's URL-param sidebar facets).
+    runResetHandlers();
+  };
+
+  const reload = () => {
+    setIsReloading(true);
+    void queryClient
+      .invalidateQueries()
+      .finally(() => setIsReloading(false));
   };
 
   return (
@@ -177,6 +235,8 @@ export const GlobalFilterStrip = () => {
           flexWrap: "wrap",
         }}
       >
+        {/* Primary scope controls — Segments + Filters carry full weight and
+            sit together on the left as the two everyday knobs. */}
         <LabeledField label="Segments">
           <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
             <SegmentSelector variant="compact" />
@@ -184,16 +244,14 @@ export const GlobalFilterStrip = () => {
           </Flex>
         </LabeledField>
 
-        <LabeledField label="Sampling">
-          <SamplingSegmented />
-        </LabeledField>
-
-        <LabeledField label="Scan limit">
-          <ScanLimitSegmented />
-        </LabeledField>
-
         <LabeledField label="Filters">
           <Flex alignItems="center" gap={8} style={{ minWidth: 0 }}>
+            {/* Active conditions render as removable pills inside
+                GlobalAttributeFilter. The direct subset (model/service/…) is
+                exact + uncapped, so no count is shown for it. The cross-span
+                entity subset (agent/tool) is resolved to trace.ids — the
+                TraceScopeIndicator shows that count (and an approximate note
+                when the match set hits the cap). */}
             <GlobalAttributeFilter />
             <TraceScopeIndicator />
           </Flex>
@@ -201,17 +259,59 @@ export const GlobalFilterStrip = () => {
 
         <Flex flexGrow={1} style={{ minWidth: 0 }} />
 
-        <Button
-          variant="default"
-          onClick={resetAll}
-          disabled={isDefaultScope && !hasFilters}
-          aria-label="Reset filters"
+        {/* Secondary / advanced Grail-cost knobs — demoted (smaller, dimmer
+            labels, behind a divider) so they no longer sit at equal weight with
+            the primary scope controls (IA — Information-10). Most users never
+            touch Sampling / Scan limit. */}
+        <Flex
+          alignItems="flex-end"
+          gap={12}
+          style={{
+            paddingLeft: 16,
+            borderLeft: "1px solid var(--border)",
+          }}
         >
-          <Button.Prefix>
-            <ResetIcon />
-          </Button.Prefix>
-          Reset
-        </Button>
+          <AdvancedField
+            label="Sampling"
+            hint="Higher = faster & cheaper; counts become extrapolated estimates."
+          >
+            <SamplingSegmented />
+          </AdvancedField>
+
+          <AdvancedField
+            label="Scan limit"
+            hint="Higher = fewer truncated results, but slower & more scan cost."
+          >
+            <ScanLimitSegmented />
+          </AdvancedField>
+        </Flex>
+
+        <Flex gap={8} alignItems="center">
+          <Button
+            variant="default"
+            onClick={reload}
+            disabled={isReloading}
+            aria-label="Reload data"
+          >
+            <Button.Prefix>
+              <RefreshIcon />
+            </Button.Prefix>
+            Reload
+          </Button>
+          {/* Always enabled: page-local filters (e.g. Explorer's URL-param
+              sidebar) can be active even when scope is default and no global
+              attribute filter is set, and they aren't reflected in hasFilters. */}
+          <Button
+            variant="default"
+            onClick={resetAll}
+            aria-label="Reset filters"
+          >
+            <Button.Prefix>
+              <ResetIcon />
+            </Button.Prefix>
+            Reset
+          </Button>
+        </Flex>
       </Flex>
       <ResolutionStatusLine />
     </Flex>

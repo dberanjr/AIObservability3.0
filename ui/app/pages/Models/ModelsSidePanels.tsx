@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -13,6 +13,8 @@ import {
   type ProviderId,
 } from "../../detection/attributes";
 import type { ModelRow } from "./useModels";
+import { ModelDetailModal } from "./ModelDetailModal";
+import { EmptyState, emptyCause } from "../../components/EmptyState";
 
 const Panel = ({
   title,
@@ -41,12 +43,21 @@ const Panel = ({
 export interface ModelsSidePanelsProps {
   models: ModelRow[];
   isLoading: boolean;
+  /** Model-query error, so an empty panel reads as a failure rather than "no
+   *  data" (STATE-2). */
+  error?: Error;
+  /** True when the model scan hit its scan-limit budget, so an empty panel can
+   *  surface the truncation instead of "no activity" (STATE-4). */
+  limitHit?: boolean;
 }
 
 export const ModelsSidePanels = ({
   models,
   isLoading,
+  error,
+  limitHit,
 }: ModelsSidePanelsProps) => {
+  const [selected, setSelected] = useState<ModelRow | null>(null);
   const topSpenders = useMemo<BarListItem[]>(
     () =>
       [...models]
@@ -57,7 +68,7 @@ export const ModelsSidePanels = ({
           label: m.model,
           value: m.cost,
           displayValue: fmtUSD(m.cost),
-          secondary: `${m.provider.label} · ${m.requests.toLocaleString()} req`,
+          secondary: `${m.provider.label} · ${fmtCount(m.requests)} req`,
         })),
     [models],
   );
@@ -82,11 +93,15 @@ export const ModelsSidePanels = ({
 
   const totalRequests = models.reduce((acc, m) => acc + m.requests, 0);
 
+  // STATE-2/STATE-4: shared empty-state cause for both panels below — an
+  // errored or truncated model scan must not masquerade as "no data".
+  const cause = emptyCause({ error, limitHit });
+
   return (
     <Flex flexDirection="column" gap={16}>
       <Panel
         title="Top spenders"
-        sub="Estimated cost per model in this scope"
+        sub="Estimated cost per model in this scope · click for detail"
       >
         {isLoading && topSpenders.length === 0 ? (
           <Flex flexDirection="column" gap={8}>
@@ -95,15 +110,26 @@ export const ModelsSidePanels = ({
             ))}
           </Flex>
         ) : topSpenders.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No priced models in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause={cause}
+            title={
+              cause === "no-activity"
+                ? "No priced models in the current scope."
+                : undefined
+            }
+            hint={cause === "no-activity" ? "gen_ai.request.model" : undefined}
+          />
         ) : (
           <BarList
             items={topSpenders}
             color={(item) => {
               const model = models.find((m) => m.modelKey === item.key);
               return model?.providerColor ?? "var(--blue)";
+            }}
+            onSelect={(item) => {
+              const model = models.find((m) => m.modelKey === item.key);
+              if (model) setSelected(model);
             }}
           />
         )}
@@ -113,17 +139,28 @@ export const ModelsSidePanels = ({
         {isLoading && providerShares.length === 0 ? (
           <Skeleton style={{ height: 160 }} />
         ) : providerShares.length === 0 ? (
-          <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-            No provider data in the current scope.
-          </Text>
+          <EmptyState
+            bare
+            cause={cause}
+            title={
+              cause === "no-activity"
+                ? "No provider data in the current scope."
+                : undefined
+            }
+            hint={cause === "no-activity" ? "gen_ai.provider.name" : undefined}
+          />
         ) : (
           <Donut
             slices={providerShares}
             centerValue={fmtCount(totalRequests)}
             centerLabel="requests"
+            valueFormatter={(n) => `${fmtCount(n)} req`}
           />
         )}
       </Panel>
+      {selected && (
+        <ModelDetailModal model={selected} onClose={() => setSelected(null)} />
+      )}
     </Flex>
   );
 };

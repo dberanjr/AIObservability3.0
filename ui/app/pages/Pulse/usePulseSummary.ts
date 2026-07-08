@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
@@ -54,6 +54,8 @@ export interface PulseSummary {
   spark: {
     tokens: number[];
     spend: number[];
+    /** Blended cost per request per bucket (sampling-invariant). */
+    costPerReq: number[];
     p95Ms: number[];
     errorRatePct: number[];
     /** Bucket interval in seconds — same for every series above. */
@@ -65,6 +67,8 @@ export interface PulseSummary {
   };
   isLoading: boolean;
   error?: Error;
+  /** Re-run every underlying summary query (bound to the useDql refetches). */
+  refetch: () => void;
 }
 
 interface McpCountRecord {
@@ -165,6 +169,15 @@ export const usePulseSummary = (): PulseSummary => {
     { enabled: canQuery, staleTime: 60_000 },
   );
 
+  const refetch = useCallback(() => {
+    void summary.refetch();
+    void spark.refetch();
+    void mcpCounts.refetch();
+    // react-query refetch identities are stable; depending on the whole result
+    // objects would rebuild this callback every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary.refetch, spark.refetch, mcpCounts.refetch]);
+
   return useMemo<PulseSummary>(() => {
     const row = summary.data?.records?.[0];
     const sparkRow = spark.data?.records?.[0];
@@ -209,6 +222,13 @@ export const usePulseSummary = (): PulseSummary => {
     const errorRateSeries = requestsSeries.map((req, i) =>
       req > 0 ? (errorsSeries[i] / req) * 100 : 0,
     );
+    // Cost per request per bucket. spendSeries is extrapolated (from
+    // extrapolated tokens); requestsSeries is the raw sampled count, so scale
+    // it by samplingRatio to keep the quotient sampling-invariant.
+    const costPerReqSeries = spendSeries.map((bucketSpend, i) => {
+      const reqs = requestsSeries[i] * samplingRatio;
+      return reqs > 0 ? bucketSpend / reqs : 0;
+    });
 
     // Per-bucket date+time labels for the sparkline cursor tooltip. The
     // last bucket lines up with "now"; earlier buckets step back by
@@ -253,6 +273,7 @@ export const usePulseSummary = (): PulseSummary => {
       spark: {
         tokens: tokensSeries,
         spend: spendSeries,
+        costPerReq: costPerReqSeries,
         p95Ms: p95MsSeries,
         errorRatePct: errorRateSeries,
         intervalSec: sparkIntervalSec,
@@ -266,6 +287,7 @@ export const usePulseSummary = (): PulseSummary => {
         mcpCounts.isLoading,
       error:
         summary.error ?? spark.error ?? mcpCounts.error ?? undefined,
+      refetch,
     };
   }, [
     samplingRatio,
@@ -280,5 +302,6 @@ export const usePulseSummary = (): PulseSummary => {
     mcpCounts.error,
     mcpCounts.isLoading,
     sparkIntervalSec,
+    refetch,
   ]);
 };

@@ -487,9 +487,11 @@ export const GlobalAttributeFilter = () => {
               textOverflow: "ellipsis",
             }}
           >
-            {c.values.length <= 2
-              ? c.values.join(", ")
-              : `${c.values.slice(0, 2).join(", ")} +${c.values.length - 2}`}
+            {c.op === "exists"
+              ? "present"
+              : c.values.length <= 2
+                ? c.values.join(", ")
+                : `${c.values.slice(0, 2).join(", ")} +${c.values.length - 2}`}
           </span>
           <button
             type="button"
