@@ -47,6 +47,8 @@ describe("bedrockCostIntervalSec", () => {
     ["now()-72h", 3600],
     ["now()-7d", 86400],
     ["now()-30d", 86400],
+    ["now()-45d", 86400],
+    ["now()-46d", 604800],
     ["now()-90d", 604800],
   ])("%s -> %i seconds", (from, expected) => {
     expect(bedrockCostIntervalSec(from)).toBe(expected);

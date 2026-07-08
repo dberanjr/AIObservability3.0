@@ -127,9 +127,9 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
     return (
       <EmptyState
         bare
-        title="No daily cost data in this scope"
+        title="No cost data in this scope"
         description="No costable Bedrock token usage was found in the current scope."
-        hint="Each day is folded from the daily-cost timeseries query — widen the timeframe or check that priced/estimable models are in use."
+        hint="Data is folded from the cost timeseries query — widen the timeframe or check that priced/estimable models are in use."
       />
     );
   }
@@ -182,9 +182,9 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
     <Flex flexDirection="column" gap={12}>
       <div
         role="img"
-        aria-label={`Daily Bedrock cost by model with cache-savings ghost, ${daily.length} days, ${fmtUSD(
+        aria-label={`Bedrock cost by model over time with cache-savings ghost, ${daily.length} time buckets, ${fmtUSD(
           daily.reduce((s, d) => s + d.actual, 0),
-        )} total. Use arrow keys to move between days.`}
+        )} total. Use arrow keys to move between time buckets.`}
         tabIndex={0}
         onKeyDown={onKeyDown}
         onBlur={onBlur}
