@@ -21,7 +21,17 @@ import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, 
 import { foldDailyCost, type BedrockDailyCostPoint } from "./series";
 import type { BedrockCostSummary } from "./cost";
 
-const IGNORE = { ignoreGlobalFilter: true, ignoreBucketFilter: true, ignoreSegments: true, staleTime: 60_000 } as const;
+// samplingRatioOverride:1 forces FULL FIDELITY on the log-based cost/usage
+// queries so Total Spend, tokens, and invocation counts are exact and immune to
+// the toolbar sampling selector (sampled logs are never extrapolated → cost would
+// undercount). No-op for the metric `timeseries` queries (nothing to sample).
+const IGNORE = {
+  ignoreGlobalFilter: true,
+  ignoreBucketFilter: true,
+  ignoreSegments: true,
+  samplingRatioOverride: 1,
+  staleTime: 60_000,
+} as const;
 
 /** Cheap existence probe: any bedrock log group in the last 24h. */
 export const useBedrockAvailable = (): { available: boolean; isLoading: boolean } => {
