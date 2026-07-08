@@ -18,6 +18,7 @@ const numOr0 = (v: unknown): number => {
   const n = toNum(v);
   return Number.isFinite(n) ? n : 0;
 };
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 export const parseOverview = (records: Record<string, unknown>[]): OverviewTotals => {
   const r = records[0] ?? {};
@@ -44,7 +45,7 @@ export const parseAgentSessions = (records: Record<string, unknown>[]): AgentSes
     const inputSide = inTok + cacheRead;
     const invocations = toNum(r.invocations);
     return {
-      session: String(r.session ?? ""), account: String(r.account ?? ""),
+      session: str(r.session), account: str(r.account),
       models: models.map(shortModelName),
       invocations, inTok, outTok,
       cachePct: inputSide > 0 ? (cacheRead / inputSide) * 100 : 0,
@@ -58,7 +59,7 @@ export interface PerfByModelRow {
 }
 export const parsePerfByModel = (records: Record<string, unknown>[]): PerfByModelRow[] =>
   (records ?? []).map((r) => ({
-    model: normalizeBedrockModelId(String(r.ModelId ?? "")),
+    model: normalizeBedrockModelId(str(r.ModelId)),
     latencyMs: arrMax(numArr(r.latencyMs)),
     ttftMs: arrAvg(numArr(r.ttftMs)),
     invocations: numArr(r.invocations).reduce((s, x) => s + x, 0),
@@ -80,9 +81,9 @@ export interface AccountCostRow {
 export const parseAccountCost = (records: Record<string, unknown>[]): AccountCostRow[] => {
   const sums = new Map<string, { cost: number; blended: boolean }>();
   for (const r of records ?? []) {
-    const account = String(r.account ?? "");
+    const account = str(r.account);
     const { cost, blended } = bedrockCostOfTokens({
-      modelId: String(r.modelId ?? ""),
+      modelId: str(r.modelId),
       inTok: toNum(r.inTok),
       outTok: toNum(r.outTok),
       cacheRead: toNum(r.cacheRead),
