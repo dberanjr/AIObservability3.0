@@ -9,6 +9,7 @@ import { useBedrockCost, useBedrockPerf } from "../../bedrock/useBedrock";
 import { STATUS_COLOR } from "../../theme/statusColor";
 import type { BedrockScope } from "../../bedrock/types";
 import { computeInsights, buildInsightsInput, type Insight } from "./insights";
+import { windowDays } from "../../scope/chartInterval";
 
 export interface BedrockHeroProps {
   scope: BedrockScope;
@@ -60,11 +61,10 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
     [daily, summary, perfRows],
   );
 
-  // Approximate the scope window's day count from the fold's bucket count
-  // (one bucket = one day — see foldDailyCost) rather than re-parsing
-  // scope.timeframe, so the projection always matches what the sparkline
-  // actually plots.
-  const dayCount = Math.max(1, daily.length);
+  // Real elapsed days in the scope window (NOT the chart's bucket count, which
+  // only equals the day count at a 1-day interval — the adaptive granularity
+  // broke that), so the 30-day run-rate projection is correct at every timeframe.
+  const dayCount = windowDays(scope.timeframe.from);
   const projected = (summary.total * 30) / dayCount;
 
   const initialLoading = (costLoading && daily.length === 0) || (perfLoading && perfRows.length === 0);

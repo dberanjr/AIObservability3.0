@@ -84,3 +84,12 @@ export const intervalPhrase = (sec: number): string => {
 /** Same as {@link intervalPhrase} but from a millisecond interval. */
 export const intervalPhraseFromMs = (ms: number): string =>
   intervalPhrase(Math.round(ms / 1000));
+
+/**
+ * Scope window length in DAYS (≥1), from the `from` expression — for run-rate
+ * projections. Use this, NOT a chart's bucket count, which only equals the day
+ * count when the interval happens to be 1 day (the adaptive granularity broke
+ * that assumption).
+ */
+export const windowDays = (from: string): number =>
+  Math.max(1, parseScopeMs(from) / 86_400_000);

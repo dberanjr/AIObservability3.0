@@ -36,6 +36,8 @@ export interface BedrockTileModalProps {
   totals: OverviewTotals;
   daily: BedrockDailyCostPoint[];
   costSummary: BedrockCostSummary;
+  /** Real elapsed days in the scope window (for the 30-day run-rate projection). */
+  windowDays: number;
   perfRows: PerfByModelRow[];
   tpmPeakPct: number;
   sessionRows: AgentSessionRow[];
@@ -98,6 +100,7 @@ export const BedrockTileModal = ({
   totals,
   daily,
   costSummary,
+  windowDays,
   perfRows,
   tpmPeakPct,
   sessionRows,
@@ -105,8 +108,7 @@ export const BedrockTileModal = ({
   const meta = MODAL_META[kind];
 
   // ---- cost-only derived data -------------------------------------------
-  const dayCount = Math.max(1, daily.length);
-  const projected30d = (costSummary.total * 30) / dayCount;
+  const projected30d = (costSummary.total * 30) / windowDays;
   const avgPerInvocationCents =
     totals.invocations > 0 ? (costSummary.total / totals.invocations) * 100 : 0;
 
@@ -232,7 +234,7 @@ export const BedrockTileModal = ({
                 <Stat
                   label="30-day projection"
                   value={fmtUSD(projected30d)}
-                  sub={`linear from ${dayCount}-day scope`}
+                  sub={`linear from ${Math.round(windowDays)}-day scope`}
                 />
                 <Stat label="Avg / invocation" value={fmtUSDCents(avgPerInvocationCents)} />
               </StatGrid>

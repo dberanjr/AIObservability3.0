@@ -13,6 +13,7 @@ import type { Timeframe } from "../../scope/types";
 import type { PerfByModelRow } from "../../bedrock/parse";
 import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSD } from "../../data/format";
 import { BedrockTileModal, type BedrockTileKind } from "./BedrockTileModal";
+import { windowDays } from "../../scope/chartInterval";
 
 export interface BedrockKpiRowProps {
   scope: BedrockScope;
@@ -266,6 +267,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           totals={totals}
           daily={daily}
           costSummary={summary}
+          windowDays={windowDays(scope.timeframe.from)}
           perfRows={perfRows}
           tpmPeakPct={tpmPeakPct}
           sessionRows={sessionRows}
