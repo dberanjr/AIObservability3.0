@@ -404,6 +404,10 @@ export const PLATFORM_PRICING: Record<PricingPlatform, Record<string, ModelPrici
  */
 export const normalizeModelKey = (model: string): string => {
   let s = model.trim().toLowerCase();
+  // Strip an ARN / inference-profile path, keeping only the trailing model id
+  // (arn:aws:bedrock:…:inference-profile/us.anthropic.claude-… → us.anthropic.claude-…).
+  // No canonical model key contains a "/", so this never removes real content.
+  s = s.replace(/^.*\//, "");
   // Strip Bedrock region prefix (us., eu., apac., ap., sa., global.)
   s = s.replace(/^(us|eu|apac|ap|sa|global)\./, "");
   // Strip vendor prefix
@@ -466,8 +470,13 @@ export const setPricingOverrides = (
 ): void => {
   PRICING_OVERRIDES.clear();
   if (next) {
-    for (const [key, val] of Object.entries(next)) {
-      PRICING_OVERRIDES.set(normalizeModelKey(key), val);
+    for (const [rawKey, val] of Object.entries(next)) {
+      const sep = rawKey.indexOf("::");
+      const stored =
+        sep === -1
+          ? normalizeModelKey(rawKey)
+          : `${rawKey.slice(0, sep)}::${normalizeModelKey(rawKey.slice(sep + 2))}`;
+      PRICING_OVERRIDES.set(stored, val);
     }
   }
   for (const listener of PRICING_OVERRIDE_LISTENERS) listener();

@@ -24,6 +24,26 @@ describe("normalizeModelKey", () => {
   });
 });
 
+describe("normalizeModelKey — Bedrock inference-profile ARNs", () => {
+  it("strips the ARN path to the model id", () => {
+    expect(
+      normalizeModelKey(
+        "arn:aws:bedrock:us-east-1:975049911737:inference-profile/us.anthropic.claude-sonnet-4-6",
+      ),
+    ).toBe("claude-sonnet-4-6");
+  });
+  it("keeps the dated Sonnet-4 family distinct from Sonnet-4-6", () => {
+    expect(
+      normalizeModelKey(
+        "arn:aws:bedrock:us-east-1:637423486688:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0",
+      ),
+    ).toBe("claude-sonnet-4");
+  });
+  it("normalizes the short Titan embed id", () => {
+    expect(normalizeModelKey("amazon.titan-embed-text-v1")).toBe("titan-embed-text");
+  });
+});
+
 describe("getPricing", () => {
   it("returns the UNKNOWN_PRICE record for nullish input", () => {
     expect(getPricing(null)).toEqual(UNKNOWN_PRICE);
