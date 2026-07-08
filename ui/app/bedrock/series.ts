@@ -77,7 +77,15 @@ export const foldDailyCost = (
       savedByCache += Math.max(0, noCacheCost - cost);
       flat.push(t);
     }
-    const day = hasAxis ? new Date(startMs + i * intervalMs).toISOString().slice(0, 10) : String(i);
+    // Sub-day buckets need the time-of-day in the label, or every intraday
+    // bucket collapses onto the same calendar-day string (e.g. three 1h
+    // buckets all labeled "2026-07-01"). Day-or-longer buckets keep the
+    // plain date so the label stays short when it doesn't need the time.
+    const day = !hasAxis
+      ? String(i)
+      : intervalMs >= 86_400_000
+        ? new Date(startMs + i * intervalMs).toISOString().slice(0, 10)
+        : new Date(startMs + i * intervalMs).toISOString().slice(0, 16).replace("T", " ");
     daily.push({ day, byModel, actual, savedByCache });
   }
 

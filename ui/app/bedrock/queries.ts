@@ -1,5 +1,6 @@
 import type { BedrockScope } from "./types";
 import type { Timeframe } from "../scope/types";
+import { parseScopeMs } from "../scope/chartInterval";
 
 const arr = (xs: string[]): string => xs.map((x) => `"${x}"`).join(",");
 const tf = (s: BedrockScope): string => `from: ${s.timeframe.from}, to: ${s.timeframe.to ?? "now()"}`;
@@ -40,11 +41,36 @@ export const buildBedrockOverviewQuery = (s: BedrockScope): string =>
     errors = sum(hasError)
   }`;
 
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Adaptive bucket width (seconds) for the daily-cost chart, keyed off the
+ * scope's `from` expression via {@link parseScopeMs}. A fixed `interval: 1d`
+ * collapsed every sub-day scope into a single bucket (the chart went blank
+ * for a 1h or 6h window) while still being too coarse to show intraday
+ * shape for a several-hour incident window. This ladder snaps to a bucket
+ * that keeps the chart legible from a 1-hour scope up through a 90-day one.
+ * Always expressed in SECONDS — DQL's `m` duration unit is ambiguous
+ * between minutes and months, so this (like the rest of the app) never
+ * emits a bare `1m`.
+ */
+export const bedrockCostIntervalSec = (from: string): number => {
+  const ms = parseScopeMs(from);
+  if (ms <= 2 * HOUR_MS) return 60; // 1m
+  if (ms <= 6 * HOUR_MS) return 300; // 5m
+  if (ms <= 12 * HOUR_MS) return 900; // 15m
+  if (ms < DAY_MS) return 1800; // 30m
+  if (ms <= 3 * DAY_MS) return 3600; // 1h
+  if (ms <= 45 * DAY_MS) return 86400; // 1d
+  return 604800; // 1w
+};
+
 export const buildBedrockDailyCostQuery = (s: BedrockScope): string =>
   `${bedrockLogBase(s)}\n${FLATTEN}\n| makeTimeseries {
     inTok = sum(inTok), outTok = sum(outTok),
     cacheRead = sum(cacheRead), cacheWrite = sum(cacheWrite)
-  }, interval: 1d, by: { modelId }`;
+  }, interval: ${bedrockCostIntervalSec(s.timeframe.from)}s, by: { modelId }`;
 
 /** One row per (session, account, modelId) — NOT per session — so a
  *  multi-model agent session (e.g. Opus for planning + Nova for tool calls)

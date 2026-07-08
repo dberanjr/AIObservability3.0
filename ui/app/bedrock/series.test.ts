@@ -42,6 +42,29 @@ describe("foldDailyCost", () => {
     expect(summary.savedByCache).toBeCloseTo(2.7);
   });
 
+  it("uses time-aware labels for sub-day intervals so intraday buckets stay distinct", () => {
+    // 1h buckets (interval = 3600000000000ns) over a 3-hour window — a
+    // date-only label would collapse all 3 buckets to the same "2026-07-01".
+    const hourlySeries = {
+      modelId: "us.anthropic.claude-sonnet-4-6",
+      inTok: [100, 200, 300],
+      outTok: [0, 0, 0],
+      cacheRead: [0, 0, 0],
+      cacheWrite: [0, 0, 0],
+      timeframe: { start: "2026-07-01T00:00:00.000Z", end: "2026-07-01T03:00:00.000Z" },
+      interval: "3600000000000",
+    };
+    const { daily } = foldDailyCost([hourlySeries]);
+
+    expect(daily).toHaveLength(3);
+    const labels = daily.map((d) => d.day);
+    expect(new Set(labels).size).toBe(3);
+    for (const label of labels) {
+      expect(label).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    }
+    expect(labels).toEqual(["2026-07-01 00:00", "2026-07-01 01:00", "2026-07-01 02:00"]);
+  });
+
   it("falls back to index-based day labels when timeframe/interval are missing", () => {
     const { daily } = foldDailyCost([
       { modelId: "us.anthropic.claude-sonnet-4-6", inTok: [10], outTok: [0], cacheRead: [0], cacheWrite: [0] },

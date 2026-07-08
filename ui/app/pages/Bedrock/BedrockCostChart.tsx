@@ -51,11 +51,28 @@ export const buildModelColorMap = (daily: BedrockDailyCostPoint[]): Map<string, 
   return map;
 };
 
-/** "2026-07-05" -> "7/5"; falls through unchanged for the index-based
- *  fallback labels `foldDailyCost` emits when the query has no time axis. */
-const shortDay = (iso: string): string => {
-  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso);
-  return m ? `${Number(m[1])}/${Number(m[2])}` : iso;
+const DATE_ONLY_RE = /^\d{4}-(\d{2})-(\d{2})$/;
+const DATE_TIME_RE = /^\d{4}-(\d{2})-(\d{2}) (\d{2}:\d{2})$/;
+
+/**
+ * "2026-07-05" -> "7/5" (day-or-longer buckets, unchanged). Sub-day buckets
+ * come through as "2026-07-05 14:30" (see `foldDailyCost`) — the AXIS needs
+ * a compact label (just the time; the date rarely earns its width once
+ * labels are thinned to ~12), while the TOOLTIP header needs the fuller
+ * "7/5 14:30" so a reader can tell which bucket they're looking at even
+ * across a multi-day, sub-day-interval scope. Falls through unchanged for
+ * the index-based fallback labels `foldDailyCost` emits when the query has
+ * no time axis.
+ */
+const shortDay = (iso: string, mode: "axis" | "tooltip" = "tooltip"): string => {
+  const dateOnly = DATE_ONLY_RE.exec(iso);
+  if (dateOnly) return `${Number(dateOnly[1])}/${Number(dateOnly[2])}`;
+  const dateTime = DATE_TIME_RE.exec(iso);
+  if (dateTime) {
+    const [, mm, dd, time] = dateTime;
+    return mode === "axis" ? time : `${Number(mm)}/${Number(dd)} ${time}`;
+  }
+  return iso;
 };
 
 // Theme-neutral hatch: a translucent diagonal `repeating-linear-gradient`
@@ -155,6 +172,11 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
   };
 
   const hovered = hoverIdx != null ? daily[hoverIdx] : null;
+
+  // Thin the x-axis labels to ~10-12 so they don't overlap once a short
+  // scope's finer interval produces 30-120+ buckets — every bucket still
+  // gets a bar, just not every bucket gets a label.
+  const axisLabelStep = Math.max(1, Math.ceil(daily.length / 12));
 
   return (
     <Flex flexDirection="column" gap={12}>
@@ -304,7 +326,8 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
               </div>
             )}
 
-            {/* X axis day labels */}
+            {/* X axis labels — thinned to axisLabelStep so they don't overlap
+                at high bucket counts; every bucket still gets a bar. */}
             <div style={{ display: "flex", gap: 4, paddingTop: 4 }}>
               {daily.map((d, i) => (
                 <Text
@@ -318,7 +341,7 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
                     fontFamily: "var(--mono, monospace)",
                   }}
                 >
-                  {shortDay(d.day)}
+                  {i % axisLabelStep === 0 ? shortDay(d.day, "axis") : ""}
                 </Text>
               ))}
             </div>

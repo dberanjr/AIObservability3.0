@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bedrockLogBase, buildBedrockOverviewQuery, buildBedrockDailyCostQuery,
-  buildAgentSessionsQuery, buildBedrockFacetsQuery,
+  buildAgentSessionsQuery, buildBedrockFacetsQuery, bedrockCostIntervalSec,
 } from "./queries";
 
 const scope = { timeframe: { from: "now()-7d", to: "now()" }, accounts: [] as string[], models: [] as string[] };
@@ -31,12 +31,39 @@ describe("buildBedrockOverviewQuery", () => {
   });
 });
 
+describe("bedrockCostIntervalSec", () => {
+  // The interval ladder: shortest scopes get minute-level resolution, the
+  // longest get week-level, so the chart is never a single collapsed bucket
+  // (sub-day scope) nor hundreds of hairline bars (multi-month scope).
+  // Expressed in SECONDS — DQL's `m` duration unit is ambiguous between
+  // minutes and months, so the app never emits `1m`.
+  it.each([
+    ["now()-1h", 60],
+    ["now()-2h", 60],
+    ["now()-6h", 300],
+    ["now()-12h", 900],
+    ["now()-18h", 1800],
+    ["now()-24h", 3600],
+    ["now()-72h", 3600],
+    ["now()-7d", 86400],
+    ["now()-30d", 86400],
+    ["now()-90d", 604800],
+  ])("%s -> %i seconds", (from, expected) => {
+    expect(bedrockCostIntervalSec(from)).toBe(expected);
+  });
+});
+
 describe("buildBedrockDailyCostQuery", () => {
-  it("makes a per-day, per-model token timeseries", () => {
+  it("makes a per-model token timeseries bucketed to the adaptive interval for a wide (7d) scope", () => {
     const q = buildBedrockDailyCostQuery(scope);
     expect(q).toContain("makeTimeseries");
-    expect(q).toContain("interval: 1d");
+    expect(q).toContain("interval: 86400s");
     expect(q).toContain("by:");
+  });
+
+  it("narrows the bucket for a short (1h) scope instead of always using 1 day", () => {
+    const q = buildBedrockDailyCostQuery({ ...scope, timeframe: { from: "now()-1h", to: "now()" } });
+    expect(q).toContain("interval: 60s");
   });
 });
 

@@ -6,6 +6,8 @@ import { Donut, type DonutSlice } from "../../components/charts/Donut";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { fmtUSD, fmtUSDCompact } from "../../data/format";
 import { useBedrockCost, useBedrockAccountCost } from "../../bedrock/useBedrock";
+import { bedrockCostIntervalSec } from "../../bedrock/queries";
+import { intervalPhrase } from "../../scope/chartInterval";
 import type { BedrockScope } from "../../bedrock/types";
 import { BedrockCostChart, buildModelColorMap, modelTotals } from "./BedrockCostChart";
 
@@ -73,13 +75,18 @@ export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
   const costInitial = costLoading && daily.length === 0;
   const accountInitial = accountLoading && accountRows.length === 0;
   const modelTotal = modelSlices.reduce((s, x) => s + x.value, 0);
+  // Same ladder the daily-cost query builder (bedrock/queries.ts) keys the
+  // chart's own bucket width off of — surfaced here purely for the "N
+  // buckets" title suffix, so the wording doesn't lie about granularity now
+  // that it's adaptive instead of a fixed "Daily".
+  const intervalSec = bedrockCostIntervalSec(scope.timeframe.from);
 
   return (
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={16}>
         <Flex flexDirection="column" gap={2}>
           <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Daily cost by model — with cache-savings ghost
+            Cost by model over time — with cache-savings ghost · {intervalPhrase(intervalSec)} buckets
           </Heading>
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
             Stacked by model; the hatched cap is the counterfactual spend that caching avoided that
