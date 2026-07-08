@@ -355,6 +355,48 @@ export const PRICING: Record<string, ModelPricing> = {
   // given a fabricated rate.
 };
 
+/** LLM hosting platform. Same model can be priced differently per platform. */
+export type PricingPlatform = "direct" | "aws_bedrock" | "azure" | "gcp_vertex";
+
+/** Composite override/registry key. `direct` stays bare for backward compat with
+ *  every existing lookup and saved override; other platforms are namespaced. */
+export const platformKey = (platform: PricingPlatform, modelKey: string): string =>
+  platform === "direct" ? modelKey : `${platform}::${modelKey}`;
+
+/** Bedrock-native models (Amazon Titan/Nova) — priced only on Bedrock. Claude on
+ *  Bedrock is intentionally ABSENT here so it falls back to the Direct Claude
+ *  rate (at parity today). Keys are normalizeModelKey() outputs. */
+export const PRICING_BEDROCK: Record<string, ModelPricing> = {
+  "titan-embed-text": {
+    inputPerMTok: 0.02, outputPerMTok: 0, contextWindow: 8192,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-lite": {
+    inputPerMTok: 0.06, outputPerMTok: 0.24, contextWindow: 300_000,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-2-lite": {
+    inputPerMTok: 0.06, outputPerMTok: 0.24, contextWindow: 300_000,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-micro": {
+    inputPerMTok: 0.035, outputPerMTok: 0.14, contextWindow: 128_000,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-pro": {
+    inputPerMTok: 0.8, outputPerMTok: 3.2, contextWindow: 300_000,
+    provider: "Amazon", tier: "mid",
+  },
+};
+
+/** Per-platform built-in rate tables. `direct` is the existing PRICING table. */
+export const PLATFORM_PRICING: Record<PricingPlatform, Record<string, ModelPricing>> = {
+  direct: PRICING,
+  aws_bedrock: PRICING_BEDROCK,
+  azure: {},
+  gcp_vertex: {},
+};
+
 /**
  * Normalize a model name to its lookup key. Handles the variants seen in
  * the wild on Bedrock-fronted deployments:
