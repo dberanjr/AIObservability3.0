@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { parseAgentSessions, parsePerfByModel } from "./parse";
+import { parseAgentSessions, parseOverview, parsePerfByModel } from "./parse";
+
+describe("parseOverview", () => {
+  it("maps a summarize-style record to OverviewTotals", () => {
+    const totals = parseOverview([
+      {
+        invocations: 934, inTok: 1_600_000, outTok: 500_000,
+        cacheRead: 100_000, cacheWrite: 0,
+        accounts: 4, models: 12, sessions: 13, errors: 6,
+      },
+    ]);
+    expect(totals).toEqual({
+      invocations: 934, inTok: 1_600_000, outTok: 500_000,
+      cacheRead: 100_000, cacheWrite: 0,
+      accounts: 4, models: 12, sessions: 13, errors: 6,
+    });
+  });
+
+  it("returns zeros for an empty result set", () => {
+    expect(parseOverview([])).toEqual({
+      invocations: 0, inTok: 0, outTok: 0,
+      cacheRead: 0, cacheWrite: 0,
+      accounts: 0, models: 0, sessions: 0, errors: 0,
+    });
+  });
+});
 
 describe("parseAgentSessions", () => {
   it("computes cost, cache% and error rate per session", () => {

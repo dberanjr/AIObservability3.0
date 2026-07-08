@@ -12,13 +12,20 @@ export interface OverviewTotals {
   cacheRead: number; cacheWrite: number;
   accounts: number; models: number; sessions: number; errors: number;
 }
+/** toNum, but NaN (e.g. a missing/undefined field on an empty result row)
+ *  collapses to 0 — an overview total should read "0", never "NaN". */
+const numOr0 = (v: unknown): number => {
+  const n = toNum(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 export const parseOverview = (records: Record<string, unknown>[]): OverviewTotals => {
   const r = records[0] ?? {};
   return {
-    invocations: toNum(r.invocations), inTok: toNum(r.inTok), outTok: toNum(r.outTok),
-    cacheRead: toNum(r.cacheRead), cacheWrite: toNum(r.cacheWrite),
-    accounts: toNum(r.accounts), models: toNum(r.models),
-    sessions: toNum(r.sessions), errors: toNum(r.errors),
+    invocations: numOr0(r.invocations), inTok: numOr0(r.inTok), outTok: numOr0(r.outTok),
+    cacheRead: numOr0(r.cacheRead), cacheWrite: numOr0(r.cacheWrite),
+    accounts: numOr0(r.accounts), models: numOr0(r.models),
+    sessions: numOr0(r.sessions), errors: numOr0(r.errors),
   };
 };
 
