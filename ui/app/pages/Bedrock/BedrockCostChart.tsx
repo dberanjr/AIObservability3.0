@@ -80,18 +80,26 @@ const shortDay = (iso: string, mode: "axis" | "tooltip" = "tooltip"): string => 
 // that isn't really there" in both light and dark themes because every
 // color is `color-mix(...)` against the existing `--text-*` tokens rather
 // than a fixed hex, so it inherits the theme's actual contrast instead of
-// fighting it.
-const GHOST_LINE = "color-mix(in oklab, var(--text-2) 45%, transparent)";
-const GHOST_FILL = "color-mix(in oklab, var(--text-3) 16%, transparent)";
+// fighting it. Deliberately quiet (~half the visual weight of an earlier,
+// more prominent pass): a sparse, thin hatch over a barely-there fill and a
+// faint hairline border — a hint the counterfactual is there, not a bar that
+// competes with the real (solid) spend beneath it.
+const GHOST_LINE = "color-mix(in oklab, var(--text-3) 20%, transparent)";
+const GHOST_FILL = "color-mix(in oklab, var(--text-3) 7%, transparent)";
 const ghostStyle: React.CSSProperties = {
   backgroundColor: GHOST_FILL,
-  backgroundImage: `repeating-linear-gradient(135deg, ${GHOST_LINE} 0px, ${GHOST_LINE} 2px, transparent 2px, transparent 6px)`,
-  borderTop: "1.5px dashed var(--text-2)",
+  backgroundImage: `repeating-linear-gradient(135deg, ${GHOST_LINE} 0px, ${GHOST_LINE} 1px, transparent 1px, transparent 10px)`,
+  borderTop: `1px dashed ${GHOST_LINE}`,
 };
 
 export interface BedrockCostChartProps {
   daily: BedrockDailyCostPoint[];
   isLoading: boolean;
+  /** Whether to render the cache-savings "ghost" cap at all. Defaults to
+   *  `true` (existing behavior). When `false`, bars scale against actual
+   *  spend alone, no ghost segment/legend swatch/tooltip line renders — see
+   *  `toGhostBars`'s `includeGhost` param, which this threads into. */
+  showGhost?: boolean;
 }
 
 /**
@@ -109,15 +117,15 @@ export interface BedrockCostChartProps {
  * in the same order per bucket) always sits on the axis, and the ghost
  * always ends up on top.
  */
-export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) => {
+export const BedrockCostChart = ({ daily, isLoading, showGhost = true }: BedrockCostChartProps) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [srText, setSrText] = useState("");
 
   const colorFor = useMemo(() => buildModelColorMap(daily), [daily]);
-  const bars = useMemo(() => toGhostBars(daily, CHART_H), [daily]);
+  const bars = useMemo(() => toGhostBars(daily, CHART_H, showGhost), [daily, showGhost]);
   const max = useMemo(
-    () => Math.max(0, ...daily.map((d) => d.actual + d.savedByCache)),
-    [daily],
+    () => Math.max(0, ...daily.map((d) => (showGhost ? d.actual + d.savedByCache : d.actual))),
+    [daily, showGhost],
   );
 
   if (isLoading && daily.length === 0) {
@@ -144,7 +152,7 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
       .forEach(([model, v]) => parts.push(`${model} ${fmtUSD(v)}`));
-    if (d.savedByCache > 0) parts.push(`saved by caching ${fmtUSD(d.savedByCache)}`);
+    if (showGhost && d.savedByCache > 0) parts.push(`saved by caching ${fmtUSD(d.savedByCache)}`);
     return parts.join(", ");
   };
 
@@ -182,7 +190,9 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
     <Flex flexDirection="column" gap={12}>
       <div
         role="img"
-        aria-label={`Bedrock cost by model over time with cache-savings ghost, ${daily.length} time buckets, ${fmtUSD(
+        aria-label={`Bedrock cost by model over time${
+          showGhost ? " with cache-savings ghost" : ""
+        }, ${daily.length} time buckets, ${fmtUSD(
           daily.reduce((s, d) => s + d.actual, 0),
         )} total. Use arrow keys to move between time buckets.`}
         tabIndex={0}
@@ -317,7 +327,7 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
                         </Text>
                       </Flex>
                     ))}
-                  {hovered.savedByCache > 0 && (
+                  {showGhost && hovered.savedByCache > 0 && (
                     <Text style={{ fontSize: 11, color: STATUS_COLOR.good, fontWeight: 600 }}>
                       − {fmtUSD(hovered.savedByCache)} saved by caching
                     </Text>
@@ -356,10 +366,12 @@ export const BedrockCostChart = ({ daily, isLoading }: BedrockCostChartProps) =>
             <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{model}</Text>
           </Flex>
         ))}
-        <Flex alignItems="center" gap={4}>
-          <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, flex: "0 0 auto", ...ghostStyle }} />
-          <Text style={{ fontSize: 11, color: "var(--text-3)" }}>Saved by caching</Text>
-        </Flex>
+        {showGhost && (
+          <Flex alignItems="center" gap={4}>
+            <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, flex: "0 0 auto", ...ghostStyle }} />
+            <Text style={{ fontSize: 11, color: "var(--text-3)" }}>Saved by caching</Text>
+          </Flex>
+        )}
       </Flex>
 
       {/* Keyboard-cursor readout — mirrors AreaChart / DailyCostStackedBar. */}

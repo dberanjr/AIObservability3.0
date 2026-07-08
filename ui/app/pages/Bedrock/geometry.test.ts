@@ -59,4 +59,20 @@ describe("toGhostBars", () => {
     expect(bars[0].segments.every((s) => Number.isFinite(s.px))).toBe(true);
     expect(Number.isFinite(bars[0].ghostPx)).toBe(true);
   });
+
+  it("with includeGhost=false, scales against actual only and zeroes every ghostPx", () => {
+    const bars = toGhostBars(
+      [
+        { day: "Jul 5", byModel: { a: 80, b: 60 }, actual: 140, savedByCache: 60 }, // tallest actual = 140
+        { day: "Jul 6", byModel: { a: 40 }, actual: 40, savedByCache: 10 },
+      ],
+      200,
+      false,
+    );
+    // scale = 200 / 140 (actual-only max) — contrast with the includeGhost=true
+    // test above, which scales against 200 (140 actual + 60 ghost).
+    const day1Total = bars[0].segments.reduce((s, x) => s + x.px, 0);
+    expect(day1Total).toBeCloseTo(200); // the tallest ACTUAL fills maxPx
+    expect(bars.every((b) => b.ghostPx === 0)).toBe(true);
+  });
 });

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
@@ -32,6 +32,7 @@ const TOP_MODELS = 7;
 export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
   const { daily, isLoading: costLoading } = useBedrockCost(scope);
   const { rows: accountRows, isLoading: accountLoading } = useBedrockAccountCost(scope);
+  const [showGhost, setShowGhost] = useState(true);
 
   const modelSlices = useMemo<DonutSlice[]>(() => {
     const colorFor = buildModelColorMap(daily);
@@ -85,16 +86,75 @@ export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
     <Surface elevation="raised" padding={16}>
       <Flex flexDirection="column" gap={16}>
         <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Cost by model over time — with cache-savings ghost · {intervalPhrase(intervalSec)} buckets
-          </Heading>
+          <Flex alignItems="center" justifyContent="space-between" gap={12} style={{ flexWrap: "wrap" }}>
+            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
+              Cost by model over time{showGhost ? " — with cache-savings ghost" : ""} ·{" "}
+              {intervalPhrase(intervalSec)} buckets
+            </Heading>
+            <Flex alignItems="center" gap={8}>
+              <Text
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "var(--text-3)",
+                }}
+              >
+                Cache savings
+              </Text>
+              <div
+                role="radiogroup"
+                aria-label="Cache savings ghost overlay"
+                style={{
+                  display: "inline-flex",
+                  padding: 2,
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 999,
+                  flex: "0 0 auto",
+                }}
+              >
+                {(
+                  [
+                    { value: true, label: "Shown" },
+                    { value: false, label: "Hidden" },
+                  ] as const
+                ).map((opt) => {
+                  const active = showGhost === opt.value;
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setShowGhost(opt.value)}
+                      style={{
+                        all: "unset",
+                        cursor: "pointer",
+                        padding: "3px 10px",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: active ? 600 : 500,
+                        color: active ? "var(--text)" : "var(--text-2)",
+                        background: active ? "var(--surface)" : "transparent",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Flex>
+          </Flex>
           <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Stacked by model; the hatched cap is the counterfactual spend that caching avoided that
-            day (savedByCache re-priced as full-cost input).
+            {showGhost
+              ? "Stacked by model; the hatched cap is the counterfactual spend that caching avoided that day (savedByCache re-priced as full-cost input)."
+              : "Stacked by model."}
           </Text>
         </Flex>
 
-        <BedrockCostChart daily={daily} isLoading={costLoading} />
+        <BedrockCostChart daily={daily} isLoading={costLoading} showGhost={showGhost} />
 
         <div
           style={{
