@@ -397,12 +397,21 @@ export const AgentSessionTable = ({ scope }: AgentSessionTableProps) => {
                       {fmtPercent(r.cachePct)}
                     </Cell>
                     <Cell width={100} align="right" mono>
-                      {fmtUSD(r.estCost)}
-                      {r.blended && (
-                        <span style={{ marginLeft: 4 }}>
-                          <EstimatedBadge />
-                        </span>
-                      )}
+                      <span
+                        title={
+                          r.blended
+                            ? "Estimated — model priced at a blended/fallback rate; add it to the Model Pricing table for an exact figure."
+                            : "Priced from the rate card."
+                        }
+                        style={{ color: r.blended ? "var(--text-2)" : "var(--text)" }}
+                      >
+                        {r.blended && (
+                          <span aria-hidden style={{ color: "var(--amber)", marginRight: 3 }}>
+                            ≈
+                          </span>
+                        )}
+                        {fmtUSD(r.estCost)}
+                      </span>
                     </Cell>
                     <Cell width={80} align="right" mono>
                       {r.p95Ms == null ? <Dash /> : fmtMs(r.p95Ms)}
