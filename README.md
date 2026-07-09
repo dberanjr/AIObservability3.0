@@ -10,11 +10,21 @@ AI Observability 3.0 turns OpenTelemetry GenAI spans collected in Dynatrace Grai
 
 Modern AI applications fan out across orchestrators, agents, tools, RAG pipelines, and a half-dozen model providers. The data is in Grail thanks to the OpenTelemetry GenAI semantic conventions, but the questions teams actually need to answer — *which agent is regressing? which model is the most expensive per useful answer? where is latency coming from?* — require a UI that understands the shape of agentic systems.
 
-That's what this app provides: five purpose-built tabs — organized around the AI Application Architecture and around complete investigations — that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request through a cache-aware cost model, and surface layer-tagged findings you can pivot from directly into Traces, Services, and Problems.
+That's what this app provides: five purpose-built tabs — organized around the AI Application Architecture and around complete investigations — that read the same `gen_ai.*` spans your collectors already emit, normalize provider/model identity (including Bedrock vendor unwrapping), price every request through a cache-aware cost model, and surface layer-tagged findings you can pivot from directly into Traces, Services, and Problems. A sixth, provider-native **AWS Bedrock** tab covers Amazon Bedrock deployments from their own logs, CloudWatch metrics, and CloudTrail — for teams that route through the Bedrock gateway and need runtime, cost, and access-governance visibility even where `gen_ai.*` spans aren't emitted.
 
-## What's new in v0.2.48
+## What's new in v0.2.56 — AWS Bedrock
 
-This release lands a large UX-quality pass, several correctness fixes to the topology and charting, and a new upstream-services deep-dive on Pulse. It is the first **stable** release (all prior releases were pre-release).
+A dedicated **AWS Bedrock** tab (under *Analyze*) for teams running models through Amazon Bedrock, built on Bedrock's own telemetry — **model-invocation logs**, **CloudWatch metrics**, and **CloudTrail** — rather than `gen_ai.*` spans. Two sub-tabs share an **Account** picker and the global timeframe:
+
+- **Runtime Observability & Cost & Usage** — invocations, tokens (incl. cache-read/write tiers) and **platform-aware cost** through the same cache-aware cost model (Bedrock unwrapped to its underlying vendor); per-model **TPM quota headroom** (`EstimatedTPMQuotaUsage`, an *absolute* tokens/minute figure — not a percentage) and log-delivery health; **latency / TTFT** min·avg·max trend bands; an agent-session table (the caller identity ARN encodes the agent session, not a human); a guardrails summary (`cloud.aws.bedrock_guardrails.*`); and threshold findings.
+- **Access & Governance** — 100% CloudTrail (`bedrock.amazonaws.com` management events): API-call / identity / source-IP / account KPIs, clickable insight cards (anomalous access, access-denied / AuthZ failures, data-residency, throttling), a **cross-region exfiltration deep-dive** (out-of-country vs. same-country by AWS-region geography, with destination / actor / timeline breakdowns), and a reconciliation bridge that proves the CloudTrail and ModelInvocationLog sources agree.
+- Panels **maximize** to near-full-screen; governance tiles are click-through to detail modals; runtime/governance tables are **resizable**; and the active sub-tab pill carries a thin **accent border** so the selected view stands out.
+
+See the **AWS Bedrock** feature section below for the full breakdown.
+
+## Previously — v0.2.48 (first stable release)
+
+This release landed a large UX-quality pass, several correctness fixes to the topology and charting, and a new upstream-services deep-dive on Pulse. It was the first **stable** release (all prior releases were pre-release).
 
 **New**
 
@@ -43,7 +53,9 @@ This release lands a large UX-quality pass, several correctness fixes to the top
 
 ## Features
 
-**Five** purpose-built tabs — **Pulse · Explorer · Agents · Prompts · Models / FinOps** — each reading the same `gen_ai.*` spans and sharing one global scope (timeframe + segments + filters). The navigation is organized around the **AI Application Architecture** and around complete investigations, not isolated features: the old Tools and Topology tabs fold into **Agents** (as per-agent sub-views), MCP Health folds into **Pulse**, and FinOps merges into **Models / FinOps**. Every chart can be expanded to a modal, most values are click-to-filter, and each tab degrades gracefully with a data-gap note (or optional **example data**) when an attribute your telemetry doesn't emit yet would otherwise power a panel.
+**Five** purpose-built tabs — **Pulse · Explorer · Agents · Prompts · Models / FinOps** — each reading the same `gen_ai.*` spans and sharing one global scope (timeframe + segments + filters). The navigation is organized around the **AI Application Architecture** and around complete investigations, not isolated features: the old Tools and Topology tabs fold into **Agents** (as per-agent sub-views), MCP Health folds into **Pulse**, and FinOps merges into **Models / FinOps**. Every chart can be expanded to a modal, most values are click-to-filter, and each tab degrades gracefully with a data-gap note (or optional **example data**) when an attribute your telemetry doesn't emit yet would otherwise power a panel. A sixth, provider-native **AWS Bedrock** tab (documented below) sits alongside these — built on Bedrock's logs / metrics / CloudTrail instead of `gen_ai.*` spans, for Amazon Bedrock deployments.
+
+The nav is grouped into four labeled clusters: **Overview** (Summary · Pulse), **Analyze** (Explorer · Agents · Models · Prompts · AWS Bedrock), **Audit** (Attributes), and trailing utility items (Field Notes · About).
 
 > **The Pulse architecture map is the app's primary navigation surface.** A fixed schematic of the eight AI layers (client → gateway → orchestrator → agent, then tools & llm, then vectordb & memory, with a reasoning-loop arc from the LLM back to the orchestrator) renders live health per layer and routes clicks to the owning tab — a secondary router that supplements, and never replaces, the persistent top tab bar. See Pulse below.
 
@@ -117,6 +129,28 @@ Model comparison with FinOps cost analysis merged in (the standalone FinOps tab 
 - **FinOps sections** *(collapsible, below the table)* — **daily cost stacked bar** (computed as seven independent per-day scans at a sampling floor, so the older days never truncate under the scan limit) + a **cost-concentration treemap** whose tiles **open a service detail modal** (cost trio, per-call economics, and a per-model spend breakdown, with a **Filter to this service** action); the **Model A/B swap comparison** (below); **cost efficiency by service** (now **$ per LLM call** — cost ÷ requests — with **tokens/call** as a prompt-bloat signal, since blended $/1M only reflected which models a service picked, not how efficiently it used them); the auto-appearing **prompt cache & reported cost** panel (`gen_ai.usage.cached_tokens` / `cache_creation_input_tokens` / `cost`); and a **session / user cost rollup** (effective cost + billable tokens per session and user), capability-gated on `session.id` + `gen_ai.user` (example data available via the Tweaks toggle when absent).
 - **Model A/B swap comparison** — Pick two generative models and score them on a five-dimension weighted model (latency · cost/request · quality · throughput · reliability) → recommended winner, margin, verdict, and estimated monthly saving. The scoring is fully configurable: a **use-case profile** seeds the weights, **editable weight sliders** let you tune each dimension live, a **"service being compared" dropdown scopes every metric** (latency, cost/call, errors, volume) to one service's actual traffic instead of the fleet, and a **"driving upstream service" dropdown** (populated from the real Smartscape callers) sets the calling context. Quality tier and the min-quality disqualification floor come straight from the pricing table, and the monthly-saving projection uses the actual scope window.
 
+### AWS Bedrock — provider-native runtime, cost & governance
+
+A dedicated tab for teams running models through **Amazon Bedrock**, built on the telemetry Bedrock actually emits — **model-invocation logs**, **CloudWatch metrics**, and **CloudTrail** — rather than `gen_ai.*` spans. It splits into two sub-tabs that share an **Account** picker and the global timeframe (the active sub-tab pill carries a thin accent border). The data source is stated on every view (Logs + Metrics vs. CloudTrail) so nothing implies detail the source doesn't carry — Bedrock's model-invocation logs are **metadata-only**: token counts, `modelId`, `accountId`, `region`, cache tokens, and the caller identity ARN, but **no prompt/response content**.
+
+**Runtime Observability & Cost & Usage** — reads the model-invocation log group (`/aws/bedrock/model-invocations`) and the `cloud.aws.bedrock.*` metric namespace:
+
+- **Hero + KPI row** — invocations, accounts, models, agent sessions, tokens (including cache-read/write), and **platform-aware cost** priced through the same cache-aware cost model, unwrapping each Bedrock invocation to its underlying vendor.
+- **Cost zone** — spend over time (seven independent per-day scans so older days don't truncate under the scan limit) plus a per-model cost breakdown.
+- **Agent-session table** — the caller identity ARN encodes the **agent session** (e.g. `bedrock-agentcore-*-session`), not a human, surfaced with per-session invocations, tokens, and latency.
+- **Performance zone + latency/TTFT trend bands** — `InvocationLatency` and `TimeToFirstToken` as min·avg·max over time.
+- **Quota & delivery (Runtime 2.0)** — per-model **`EstimatedTPMQuotaUsage`** headroom (an *absolute* tokens-per-minute figure, not a percentage) alongside log-delivery health.
+- **Per-model summary table**, a **guardrails summary** (`cloud.aws.bedrock_guardrails.*` — intervention rate, coverage), and threshold-detected **findings**.
+
+**Access & Governance** — 100% **CloudTrail** (`bedrock.amazonaws.com` management events):
+
+- **KPI band** — total API calls, distinct identities, source IPs, and accounts.
+- **Insight cards** *(clickable, each opening a detail modal)* — **anomalous access**, **access-denied / AuthZ failures**, **data-residency**, and **throttling**.
+- **Cross-region exfiltration deep-dive** — flags calls whose actual inference region differs from the requested region, split **out-of-country vs. same-country** by AWS-region geography family, with destination, actor, and timeline breakdowns and a region→country map.
+- **Activity & identity detail**, a **security-over-time** view, and a **reconciliation bridge** that proves the CloudTrail and ModelInvocationLog sources agree.
+
+Panels **maximize** to near-full-screen and both sub-tabs' tables are **resizable**.
+
 ## Cross-cutting capabilities
 
 - **Fleet-wide by default** — Opens against your entire AI footprint; **Dynatrace Segments** (with variables) slice it down to any logical subset (teams, services, environments, deployments).
@@ -140,11 +174,16 @@ Model comparison with FinOps cost analysis merged in (the standalone FinOps tab 
 
 ```
 ui/app/
-├── pages/               Five feature tabs (Pulse, Explorer, Agents, Prompts,
-│                        Models — "Models / FinOps"). Each page owns its
+├── pages/               Feature tabs (Pulse, Explorer, Agents, Prompts,
+│                        Models — "Models / FinOps" — and Bedrock, the
+│                        provider-native AWS Bedrock view with its Runtime and
+│                        Access & Governance sub-tabs). Each page owns its
 │                        queries.ts + hooks + panels. The folded Tools /
 │                        Topology / McpHealth dirs now hold only the shared
 │                        query/hook/renderer modules reused by Agents & Pulse.
+├── bedrock/             Bedrock log/metric/CloudTrail queries, parsers, the
+│                        platform-aware cost helper, and the governance
+│                        (exfiltration/residency) analysis behind the tab.
 ├── scope/               Timeframe, segments, scan-limit, sampling, global
 │                        filter + capability contexts + the useScopedDql
 │                        wrapper that injects them all into every query.
@@ -253,8 +292,8 @@ Where two attribute names exist for the same thing (the older OpenLLMetry name a
 
   | Scope | Purpose |
   |---|---|
-  | `storage:logs:read` | Guardrail and error detection from logs |
-  | `storage:metrics:read` | Pulse reliability score, forecasting |
+  | `storage:logs:read` | Guardrail and error detection from logs; AWS Bedrock model-invocation logs + CloudTrail access events |
+  | `storage:metrics:read` | Pulse reliability score, forecasting; AWS Bedrock `cloud.aws.bedrock.*` runtime/cost/quota metrics |
   | `storage:spans:read` | Agent / tool / model / prompt analysis |
   | `storage:bizevents:read` | Evaluation scores |
   | `storage:events:read` | Davis problems for the reliability score |
@@ -317,7 +356,7 @@ All persisted via `@dynatrace-sdk/react-hooks` `useUserAppState` / `useSetUserAp
 
 Pure functions — pricing, classification, attribute normalization, agent health scoring, FinOps scoring — are covered by Vitest. Run `npm test` for a single pass or `npm run test:watch` while developing.
 
-Current coverage: 726 tests across 72 files spanning detection, the attribute-capability registry + enrichment-tier gating, the cache-aware cost model (cache tiers, provider accounting, blended fallback), the AI-layer model + use-case-lens drift guards, the within-trace token-growth detector, the high-frequency-tool predicate, scan-limit injection, the **hybrid global filter** (direct per-span injection + the cross-span trace-scope resolver, including the **250-sub-expressions-per-expression cap safety** so a large trace set can't overflow DQL, and the **attribute-presence "exists" condition**), the **fleet TTFT summary** (per-agent → median/P90 + emitting-agent set), the **trace span-attribute namespace grouping** (humanized keys, per-namespace sections, "Other" catch-all), the **Prompts focus presets** (every same-span predicate + cross-span trace resolver) and the **server-side agent join + status-tile content relaxation**, **trace-topology cycle safety** (recursive agent/MCP traces collapse to cyclic node graphs — the layout must not loop), SLA scoring, FinOps comparison scoring, the **upstream-services detail** (query builders, graph assembly, sort/top-N, Smartscape URL builder), and the **semantic status-color** helpers.
+Current coverage: 838 tests across 85 files spanning detection, the attribute-capability registry + enrichment-tier gating, the cache-aware cost model (cache tiers, provider accounting, blended fallback), the AI-layer model + use-case-lens drift guards, the within-trace token-growth detector, the high-frequency-tool predicate, scan-limit injection, the **hybrid global filter** (direct per-span injection + the cross-span trace-scope resolver, including the **250-sub-expressions-per-expression cap safety** so a large trace set can't overflow DQL, and the **attribute-presence "exists" condition**), the **fleet TTFT summary** (per-agent → median/P90 + emitting-agent set), the **trace span-attribute namespace grouping** (humanized keys, per-namespace sections, "Other" catch-all), the **Prompts focus presets** (every same-span predicate + cross-span trace resolver) and the **server-side agent join + status-tile content relaxation**, **trace-topology cycle safety** (recursive agent/MCP traces collapse to cyclic node graphs — the layout must not loop), SLA scoring, FinOps comparison scoring, the **upstream-services detail** (query builders, graph assembly, sort/top-N, Smartscape URL builder), the **semantic status-color** helpers, and the **AWS Bedrock** tab (ModelInvocationLog parsing, platform-aware cost, metric/runtime query builders, agent-session performance, cross-region exfiltration/residency analysis, and the insight/geometry helpers).
 
 ## Known issues
 
