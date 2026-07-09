@@ -6,12 +6,58 @@ import { useModelPricing, type PricingConfig } from "./ModelPricingContext";
 import {
   getEffectivePricing,
   normalizeModelKey,
+  platformKey,
   type ModelPricing,
+  type PricingPlatform,
 } from "../data/pricing";
 import { useModalA11y } from "../components/useModalA11y";
 
 type Tier = ModelPricing["tier"];
 const TIERS: Tier[] = ["low", "mid", "high", "frontier"];
+
+/** Hosting platform selector options, in display order. */
+const PLATFORM_OPTIONS: { value: PricingPlatform; label: string }[] = [
+  { value: "direct", label: "Direct" },
+  { value: "aws_bedrock", label: "AWS Bedrock" },
+  { value: "azure", label: "Azure" },
+  { value: "gcp_vertex", label: "GCP Vertex" },
+];
+const PLATFORM_LABELS: Record<PricingPlatform, string> = Object.fromEntries(
+  PLATFORM_OPTIONS.map((o) => [o.value, o.label]),
+) as Record<PricingPlatform, string>;
+const PLATFORM_ORDER: PricingPlatform[] = PLATFORM_OPTIONS.map(
+  (o) => o.value,
+);
+/** Non-direct platforms are namespaced as `platform::modelKey` overrides. */
+const PLATFORM_PREFIXES: PricingPlatform[] = PLATFORM_ORDER.filter(
+  (p) => p !== "direct",
+);
+
+/**
+ * Split a raw override key (as stored in `config.overrides`) into its
+ * hosting platform and bare model key. Bare keys (no `platform::` prefix)
+ * are Direct — this mirrors the parsing `setPricingOverrides` does when
+ * loading the shared config.
+ */
+const splitPlatformKey = (
+  rawKey: string,
+): { platform: PricingPlatform; modelKey: string } => {
+  for (const platform of PLATFORM_PREFIXES) {
+    const prefix = `${platform}::`;
+    if (rawKey.startsWith(prefix)) {
+      return { platform, modelKey: rawKey.slice(prefix.length) };
+    }
+  }
+  return { platform: "direct", modelKey: rawKey };
+};
+
+/**
+ * Row display label for a (possibly composite) draft key — strips the
+ * `platform::` prefix since the platform is already shown by the section
+ * heading above the row. The full composite key is still what gets saved
+ * (see `handleSave`); this only affects what's rendered.
+ */
+const displayModelKey = (key: string): string => splitPlatformKey(key).modelKey;
 
 /** Read a `notes` string off a built-in pricing entry. ModelPricing has no
  *  `notes` in its type (it's stashed at runtime), so narrow with `in` rather
@@ -28,6 +74,12 @@ interface Draft extends ModelPricing {
   key: string;
   /** Optional human-friendly notes (rate card link, sales contact, etc.). */
   notes?: string;
+  /**
+   * Hosting platform this rate applies to. Undefined means Direct — every
+   * pre-A4 built-in and custom entry has no platform stamped, so callers
+   * should read this as `d.platform ?? "direct"`.
+   */
+  platform?: PricingPlatform;
 }
 
 /**
@@ -46,7 +98,25 @@ const groupByProvider = (drafts: Draft[]): Record<string, Draft[]> => {
   return out;
 };
 
+/**
+ * Group a list of pricing entries by hosting platform (Direct / AWS Bedrock
+ * / Azure / GCP Vertex), preserving `PLATFORM_ORDER`.
+ */
+const groupByPlatform = (
+  drafts: Draft[],
+): Partial<Record<PricingPlatform, Draft[]>> => {
+  const out: Partial<Record<PricingPlatform, Draft[]>> = {};
+  for (const d of drafts) {
+    const platform = d.platform ?? "direct";
+    (out[platform] ||= []).push(d);
+  }
+  return out;
+};
+
 const buildInitialDrafts = (config: PricingConfig): Draft[] => {
+  // Direct-only merged built-ins + Direct overrides. Bedrock/Azure/Vertex
+  // overrides live under composite `platform::modelKey` keys in
+  // `config.overrides` and are picked up below instead.
   const merged = getEffectivePricing();
   const drafts: Draft[] = Object.entries(merged).map(([key, p]) => ({
     key,
@@ -56,11 +126,14 @@ const buildInitialDrafts = (config: PricingConfig): Draft[] => {
     notes: (config.overrides[key] as ModelPricing & { notes?: string })
       ?.notes,
   }));
-  // Also surface user-added custom models that aren't in the merged map
-  // (defensive — they should already be in `merged` via overrides).
-  for (const [key, p] of Object.entries(config.overrides)) {
-    if (!drafts.find((d) => d.key === normalizeModelKey(key))) {
-      drafts.push({ key: normalizeModelKey(key), ...p });
+  // Also surface user-added custom models that aren't in the merged map —
+  // this is how non-direct (Bedrock/Azure/Vertex) entries reach the panel,
+  // since `getEffectivePricing()` above only returns the Direct table.
+  for (const [rawKey, p] of Object.entries(config.overrides)) {
+    const { platform, modelKey } = splitPlatformKey(rawKey);
+    const draftKey = platformKey(platform, normalizeModelKey(modelKey));
+    if (!drafts.find((d) => d.key === draftKey)) {
+      drafts.push({ key: draftKey, platform, ...p });
     }
   }
   drafts.sort((a, b) => a.key.localeCompare(b.key));
@@ -211,7 +284,7 @@ const PricingRow = ({
             whiteSpace: "nowrap",
           }}
         >
-          {draft.key}
+          {displayModelKey(draft.key)}
         </Text>
         {isCustom && <Pill tone="purple">Custom</Pill>}
         {!isCustom && isOverride && <Pill>Edited</Pill>}
@@ -348,6 +421,7 @@ const AddModelForm = ({
 }: AddModelFormProps) => {
   const [key, setKey] = useState("");
   const [provider, setProvider] = useState("");
+  const [platform, setPlatform] = useState<PricingPlatform>("direct");
   const [tier, setTier] = useState<Tier>("mid");
   const [input, setInput] = useState(0);
   const [output, setOutput] = useState(0);
@@ -355,7 +429,8 @@ const AddModelForm = ({
   const [notes, setNotes] = useState("");
 
   const normalized = normalizeModelKey(key);
-  const dup = key.length > 0 && existingKeys.has(normalized);
+  const savedKey = platformKey(platform, normalized);
+  const dup = key.length > 0 && existingKeys.has(savedKey);
   const valid =
     key.trim().length > 0 && provider.trim().length > 0 && !dup;
 
@@ -451,6 +526,25 @@ const AddModelForm = ({
           placeholder="Provider (e.g. Anthropic)"
           onChange={setProvider}
         />
+        <select
+          aria-label="Platform"
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value as PricingPlatform)}
+          style={{
+            padding: "4px 6px",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            background: "var(--surface)",
+            color: "var(--text)",
+            fontSize: 12,
+          }}
+        >
+          {PLATFORM_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         <TextInput
           ariaLabel="Notes"
           value={notes}
@@ -461,7 +555,7 @@ const AddModelForm = ({
       </Flex>
       {dup && (
         <Text style={{ fontSize: 11.5, color: "var(--red)" }}>
-          A model with key “{normalized}” already exists.
+          A model with key “{savedKey}” already exists.
         </Text>
       )}
       <Flex justifyContent="flex-end" gap={8}>
@@ -473,7 +567,8 @@ const AddModelForm = ({
           disabled={!valid}
           onClick={() =>
             onAdd({
-              key: normalized,
+              key: savedKey,
+              platform,
               provider: provider.trim(),
               tier,
               inputPerMTok: input,
@@ -588,8 +683,16 @@ export const ModelPricingPanel = () => {
   }, [t.isPanelOpen, t.config]);
 
 
-  const grouped = useMemo(() => groupByProvider(drafts), [drafts]);
-  const providers = Object.keys(grouped).sort();
+  // Platform, then provider: split drafts into their hosting-platform
+  // sections first (Direct / AWS Bedrock / Azure / GCP Vertex), then group
+  // each section by provider — same nested shape the row-grouping UI uses.
+  const byPlatform = useMemo(() => groupByPlatform(drafts), [drafts]);
+  const platformsPresent = PLATFORM_ORDER.filter(
+    (p) => (byPlatform[p]?.length ?? 0) > 0,
+  );
+  // Only surface the platform sub-heading once there's more than one
+  // section to distinguish — keeps the common (Direct-only) view unchanged.
+  const showPlatformHeadings = platformsPresent.length > 1;
   const existingKeys = useMemo(
     () => new Set(drafts.map((d) => d.key)),
     [drafts],
@@ -777,46 +880,79 @@ export const ModelPricingPanel = () => {
               <span>Tier</span>
               <span style={{ textAlign: "right" }}>Actions</span>
             </div>
-            {providers.map((provider) => (
-              <div key={provider}>
-                <div
-                  style={{
-                    padding: "8px 12px",
-                    background: "var(--surface)",
-                    borderTop: "1px solid var(--border)",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    color: "var(--text-2)",
-                  }}
-                >
-                  {provider}
+            {platformsPresent.map((platform) => {
+              const grouped = groupByProvider(byPlatform[platform] ?? []);
+              const providers = Object.keys(grouped).sort();
+              return (
+                <div key={platform}>
+                  {showPlatformHeadings && (
+                    <div
+                      style={{
+                        padding: "8px 12px",
+                        background:
+                          platform === "direct"
+                            ? "var(--surface-2)"
+                            : "var(--intel-soft)",
+                        borderTop: "1px solid var(--border)",
+                        fontSize: 11.5,
+                        fontWeight: 800,
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                        color:
+                          platform === "direct"
+                            ? "var(--text)"
+                            : "var(--purple-2)",
+                      }}
+                    >
+                      {PLATFORM_LABELS[platform]}
+                    </div>
+                  )}
+                  {providers.map((provider) => (
+                    <div key={provider}>
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          background: "var(--surface)",
+                          borderTop: "1px solid var(--border)",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                          color: "var(--text-2)",
+                        }}
+                      >
+                        {provider}
+                      </div>
+                      {grouped[provider].map((d) => {
+                        const isOverride = Boolean(t.config.overrides[d.key]);
+                        // Custom = present in overrides but not in built-ins.
+                        // Built-ins live in the merged map BEFORE overrides
+                        // applied; using getEffectivePricing minus overrides is
+                        // overkill — call it custom if the key wasn't in the
+                        // initial effective map without overrides. Every
+                        // non-direct entry is custom by construction (Bedrock
+                        // built-ins aren't loaded into this panel — see A4
+                        // report for the follow-up).
+                        const isCustom =
+                          isOverride && !(d.key in getBuiltinKeys());
+                        return (
+                          <PricingRow
+                            key={d.key}
+                            draft={d}
+                            editing={editingKey === d.key}
+                            onChange={handleRowChange}
+                            onEdit={() => setEditingKey(d.key)}
+                            onRevertRow={() => handleRowRevert(d.key)}
+                            isOverride={isOverride}
+                            isCustom={isCustom}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-                {grouped[provider].map((d) => {
-                  const isOverride = Boolean(t.config.overrides[d.key]);
-                  // Custom = present in overrides but not in built-ins.
-                  // Built-ins live in the merged map BEFORE overrides
-                  // applied; using getEffectivePricing minus overrides is
-                  // overkill — call it custom if the key wasn't in the
-                  // initial effective map without overrides.
-                  const isCustom =
-                    isOverride && !(d.key in getBuiltinKeys());
-                  return (
-                    <PricingRow
-                      key={d.key}
-                      draft={d}
-                      editing={editingKey === d.key}
-                      onChange={handleRowChange}
-                      onEdit={() => setEditingKey(d.key)}
-                      onRevertRow={() => handleRowRevert(d.key)}
-                      isOverride={isOverride}
-                      isCustom={isCustom}
-                    />
-                  );
-                })}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <Flex justifyContent="flex-end" gap={8}>

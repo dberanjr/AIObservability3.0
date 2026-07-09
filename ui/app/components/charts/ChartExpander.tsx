@@ -140,7 +140,11 @@ export const ChartModal = ({
           </button>
         </Flex>
 
-        <div style={{ minHeight: 360, flexGrow: 1 }}>{children}</div>
+        {/* flexShrink:0 (not flexGrow:1): in a scrolling flex column, letting
+            this box shrink would compress it below its content height while the
+            content (overflow visible) bled over the stats footer below. Pinning
+            it makes tall content grow the box and scroll the modal instead. */}
+        <div style={{ minHeight: 360, flexShrink: 0 }}>{children}</div>
 
         {stats && stats.length > 0 && (
           <div
@@ -150,6 +154,7 @@ export const ChartModal = ({
               gap: 12,
               borderTop: "1px solid var(--border)",
               paddingTop: 16,
+              flexShrink: 0,
             }}
           >
             {stats.map((s) => (

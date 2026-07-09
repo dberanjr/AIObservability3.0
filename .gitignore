@@ -47,3 +47,6 @@ Thumbs.db
 
 # Local deploy tokens (never commit)
 .secrets/
+
+# Visual brainstorming companion (superpowers)
+.superpowers/

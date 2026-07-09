@@ -355,6 +355,44 @@ export const PRICING: Record<string, ModelPricing> = {
   // given a fabricated rate.
 };
 
+/** LLM hosting platform. Same model can be priced differently per platform. */
+export type PricingPlatform = "direct" | "aws_bedrock" | "azure" | "gcp_vertex";
+
+/** Composite override/registry key. `direct` stays bare for backward compat with
+ *  every existing lookup and saved override; other platforms are namespaced. */
+export const platformKey = (platform: PricingPlatform, modelKey: string): string =>
+  platform === "direct" ? modelKey : `${platform}::${modelKey}`;
+
+/** Bedrock-native models (Amazon Titan/Nova) — priced only on Bedrock. Claude on
+ *  Bedrock is intentionally ABSENT here so it falls back to the Direct Claude
+ *  rate (at parity today). Keys are normalizeModelKey() outputs. */
+export const PRICING_BEDROCK: Record<string, ModelPricing> = {
+  "nova-lite": {
+    inputPerMTok: 0.06, outputPerMTok: 0.24, contextWindow: 300_000,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-2-lite": {
+    inputPerMTok: 0.06, outputPerMTok: 0.24, contextWindow: 300_000,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-micro": {
+    inputPerMTok: 0.035, outputPerMTok: 0.14, contextWindow: 128_000,
+    provider: "Amazon", tier: "low",
+  },
+  "nova-pro": {
+    inputPerMTok: 0.8, outputPerMTok: 3.2, contextWindow: 300_000,
+    provider: "Amazon", tier: "mid",
+  },
+};
+
+/** Per-platform built-in rate tables. `direct` is the existing PRICING table. */
+export const PLATFORM_PRICING: Record<PricingPlatform, Record<string, ModelPricing>> = {
+  direct: PRICING,
+  aws_bedrock: PRICING_BEDROCK,
+  azure: {},
+  gcp_vertex: {},
+};
+
 /**
  * Normalize a model name to its lookup key. Handles the variants seen in
  * the wild on Bedrock-fronted deployments:
@@ -366,6 +404,10 @@ export const PRICING: Record<string, ModelPricing> = {
  */
 export const normalizeModelKey = (model: string): string => {
   let s = model.trim().toLowerCase();
+  // Strip an ARN / inference-profile path, keeping only the trailing model id
+  // (arn:aws:bedrock:…:inference-profile/us.anthropic.claude-… → us.anthropic.claude-…).
+  // No canonical model key contains a "/", so this never removes real content.
+  s = s.replace(/^.*\//, "");
   // Strip Bedrock region prefix (us., eu., apac., ap., sa., global.)
   s = s.replace(/^(us|eu|apac|ap|sa|global)\./, "");
   // Strip vendor prefix
@@ -428,8 +470,13 @@ export const setPricingOverrides = (
 ): void => {
   PRICING_OVERRIDES.clear();
   if (next) {
-    for (const [key, val] of Object.entries(next)) {
-      PRICING_OVERRIDES.set(normalizeModelKey(key), val);
+    for (const [rawKey, val] of Object.entries(next)) {
+      const sep = rawKey.indexOf("::");
+      const stored =
+        sep === -1
+          ? normalizeModelKey(rawKey)
+          : `${rawKey.slice(0, sep)}::${normalizeModelKey(rawKey.slice(sep + 2))}`;
+      PRICING_OVERRIDES.set(stored, val);
     }
   }
   for (const listener of PRICING_OVERRIDE_LISTENERS) listener();
@@ -441,20 +488,35 @@ export const subscribePricingOverrides = (cb: () => void): (() => void) => {
   return () => PRICING_OVERRIDE_LISTENERS.delete(cb);
 };
 
-export const getPricing = (model: string | undefined | null): ModelPricing => {
+export const getPricing = (
+  model: string | undefined | null,
+  platform: PricingPlatform = "direct",
+): ModelPricing => {
   if (!model) return UNKNOWN_PRICE;
   const key = normalizeModelKey(model);
-  return PRICING_OVERRIDES.get(key) ?? PRICING[key] ?? UNKNOWN_PRICE;
+  return (
+    PRICING_OVERRIDES.get(platformKey(platform, key)) ??
+    PLATFORM_PRICING[platform]?.[key] ??
+    (platform !== "direct"
+      ? (PRICING_OVERRIDES.get(key) ?? PRICING[key])
+      : undefined) ??
+    UNKNOWN_PRICE
+  );
 };
 
 /**
  * Snapshot of the merged pricing table (built-ins + overrides). Used by
  * the config panel to display the current effective rates.
  */
-export const getEffectivePricing = (): Record<string, ModelPricing> => {
-  const merged: Record<string, ModelPricing> = { ...PRICING };
+export const getEffectivePricing = (
+  platform: PricingPlatform = "direct",
+): Record<string, ModelPricing> => {
+  const merged: Record<string, ModelPricing> = { ...(PLATFORM_PRICING[platform] ?? {}) };
+  const prefix = platform === "direct" ? "" : `${platform}::`;
   for (const [key, val] of PRICING_OVERRIDES.entries()) {
-    merged[key] = val;
+    if (platform === "direct" && key.includes("::")) continue;
+    if (platform !== "direct" && !key.startsWith(prefix)) continue;
+    merged[key.slice(prefix.length)] = val;
   }
   return merged;
 };
@@ -523,11 +585,20 @@ export const getBlendedPricing = (): ModelPricing => {
  */
 export const resolveModelPricing = (
   model: string | null | undefined,
+  platform: PricingPlatform = "direct",
 ): ModelPricing => {
   if (model) {
     const key = normalizeModelKey(model);
-    const found = PRICING_OVERRIDES.get(key) ?? PRICING[key];
-    if (found) return found;
+    // 1. platform-specific override, then platform-specific built-in
+    const platHit =
+      PRICING_OVERRIDES.get(platformKey(platform, key)) ??
+      PLATFORM_PRICING[platform]?.[key];
+    if (platHit) return platHit;
+    // 2. fall back to Direct (override then built-in) — Claude-on-Bedrock path
+    if (platform !== "direct") {
+      const directHit = PRICING_OVERRIDES.get(key) ?? PRICING[key];
+      if (directHit) return directHit;
+    }
   }
   return getBlendedPricing();
 };
@@ -592,8 +663,9 @@ export const emptyTokens = (): NormalizedTokens => ({
 export const computeCost = (
   tokens: NormalizedTokens,
   model: string | null | undefined,
+  platform: PricingPlatform = "direct",
 ): CostBreakdown => {
-  const pricing = resolveModelPricing(model);
+  const pricing = resolveModelPricing(model, platform);
   const { read, write } = cacheRates(pricing);
   const effectiveCost =
     (tokens.inputTokens * pricing.inputPerMTok +
@@ -622,6 +694,7 @@ export const costOf = (
   outputTokens: number,
   model: string | null | undefined,
   cache?: { read?: number; write?: number },
+  platform: PricingPlatform = "direct",
 ): number =>
   computeCost(
     {
@@ -631,4 +704,5 @@ export const costOf = (
       cacheWriteTokens: cache?.write ?? 0,
     },
     model,
+    platform,
   ).effectiveCost;
