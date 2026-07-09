@@ -66,11 +66,30 @@ export const bedrockCostIntervalSec = (from: string): number => {
   return 86400; // 1d — 7d → 7 cols, 30d → 30, 90d → 90 (labels thinned)
 };
 
-export const buildBedrockDailyCostQuery = (s: BedrockScope): string =>
+export const buildBedrockDailyCostQuery = (
+  s: BedrockScope,
+  intervalSec: number = bedrockCostIntervalSec(s.timeframe.from),
+): string =>
   `${bedrockLogBase(s)}\n${FLATTEN}\n| makeTimeseries {
     inTok = sum(inTok), outTok = sum(outTok),
     cacheRead = sum(cacheRead), cacheWrite = sum(cacheWrite)
-  }, interval: ${bedrockCostIntervalSec(s.timeframe.from)}s, by: { modelId }`;
+  }, interval: ${intervalSec}s, by: { modelId }`;
+
+/**
+ * Finer bucket width (seconds) for the Total Spend HERO sparkline only — about
+ * one notch finer than {@link bedrockCostIntervalSec} so the spark shows a
+ * smoother trend (a 7-day scope → 28 points at 6h instead of 7 daily columns)
+ * without changing the readable daily bar chart. Kept as a separate ladder so
+ * the two visualizations tune independently.
+ */
+export const bedrockSparkIntervalSec = (from: string): number => {
+  const ms = parseScopeMs(from);
+  if (ms <= 2 * HOUR_MS) return 300; // 5m
+  if (ms <= 12 * HOUR_MS) return 900; // 15m
+  if (ms < 2 * DAY_MS) return 1800; // 30m
+  if (ms < 4 * DAY_MS) return 3 * 3600; // 3h
+  return 6 * 3600; // 6h — 7d → 28 pts, 30d → 120
+};
 
 /** One row per (session, account, modelId) — NOT per session — so a
  *  multi-model agent session (e.g. Opus for planning + Nova for tool calls)

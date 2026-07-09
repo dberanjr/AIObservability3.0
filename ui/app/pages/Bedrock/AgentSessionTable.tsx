@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
-import { ChevronDownIcon, ChevronUpIcon } from "@dynatrace/strato-icons";
 import {
   DetailModalShell,
   EstimatedBadge,
@@ -11,6 +10,9 @@ import {
   StatGrid,
 } from "../../components/DetailModal";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
+import { EmptyState } from "../../components/EmptyState";
+import { MaximizablePanel } from "../../components/MaximizablePanel";
+import { DataTable, type DataColumn } from "../../components/DataTable";
 import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
 import { useAgentSessions, useBedrockPerf } from "../../bedrock/useBedrock";
 import type { AgentSessionRow } from "../../bedrock/parse";
@@ -26,79 +28,6 @@ export interface AgentSessionTableProps {
 interface EnrichedRow extends AgentSessionRow {
   p95Ms: number | undefined;
 }
-
-type SortKey = "session" | "account" | "invocations" | "tokens" | "cachePct" | "estCost" | "p95" | "errorRate";
-
-interface Column {
-  id: string;
-  label: string;
-  width?: number;
-  grow?: boolean;
-  minWidth?: number;
-  align?: "left" | "right";
-  sortBy?: SortKey;
-}
-
-/** Mirrors ModelsTable's colStyle helper so header cells and data cells
- *  always agree on width — see that file's comment for why this matters. */
-const colStyle = (c: Pick<Column, "width" | "grow" | "minWidth">): React.CSSProperties =>
-  c.grow
-    ? { flex: `1 1 ${c.minWidth ?? 140}px`, minWidth: c.minWidth ?? 140, boxSizing: "border-box" }
-    : { flex: "0 0 auto", width: c.width, boxSizing: "border-box" };
-
-const TABLE_MIN_WIDTH = 1110;
-/** Body scroll cap (brief: "~360px") — the leaderboard scrolls internally
- *  instead of clipping to a fixed row count. Header sits outside this
- *  container, so it stays visible without needing position:sticky. */
-const BODY_MAX_HEIGHT = 360;
-
-const COLS: Column[] = [
-  { id: "session", label: "Session", width: 170, sortBy: "session" },
-  { id: "account", label: "Account", width: 120, sortBy: "account" },
-  { id: "models", label: "Models", grow: true, minWidth: 210 },
-  { id: "invocations", label: "Invocations", width: 90, align: "right", sortBy: "invocations" },
-  { id: "tokens", label: "Tokens", width: 180, align: "right", sortBy: "tokens" },
-  { id: "cachePct", label: "Cache %", width: 80, align: "right", sortBy: "cachePct" },
-  { id: "estCost", label: "Est cost", width: 100, align: "right", sortBy: "estCost" },
-  { id: "p95", label: "Latency", width: 80, align: "right", sortBy: "p95" },
-  { id: "errorRate", label: "Errors", width: 80, align: "right", sortBy: "errorRate" },
-];
-
-const Cell = ({
-  children,
-  width,
-  grow,
-  minWidth,
-  align,
-  mono,
-  style,
-}: {
-  children: React.ReactNode;
-  width?: number;
-  grow?: boolean;
-  minWidth?: number;
-  align?: "left" | "right";
-  mono?: boolean;
-  style?: React.CSSProperties;
-}) => (
-  <div
-    style={{
-      ...colStyle({ width, grow, minWidth }),
-      textAlign: align,
-      padding: "8px 6px",
-      fontSize: 12.5,
-      color: "var(--text)",
-      fontFamily: mono ? "var(--mono, monospace)" : undefined,
-      fontVariantNumeric: mono ? "tabular-nums" : undefined,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      ...style,
-    }}
-  >
-    {children}
-  </div>
-);
 
 const Dash = () => <Text style={{ fontSize: 11.5, color: "var(--text-4)" }}>—</Text>;
 
@@ -136,6 +65,69 @@ const ModelChips = ({ models }: { models: string[] }) => {
     </Flex>
   );
 };
+
+/** Est-cost cell — flags blended/fallback pricing with a muted "≈" and an
+ *  explanatory title, otherwise reads as a plain rate-card figure. */
+const CostCell = ({ row }: { row: EnrichedRow }) => (
+  <span
+    title={
+      row.blended
+        ? "Estimated — model priced at a blended/fallback rate; add it to the Model Pricing table for an exact figure."
+        : "Priced from the rate card."
+    }
+    style={{ color: row.blended ? "var(--text-2)" : "var(--text)" }}
+  >
+    {row.blended && (
+      <span aria-hidden style={{ color: "var(--amber)", marginRight: 3 }}>
+        ≈
+      </span>
+    )}
+    {fmtUSDPrecise(row.estCost)}
+  </span>
+);
+
+/** "Identity/Account" shown in FULL (noTruncate) per request — resize/wrap
+ *  keeps the session identity inside the column instead of clipping with an
+ *  ellipsis. Account stays a separate, narrower column. */
+const sessionColumns: DataColumn<EnrichedRow>[] = [
+  {
+    key: "session",
+    header: "Identity/Account",
+    render: (r) => <span title={r.session || "(unknown session)"}>{r.session || "(unknown session)"}</span>,
+    mono: true,
+    noTruncate: true,
+    width: 220,
+  },
+  { key: "account", header: "Account", render: (r) => r.account || "—", mono: true, width: 130 },
+  { key: "models", header: "Models", render: (r) => <ModelChips models={r.models} />, width: 220, noTruncate: true },
+  { key: "invocations", header: "Invocations", render: (r) => fmtCount(r.invocations), align: "right", width: 100 },
+  {
+    key: "tokens",
+    header: "Tokens",
+    render: (r) => `${fmtTokens(r.inTok)} in / ${fmtTokens(r.outTok)} out`,
+    align: "right",
+    mono: true,
+    width: 190,
+  },
+  { key: "cachePct", header: "Cache %", render: (r) => fmtPercent(r.cachePct), align: "right", mono: true, width: 90 },
+  { key: "estCost", header: "Est cost", render: (r) => <CostCell row={r} />, align: "right", mono: true, width: 110 },
+  {
+    key: "p95",
+    header: "Latency",
+    render: (r) => (r.p95Ms == null ? <Dash /> : fmtMs(r.p95Ms)),
+    align: "right",
+    mono: true,
+    width: 90,
+  },
+  {
+    key: "errorRate",
+    header: "Errors",
+    render: (r) => (r.invocations > 0 ? fmtPercent(r.errorRate * 100) : <Dash />),
+    align: "right",
+    mono: true,
+    width: 90,
+  },
+];
 
 /**
  * Session-detail modal (Step 2). Built with the same DetailModalShell /
@@ -235,11 +227,12 @@ const SessionDetailModal = ({
 };
 
 /**
- * D5: scrollable agent-session leaderboard. Reads `useAgentSessions` (already
- * sorted by invocations desc / capped at 200 server-side) and re-sorts by est
- * cost desc by default — the FinOps-relevant ordering for a cost zone. Every
- * numeric column is clickable to re-sort (mirrors ModelsTable); Session/
- * Account sort lexically. Row click opens `SessionDetailModal`.
+ * D5: agent-session leaderboard. Reads `useAgentSessions` (already sorted by
+ * invocations desc / capped at 200 server-side) and re-sorts by est cost desc
+ * — the FinOps-relevant ordering for a cost zone. Wrapped in MaximizablePanel
+ * for a full-screen focused view; the table uses the resizable DataTable, with
+ * "Identity/Account" shown in full (no ellipsis). Row click opens
+ * `SessionDetailModal`.
  *
  * P95 is joined from `useBedrockPerf` by the row's PRIMARY model — see
  * agentSessionPerf.ts for the shortModelName-vs-normalizeBedrockModelId
@@ -250,196 +243,78 @@ export const AgentSessionTable = ({ scope }: AgentSessionTableProps) => {
   const { rows, isLoading } = useAgentSessions(scope);
   const { rows: perfRows, isLoading: perfLoading } = useBedrockPerf(scope);
   const [selected, setSelected] = useState<AgentSessionRow | null>(null);
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
-    key: "estCost",
-    dir: "desc",
-  });
 
   const enriched = useMemo<EnrichedRow[]>(
     () => rows.map((r) => ({ ...r, p95Ms: perfForSession(r, perfRows)?.latencyMs })),
     [rows, perfRows],
   );
 
-  const sorted = useMemo(() => {
-    const copy = [...enriched];
-    copy.sort((a, b) => {
-      const dir = sort.dir === "asc" ? 1 : -1;
-      switch (sort.key) {
-        case "session":
-          return dir * a.session.localeCompare(b.session);
-        case "account":
-          return dir * a.account.localeCompare(b.account);
-        case "invocations":
-          return dir * (a.invocations - b.invocations);
-        case "tokens":
-          return dir * (a.inTok + a.outTok - (b.inTok + b.outTok));
-        case "cachePct":
-          return dir * (a.cachePct - b.cachePct);
-        case "estCost":
-          return dir * (a.estCost - b.estCost);
-        case "p95":
-          // Undefined (no perf match) sorts last regardless of direction —
-          // otherwise "asc" would surface unmatched rows first as if they had
-          // the lowest latency, which they simply don't have data for.
-          if (a.p95Ms == null && b.p95Ms == null) return 0;
-          if (a.p95Ms == null) return 1;
-          if (b.p95Ms == null) return -1;
-          return dir * (a.p95Ms - b.p95Ms);
-        case "errorRate":
-          return dir * (a.errorRate - b.errorRate);
-        default:
-          return 0;
-      }
-    });
-    return copy;
-  }, [enriched, sort]);
-
-  const toggleSort = (key: SortKey) =>
-    setSort((current) =>
-      current.key === key ? { key, dir: current.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" },
-    );
+  const sorted = useMemo(
+    () => [...enriched].sort((a, b) => b.estCost - a.estCost),
+    [enriched],
+  );
 
   const initialLoading = (isLoading || perfLoading) && rows.length === 0;
 
-  return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={16}>
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Agent sessions
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Top 200 agent-session identities by invocation volume, sorted here by estimated cost.
-            Click a row for the full breakdown.
+  const totalInvocations = rows.reduce((s, r) => s + r.invocations, 0);
+  const totalCost = rows.reduce((s, r) => s + r.estCost, 0);
+  const stats = [
+    { label: "Sessions", value: fmtCount(rows.length) },
+    { label: "Total invocations", value: fmtCount(totalInvocations) },
+    { label: "Total est cost", value: fmtUSDPrecise(totalCost) },
+  ];
+
+  const body = (expanded: boolean) => {
+    const tableH = expanded ? 700 : 360;
+    return (
+      <Flex flexDirection="column" gap={8}>
+        {initialLoading ? (
+          <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} style={{ height: 32 }} />
+            ))}
+          </Flex>
+        ) : sorted.length === 0 ? (
+          <EmptyState
+            bare
+            title="No agent-session activity in this scope"
+            description="No Bedrock agent-session identities matched the current scope."
+          />
+        ) : (
+          <DataTable
+            columns={sessionColumns}
+            rows={sorted}
+            rowKey={(r, i) => (r.session ? `${r.session}-${r.account}` : `unknown-${i}`)}
+            maxHeight={tableH}
+            onRowClick={(row) => setSelected(row)}
+          />
+        )}
+
+        <Flex style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
+            Latency shown is the session's primary model's highest observed average latency
+            (metric-derived, not a true per-session percentile) — "—" means no perf data matched
+            that model in scope.
           </Text>
         </Flex>
-        <div style={{ overflowX: "auto" }}>
-          <style>{`.session-row{cursor:pointer}.session-row:hover{background:var(--surface-2)}`}</style>
-          <Flex flexDirection="column" gap={0} style={{ minWidth: TABLE_MIN_WIDTH }}>
-            <Flex alignItems="center" style={{ padding: "0 10px", borderBottom: "1px solid var(--border)" }}>
-              {COLS.map((c) => {
-                const active = c.sortBy && sort.key === c.sortBy;
-                const Arrow = active && sort.dir === "asc" ? ChevronUpIcon : ChevronDownIcon;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={!c.sortBy}
-                    onClick={() => c.sortBy && toggleSort(c.sortBy)}
-                    style={{
-                      all: "unset",
-                      ...colStyle(c),
-                      cursor: c.sortBy ? "pointer" : "default",
-                      textAlign: c.align,
-                      padding: "8px 6px",
-                      fontSize: 10.5,
-                      fontWeight: 600,
-                      letterSpacing: "0.05em",
-                      textTransform: "uppercase",
-                      color: active ? "var(--text)" : "var(--text-3)",
-                    }}
-                  >
-                    <Flex alignItems="center" justifyContent={c.align === "right" ? "flex-end" : "flex-start"} gap={2}>
-                      {c.label}
-                      {active && <Arrow size={12} />}
-                    </Flex>
-                  </button>
-                );
-              })}
-            </Flex>
-
-            {initialLoading ? (
-              <Flex flexDirection="column" gap={4} style={{ padding: 12 }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} style={{ height: 32 }} />
-                ))}
-              </Flex>
-            ) : sorted.length === 0 ? (
-              <Flex style={{ padding: "32px 16px" }}>
-                <Text style={{ fontSize: 12.5, color: "var(--text-3)" }}>
-                  No agent-session activity in this scope.
-                </Text>
-              </Flex>
-            ) : (
-              <div style={{ maxHeight: BODY_MAX_HEIGHT, overflowY: "auto" }}>
-                {sorted.map((r, i) => (
-                  <div
-                    key={r.session ? `${r.session}-${r.account}` : `unknown-${i}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Open details for session ${r.session || "unknown"}`}
-                    className="session-row"
-                    onClick={() => setSelected(r)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelected(r);
-                      }
-                    }}
-                    style={{ display: "flex", alignItems: "center", padding: "0 10px", borderTop: "1px solid var(--border)" }}
-                  >
-                    <Cell width={170} mono>
-                      <span title={r.session || "(unknown session)"}>
-                        {r.session || "(unknown session)"}
-                      </span>
-                    </Cell>
-                    <Cell width={120} mono>
-                      {r.account || "—"}
-                    </Cell>
-                    <Cell grow minWidth={210} style={{ overflow: "visible", whiteSpace: "normal" }}>
-                      <ModelChips models={r.models} />
-                    </Cell>
-                    <Cell width={90} align="right" mono>
-                      {fmtCount(r.invocations)}
-                    </Cell>
-                    <Cell width={180} align="right" mono>
-                      {fmtTokens(r.inTok)} in / {fmtTokens(r.outTok)} out
-                    </Cell>
-                    <Cell width={80} align="right" mono>
-                      {fmtPercent(r.cachePct)}
-                    </Cell>
-                    <Cell width={100} align="right" mono>
-                      <span
-                        title={
-                          r.blended
-                            ? "Estimated — model priced at a blended/fallback rate; add it to the Model Pricing table for an exact figure."
-                            : "Priced from the rate card."
-                        }
-                        style={{ color: r.blended ? "var(--text-2)" : "var(--text)" }}
-                      >
-                        {r.blended && (
-                          <span aria-hidden style={{ color: "var(--amber)", marginRight: 3 }}>
-                            ≈
-                          </span>
-                        )}
-                        {fmtUSDPrecise(r.estCost)}
-                      </span>
-                    </Cell>
-                    <Cell width={80} align="right" mono>
-                      {r.p95Ms == null ? <Dash /> : fmtMs(r.p95Ms)}
-                    </Cell>
-                    <Cell width={80} align="right" mono>
-                      {r.invocations > 0 ? fmtPercent(r.errorRate * 100) : <Dash />}
-                    </Cell>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <Flex style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
-              <Text style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-                Latency shown is the session's primary model's highest observed average latency
-                (metric-derived, not a true per-session percentile) — "—" means no perf data matched
-                that model in scope.
-              </Text>
-            </Flex>
-          </Flex>
-        </div>
       </Flex>
+    );
+  };
+
+  return (
+    <>
+      <MaximizablePanel
+        title="Agent sessions"
+        subtitle="Top 200 agent-session identities by invocation volume, sorted here by estimated cost. Click a row for the full breakdown."
+        stats={stats}
+        expanded={body(true)}
+      >
+        {body(false)}
+      </MaximizablePanel>
 
       {selected && (
         <SessionDetailModal row={selected} perfRows={perfRows} onClose={() => setSelected(null)} />
       )}
-    </Surface>
+    </>
   );
 };

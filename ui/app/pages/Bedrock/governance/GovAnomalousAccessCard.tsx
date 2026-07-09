@@ -1,10 +1,12 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList, type BarListItem } from "../../../components/charts/BarList";
 import { EmptyState } from "../../../components/EmptyState";
 import { InfoTooltip } from "../../../components/InfoTooltip";
+import { MaximizablePanel } from "../../../components/MaximizablePanel";
+import { DataTable, type DataColumn } from "../../../components/DataTable";
 import { STATUS_COLOR } from "../../../theme/statusColor";
 import { fmtCount } from "../../../data/format";
 import type { GovScope } from "../../../bedrock/governance/types";
@@ -37,6 +39,35 @@ interface WatchRow {
   flagged: boolean;
 }
 
+const watchColumns: DataColumn<WatchRow>[] = [
+  // "Identity/Account", shown in FULL (noTruncate) per request — resize/wrap
+  // keeps it inside the column instead of clipping with an ellipsis.
+  {
+    key: "identity",
+    header: "Identity/Account",
+    render: (r) => (
+      <span style={{ color: r.sourceIps >= SPREAD_THRESHOLD ? STATUS_COLOR.warning : undefined }}>
+        {r.identity || "—"}
+      </span>
+    ),
+    mono: true,
+    width: 280,
+    noTruncate: true,
+  },
+  {
+    key: "ips",
+    header: "Source IPs",
+    render: (r) => (
+      <span style={{ color: r.sourceIps >= SPREAD_THRESHOLD ? STATUS_COLOR.warning : undefined, fontWeight: r.sourceIps >= SPREAD_THRESHOLD ? 600 : undefined }}>
+        {fmtCount(r.sourceIps)}
+      </span>
+    ),
+    align: "right",
+    width: 110,
+  },
+  { key: "calls", header: "Calls", render: (r) => fmtCount(r.calls), align: "right", width: 110 },
+];
+
 /**
  * Headline security card (D-band): the strongest shadow-AI / credential-abuse
  * signal CloudTrail exposes, built from two angles on the same identity ↔
@@ -49,7 +80,10 @@ interface WatchRow {
  *    identity count.
  * Both are correlational, not proof of compromise — a spread identity may be
  * a legitimate multi-AZ service role. That's why rows are flagged, not
- * removed: the card surfaces the pattern for a human to triage.
+ * removed: the card surfaces the pattern for a human to triage. Wrapped in
+ * MaximizablePanel; the full-screen focused view adds the full watchlist as a
+ * resizable DataTable (rows with 3+ source IPs tinted STATUS_COLOR.warning)
+ * alongside the two BarLists.
  */
 export const GovAnomalousAccessCard = ({ scope }: GovAnomalousAccessCardProps) => {
   const { topSourceIps, identityMfa, isLoading } = useGovIdentities(scope);
@@ -121,99 +155,119 @@ export const GovAnomalousAccessCard = ({ scope }: GovAnomalousAccessCardProps) =
   const initial = isLoading && identityMfa.length === 0;
   const empty = !initial && watchlist.length === 0 && sharedIps.length === 0;
 
-  return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={16}>
-        <Flex flexDirection="column" gap={2}>
-          <Flex alignItems="center" gap={4}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Anomalous access watch
-            </Heading>
-            <InfoTooltip
-              text="Flags identities whose CloudTrail sessions touched 3+ distinct source IPs, and source IPs called from by 2+ distinct identities — patterns consistent with shared/stolen credentials, shadow-AI tooling, or LLM-jacking. Correlational, not proof of compromise: investigate a flagged identity's call pattern (event names, regions, timing) before rotating credentials."
-              size={12}
-            />
-          </Flex>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Identities spread across many source IPs, and IPs shared by many identities — the
-            strongest shadow-AI / credential-abuse signal CloudTrail exposes.
-          </Text>
-        </Flex>
+  const stats = [
+    { label: `Identities spanning ${SPREAD_THRESHOLD}+ IPs`, value: fmtCount(flaggedCount) },
+    { label: "Shared source IPs", value: fmtCount(sharedIps.length) },
+    { label: "Total identities", value: fmtCount(watchlist.length) },
+  ];
 
-        {initial ? (
-          <Skeleton style={{ height: 220, borderRadius: 8 }} />
-        ) : empty ? (
-          <EmptyState
-            bare
-            title="No anomalous access signal"
-            description="No identity or source-IP activity in this scope to evaluate."
-          />
-        ) : (
+  const body = (expanded: boolean) => (
+    <Flex flexDirection="column" gap={16}>
+      <Flex alignItems="baseline" gap={6}>
+        {flaggedCount > 0 ? (
           <>
-            <Flex alignItems="baseline" gap={6}>
-              {flaggedCount > 0 ? (
-                <>
-                  <Text
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 700,
-                      color: STATUS_COLOR.warning,
-                      fontVariantNumeric: "tabular-nums",
-                      lineHeight: 1,
-                    }}
-                  >
-                    {fmtCount(flaggedCount)}
-                  </Text>
-                  <Text style={{ fontSize: 12.5, color: "var(--text-2)" }}>
-                    identities span {SPREAD_THRESHOLD}+ source IPs
-                  </Text>
-                </>
-              ) : (
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: STATUS_COLOR.good,
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  no identity IP-spread anomalies
-                </Text>
-              )}
-            </Flex>
-
-            <div
+            <Text
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-                gap: 24,
+                fontSize: 22,
+                fontWeight: 700,
+                color: STATUS_COLOR.warning,
+                fontVariantNumeric: "tabular-nums",
+                lineHeight: 1,
               }}
             >
-              <Flex flexDirection="column" gap={8}>
-                <Text style={EYEBROW}>Identities by IP spread</Text>
-                {leftItems.length === 0 ? (
-                  <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-                    No identity access data in this scope.
-                  </Text>
-                ) : (
-                  <BarList items={leftItems} color={leftColor} limit={8} />
-                )}
-              </Flex>
-
-              <Flex flexDirection="column" gap={8}>
-                <Text style={EYEBROW}>Shared source IPs</Text>
-                {rightItems.length === 0 ? (
-                  <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-                    No source IP is shared across identities.
-                  </Text>
-                ) : (
-                  <BarList items={rightItems} color={STATUS_COLOR.warning} limit={8} />
-                )}
-              </Flex>
-            </div>
+              {fmtCount(flaggedCount)}
+            </Text>
+            <Text style={{ fontSize: 12.5, color: "var(--text-2)" }}>
+              identities span {SPREAD_THRESHOLD}+ source IPs
+            </Text>
           </>
+        ) : (
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: STATUS_COLOR.good,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            no identity IP-spread anomalies
+          </Text>
         )}
       </Flex>
-    </Surface>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: 24,
+        }}
+      >
+        <Flex flexDirection="column" gap={8}>
+          <Text style={EYEBROW}>Identities by IP spread</Text>
+          {leftItems.length === 0 ? (
+            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+              No identity access data in this scope.
+            </Text>
+          ) : (
+            <BarList items={leftItems} color={leftColor} limit={expanded ? 20 : 8} />
+          )}
+        </Flex>
+
+        <Flex flexDirection="column" gap={8}>
+          <Text style={EYEBROW}>Shared source IPs</Text>
+          {rightItems.length === 0 ? (
+            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+              No source IP is shared across identities.
+            </Text>
+          ) : (
+            <BarList items={rightItems} color={STATUS_COLOR.warning} limit={expanded ? 20 : 8} />
+          )}
+        </Flex>
+      </div>
+
+      {expanded && (
+        <Flex
+          flexDirection="column"
+          gap={8}
+          style={{ paddingTop: 16, borderTop: "1px solid var(--border)" }}
+        >
+          <Text style={EYEBROW}>Full watchlist</Text>
+          {watchlist.length === 0 ? (
+            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+              No identity access data in this scope.
+            </Text>
+          ) : (
+            <DataTable columns={watchColumns} rows={watchlist} rowKey={(r) => r.identity} maxHeight={460} />
+          )}
+        </Flex>
+      )}
+    </Flex>
+  );
+
+  return (
+    <MaximizablePanel
+      title="Anomalous access watch"
+      subtitle="Identities spread across many source IPs, and IPs shared by many identities — the strongest shadow-AI / credential-abuse signal CloudTrail exposes."
+      headerRight={
+        <InfoTooltip
+          text="Flags identities whose CloudTrail sessions touched 3+ distinct source IPs, and source IPs called from by 2+ distinct identities — patterns consistent with shared/stolen credentials, shadow-AI tooling, or LLM-jacking. Correlational, not proof of compromise: investigate a flagged identity's call pattern (event names, regions, timing) before rotating credentials."
+          size={12}
+        />
+      }
+      stats={stats}
+      expanded={body(true)}
+    >
+      {initial ? (
+        <Skeleton style={{ height: 220, borderRadius: 8 }} />
+      ) : empty ? (
+        <EmptyState
+          bare
+          title="No anomalous access signal"
+          description="No identity or source-IP activity in this scope to evaluate."
+        />
+      ) : (
+        body(false)
+      )}
+    </MaximizablePanel>
   );
 };

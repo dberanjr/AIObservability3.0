@@ -5,7 +5,7 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { Sparkline } from "../../components/charts/Sparkline";
 import { EstimatedBadge } from "../../components/DetailModal";
 import { fmtUSDPrecise } from "../../data/format";
-import { useBedrockCost, useBedrockPerf } from "../../bedrock/useBedrock";
+import { useBedrockCost, useBedrockCostSpark, useBedrockPerf } from "../../bedrock/useBedrock";
 import { STATUS_COLOR } from "../../theme/statusColor";
 import type { BedrockScope } from "../../bedrock/types";
 import { computeInsights, buildInsightsInput, type Insight } from "./insights";
@@ -54,6 +54,7 @@ const InsightRow = ({ insight }: { insight: Insight }) => (
  */
 export const BedrockHero = ({ scope }: BedrockHeroProps) => {
   const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
+  const { values: sparkSeries, labels: sparkLabels } = useBedrockCostSpark(scope);
   const { rows: perfRows, isLoading: perfLoading } = useBedrockPerf(scope);
 
   const insights = useMemo(
@@ -68,7 +69,10 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
   const projected = (summary.total * 30) / dayCount;
 
   const initialLoading = (costLoading && daily.length === 0) || (perfLoading && perfRows.length === 0);
-  const sparkValues = daily.map((d) => d.actual);
+  // Finer-grained series for the spark (useBedrockCostSpark) so the trend reads
+  // smooth; fall back to the daily points until the spark query resolves.
+  const sparkValues = sparkSeries.length > 0 ? sparkSeries : daily.map((d) => d.actual);
+  const sparkDayLabels = sparkSeries.length > 0 ? sparkLabels : daily.map((d) => d.day);
 
   return (
     <Surface elevation="raised" padding={0}>
@@ -128,11 +132,11 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
           ) : (
             <Sparkline
               values={sparkValues}
-              labels={daily.map((d) => d.day)}
+              labels={sparkDayLabels}
               color="var(--blue)"
               height={32}
               valueFormatter={(n) => fmtUSDPrecise(n)}
-              ariaLabel="Daily Bedrock spend"
+              ariaLabel="Bedrock spend trend"
             />
           )}
         </Flex>

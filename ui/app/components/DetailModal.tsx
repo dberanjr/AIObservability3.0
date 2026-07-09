@@ -116,6 +116,10 @@ export interface DetailModalShellProps {
   onClose: () => void;
   /** Optional footer row (e.g. a "Filter to this" action). */
   footer?: React.ReactNode;
+  /** Max card width in px. Defaults to 640 (compact detail modals); wide
+   *  data-rich modals (e.g. the governance tile deep-dives with tables +
+   *  charts) pass a larger value like 1080. */
+  maxWidth?: number;
   children: React.ReactNode;
 }
 
@@ -130,6 +134,7 @@ export const DetailModalShell = ({
   monoTitle,
   onClose,
   footer,
+  maxWidth = 640,
   children,
 }: DetailModalShellProps) => {
   const dialogRef = React.useRef<HTMLDivElement>(null);
@@ -161,7 +166,7 @@ export const DetailModalShell = ({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
-          maxWidth: 640,
+          maxWidth,
           maxHeight: "calc(100vh - 64px)",
           background: "var(--surface)",
           borderRadius: 12,

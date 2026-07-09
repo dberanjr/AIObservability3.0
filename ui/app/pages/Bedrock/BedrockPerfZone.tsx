@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { InfoTooltip } from "../../components/InfoTooltip";
+import { MaximizablePanel } from "../../components/MaximizablePanel";
 import { CATEGORICAL } from "../../theme/palette";
 import { STATUS_COLOR } from "../../theme/statusColor";
 import { fmtCount, fmtCountCompact, fmtMs, fmtPercent } from "../../data/format";
@@ -47,7 +48,8 @@ const perfBarItems = (
  * sorted worst-first), a peak-TPM headroom gauge, and an honest errors
  * summary sourced from the log `errorCode` field (there's no dedicated
  * Bedrock error-RATE metric in this tenant — see BedrockKpiRow's Error rate
- * tile, which carries the same caveat).
+ * tile, which carries the same caveat). Wrapped in MaximizablePanel for a
+ * focused view.
  *
  * Known gap (pre-existing, not introduced here): `useBedrockPerf`'s queries
  * (`metricQueries.ts`) take only `scope.timeframe`, not the full scope — the
@@ -66,132 +68,140 @@ export const BedrockPerfZone = ({ scope }: BedrockPerfZoneProps) => {
   const overviewInitial = overviewLoading && totals.invocations === 0;
   const errorRatePct = totals.invocations > 0 ? (totals.errors / totals.invocations) * 100 : 0;
 
-  return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={16}>
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Performance by model
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Latency and time-to-first-token, worst model first — averages from cloud metrics, not
-            true percentiles (no per-invocation percentile is ingested for this tenant).
-          </Text>
+  const worstLatency = latencyItems[0];
+  const stats = [
+    ...(worstLatency
+      ? [{ label: "Worst latency model", value: worstLatency.label, sub: fmtMs(worstLatency.value) }]
+      : []),
+    { label: "Peak TPM", value: `${fmtCountCompact(tpmPeakPct)} tok/min` },
+    { label: "Errors", value: fmtCount(totals.errors) },
+  ];
+
+  const body = (expanded: boolean) => (
+    <Flex flexDirection="column" gap={16}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: 24,
+        }}
+      >
+        <Flex flexDirection="column" gap={8}>
+          <Flex alignItems="center" gap={4}>
+            <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
+              Latency by model
+            </Heading>
+            <InfoTooltip
+              text="Average per-model invocation latency (cloud.aws.bedrock.InvocationLatency.By.ModelId), highest first. Metric-average based — NOT a true percentile across individual invocations."
+              size={12}
+            />
+          </Flex>
+          {perfInitial ? (
+            <Skeleton style={{ height: 140, borderRadius: 8 }} />
+          ) : latencyItems.length === 0 ? (
+            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+              No latency metric in this scope.
+            </Text>
+          ) : (
+            <BarList items={latencyItems} color={STATUS_COLOR.info} limit={expanded ? 20 : 8} />
+          )}
         </Flex>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 24,
-          }}
-        >
-          <Flex flexDirection="column" gap={8}>
-            <Flex alignItems="center" gap={4}>
-              <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-                Latency by model
-              </Heading>
-              <InfoTooltip
-                text="Average per-model invocation latency (cloud.aws.bedrock.InvocationLatency.By.ModelId), highest first. Metric-average based — NOT a true percentile across individual invocations."
-                size={12}
-              />
-            </Flex>
-            {perfInitial ? (
-              <Skeleton style={{ height: 140, borderRadius: 8 }} />
-            ) : latencyItems.length === 0 ? (
-              <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-                No latency metric in this scope.
-              </Text>
-            ) : (
-              <BarList items={latencyItems} color={STATUS_COLOR.info} limit={8} />
-            )}
+        <Flex flexDirection="column" gap={8}>
+          <Flex alignItems="center" gap={4}>
+            <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
+              TTFT by model
+            </Heading>
+            <InfoTooltip
+              text="Average per-model time-to-first-token (cloud.aws.bedrock.TimeToFirstToken.By.ModelId), highest first."
+              size={12}
+            />
           </Flex>
+          {perfInitial ? (
+            <Skeleton style={{ height: 140, borderRadius: 8 }} />
+          ) : ttftItems.length === 0 ? (
+            <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
+              No TTFT metric in this scope.
+            </Text>
+          ) : (
+            <BarList items={ttftItems} color={CATEGORICAL[1]} limit={expanded ? 20 : 8} />
+          )}
+        </Flex>
+      </div>
 
-          <Flex flexDirection="column" gap={8}>
-            <Flex alignItems="center" gap={4}>
-              <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-                TTFT by model
-              </Heading>
-              <InfoTooltip
-                text="Average per-model time-to-first-token (cloud.aws.bedrock.TimeToFirstToken.By.ModelId), highest first."
-                size={12}
-              />
-            </Flex>
-            {perfInitial ? (
-              <Skeleton style={{ height: 140, borderRadius: 8 }} />
-            ) : ttftItems.length === 0 ? (
-              <Text style={{ fontSize: 12, color: "var(--text-3)" }}>
-                No TTFT metric in this scope.
-              </Text>
-            ) : (
-              <BarList items={ttftItems} color={CATEGORICAL[1]} limit={8} />
-            )}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: 24,
+          paddingTop: 16,
+          borderTop: "1px solid var(--border)",
+        }}
+      >
+        <Flex flexDirection="column" gap={6}>
+          <Flex alignItems="center" gap={4}>
+            <Text style={EYEBROW}>Peak TPM usage</Text>
+            <InfoTooltip
+              text="Peak estimated tokens-per-minute against the account's Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). This metric is an ABSOLUTE tokens/min rate, not a percentage — expressing it as % of quota needs the per-model quota ceiling, which isn't ingested. See the per-model breakdown in the Runtime 2.0 section below."
+              size={12}
+            />
           </Flex>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 24,
-            paddingTop: 16,
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          <Flex flexDirection="column" gap={6}>
-            <Flex alignItems="center" gap={4}>
-              <Text style={EYEBROW}>Peak TPM usage</Text>
-              <InfoTooltip
-                text="Peak estimated tokens-per-minute against the account's Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). This metric is an ABSOLUTE tokens/min rate, not a percentage — expressing it as % of quota needs the per-model quota ceiling, which isn't ingested. See the per-model breakdown in the Runtime 2.0 section below."
-                size={12}
-              />
-            </Flex>
-            {perfInitial ? (
-              <Skeleton style={{ height: 34, borderRadius: 6 }} />
-            ) : (
-              <>
-                <Text
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 600,
-                    color: "var(--text)",
-                    fontVariantNumeric: "tabular-nums",
-                    lineHeight: 1,
-                  }}
-                >
-                  {fmtCountCompact(tpmPeakPct)}{" "}
-                  <Text as="span" style={{ fontSize: 12, fontWeight: 500, color: "var(--text-3)" }}>
-                    tok/min
-                  </Text>
+          {perfInitial ? (
+            <Skeleton style={{ height: 34, borderRadius: 6 }} />
+          ) : (
+            <>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: 600,
+                  color: "var(--text)",
+                  fontVariantNumeric: "tabular-nums",
+                  lineHeight: 1,
+                }}
+              >
+                {fmtCountCompact(tpmPeakPct)}{" "}
+                <Text as="span" style={{ fontSize: 12, fontWeight: 500, color: "var(--text-3)" }}>
+                  tok/min
                 </Text>
-                <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
-                  % of quota needs the per-model ceiling (not ingested)
-                </Text>
-              </>
-            )}
-          </Flex>
-
-          <Flex flexDirection="column" gap={6}>
-            <Flex alignItems="center" gap={4}>
-              <Text style={EYEBROW}>Errors</Text>
-              <InfoTooltip
-                text="Count of invocation log rows carrying a non-null errorCode. There's no dedicated Bedrock error-rate metric in this tenant, so this is a log-derived floor, not a full error rate — see the coverage-gap finding below."
-                size={12}
-              />
-            </Flex>
-            {overviewInitial ? (
-              <Skeleton style={{ height: 34, borderRadius: 6 }} />
-            ) : (
-              <Text style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.4 }}>
-                {fmtCount(totals.errors)} errors / period ({fmtPercent(errorRatePct)} of{" "}
-                {fmtCount(totals.invocations)} invocations) · from log{" "}
-                <code style={{ fontFamily: "var(--mono, monospace)" }}>errorCode</code>; no error
-                metric in this tenant
               </Text>
-            )}
+              <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                % of quota needs the per-model ceiling (not ingested)
+              </Text>
+            </>
+          )}
+        </Flex>
+
+        <Flex flexDirection="column" gap={6}>
+          <Flex alignItems="center" gap={4}>
+            <Text style={EYEBROW}>Errors</Text>
+            <InfoTooltip
+              text="Count of invocation log rows carrying a non-null errorCode. There's no dedicated Bedrock error-rate metric in this tenant, so this is a log-derived floor, not a full error rate — see the coverage-gap finding below."
+              size={12}
+            />
           </Flex>
-        </div>
-      </Flex>
-    </Surface>
+          {overviewInitial ? (
+            <Skeleton style={{ height: 34, borderRadius: 6 }} />
+          ) : (
+            <Text style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.4 }}>
+              {fmtCount(totals.errors)} errors / period ({fmtPercent(errorRatePct)} of{" "}
+              {fmtCount(totals.invocations)} invocations) · from log{" "}
+              <code style={{ fontFamily: "var(--mono, monospace)" }}>errorCode</code>; no error
+              metric in this tenant
+            </Text>
+          )}
+        </Flex>
+      </div>
+    </Flex>
+  );
+
+  return (
+    <MaximizablePanel
+      title="Performance by model"
+      subtitle="Latency and time-to-first-token, worst model first — averages from cloud metrics, not true percentiles (no per-invocation percentile is ingested for this tenant)."
+      stats={stats}
+      expanded={body(true)}
+    >
+      {body(false)}
+    </MaximizablePanel>
   );
 };

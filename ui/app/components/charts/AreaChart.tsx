@@ -162,6 +162,15 @@ export interface AreaChartProps {
    * Chart-9).
    */
   rightAxisFromLeftMax?: (leftMax: number) => number;
+  /**
+   * Render a clickable legend below the chart: clicking a series toggles its
+   * visibility (hidden series drop out of the paths, the y-axis scale, the
+   * tooltip and the keyboard readout), so a reader can isolate one or two
+   * series for analysis. Series are keyed by `label`, so labels must be unique.
+   * When false (default) no legend is drawn — the caller renders its own static
+   * legend if it wants one.
+   */
+  interactiveLegend?: boolean;
 }
 
 // Visually-hidden but screen-reader-available. Used for the keyboard cursor
@@ -219,9 +228,13 @@ export const AreaChart = ({
   onBrushSelect,
   ariaLabel,
   rightAxisFromLeftMax,
+  interactiveLegend,
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // Series hidden via the interactive legend (keyed by label). Only consulted
+  // when `interactiveLegend` is set; otherwise every series renders.
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   // Screen-reader readout for the current keyboard cursor position. Updated
   // ONLY on key nav (never on mouse move) so a pointer sweep doesn't spam the
   // aria-live region.
@@ -267,8 +280,15 @@ export const AreaChart = ({
 
   const VIEW_W = containerWidth;
 
-  const leftSeries = series.filter((s) => (s.axis ?? "left") === "left");
-  const rightSeries = series.filter((s) => s.axis === "right");
+  // Series actually drawn: everything unless the interactive legend has hidden
+  // some. Kept separate from `series` so the x-axis length (below) and the
+  // legend itself still reference the full set.
+  const shownSeries =
+    interactiveLegend && hidden.size > 0
+      ? series.filter((s) => !hidden.has(s.label))
+      : series;
+  const leftSeries = shownSeries.filter((s) => (s.axis ?? "left") === "left");
+  const rightSeries = shownSeries.filter((s) => s.axis === "right");
   const fcList = forecasts ?? [];
   const leftForecasts = fcList.filter((f) => (f.axis ?? "left") === "left");
   const rightForecasts = fcList.filter((f) => f.axis === "right");
@@ -461,7 +481,7 @@ export const AreaChart = ({
     const parts: string[] = [];
     const xl = xLabels?.[idx];
     parts.push(xl ? xl : `Point ${idx + 1} of ${length}`);
-    for (const s of series) {
+    for (const s of shownSeries) {
       const v = s.values[idx];
       if (v == null) continue;
       parts.push(`${s.label} ${fmtForAxis(s.axis)(v)}`);
@@ -994,7 +1014,7 @@ export const AreaChart = ({
               {xLabels[hoverIdx]}
             </div>
           )}
-          {series.map((s, i) => {
+          {shownSeries.map((s, i) => {
             const v = s.values[hoverIdx];
             if (v == null) return null;
             const fmt =
@@ -1069,6 +1089,59 @@ export const AreaChart = ({
         </div>
       )}
     </div>
+    {interactiveLegend && series.length > 0 && (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
+        {series.map((s) => {
+          const isHidden = hidden.has(s.label);
+          return (
+            <button
+              key={s.label}
+              type="button"
+              aria-pressed={!isHidden}
+              title={isHidden ? `Show ${s.label}` : `Hide ${s.label}`}
+              onClick={() =>
+                setHidden((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(s.label)) next.delete(s.label);
+                  else next.add(s.label);
+                  return next;
+                })
+              }
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 4,
+                padding: "1px 2px",
+                opacity: isHidden ? 0.45 : 1,
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 11,
+                  height: 3,
+                  borderRadius: 2,
+                  background: s.color,
+                  flex: "0 0 auto",
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-3)",
+                  textDecoration: isHidden ? "line-through" : "none",
+                }}
+              >
+                {s.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    )}
     {/* Keyboard-cursor readout. Sibling of the role="img" chart (an img is a
         leaf, so a nested live region would be ignored by AT); only populated on
         key nav, so pointer users never trigger an announcement. */}

@@ -15,7 +15,7 @@ import { useScope } from "../scope/ScopeContext";
 import { toNum } from "../data/format";
 import type { Timeframe } from "../scope/types";
 import type { BedrockScope } from "./types";
-import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery, buildAccountModelQuery, buildBedrockFacetsQuery } from "./queries";
+import { buildBedrockOverviewQuery, buildBedrockDailyCostQuery, buildAgentSessionsQuery, buildAccountModelQuery, buildBedrockFacetsQuery, bedrockSparkIntervalSec } from "./queries";
 import { buildBedrockPerfByModelQuery, buildBedrockTpmQuery } from "./metricQueries";
 import { parseOverview, parseAgentSessions, parsePerfByModel, parseAccountCost, parseFacets, aggregatePerfSeries, type OverviewTotals, type AgentSessionRow, type PerfByModelRow, type AccountCostRow, type BedrockFacets } from "./parse";
 import { foldDailyCost, type BedrockDailyCostPoint } from "./series";
@@ -63,6 +63,27 @@ export const useBedrockCost = (
   return useMemo(() => {
     const { daily, summary } = foldDailyCost(res.data?.records ?? []);
     return { daily, summary, isLoading: res.isLoading };
+  }, [res.data, res.isLoading]);
+};
+
+/** Finer-grained cost series for the Total Spend hero sparkline only — same
+ *  fold as {@link useBedrockCost} but at {@link bedrockSparkIntervalSec} so the
+ *  spark reads as a smooth trend, independent of the (coarser, daily) cost bar
+ *  chart. Returns just the per-bucket actual spend + day labels. */
+export const useBedrockCostSpark = (
+  scope: BedrockScope,
+): { values: number[]; labels: string[]; isLoading: boolean } => {
+  const res = useScopedDql<ResultRecord>(
+    buildBedrockDailyCostQuery(scope, bedrockSparkIntervalSec(scope.timeframe.from)),
+    IGNORE,
+  );
+  return useMemo(() => {
+    const { daily } = foldDailyCost(res.data?.records ?? []);
+    return {
+      values: daily.map((d) => d.actual),
+      labels: daily.map((d) => d.day),
+      isLoading: res.isLoading,
+    };
   }, [res.data, res.isLoading]);
 };
 

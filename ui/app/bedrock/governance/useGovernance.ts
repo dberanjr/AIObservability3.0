@@ -39,6 +39,15 @@ import {
   parseReconciliation,
   foldGovTimeseries,
 } from "./parse";
+import {
+  buildExfilByDestinationQuery,
+  buildExfilActorsQuery,
+  buildExfilTimeseriesQuery,
+  buildExfilDetailQuery,
+  parseExfilDestinations,
+  parseExfilActors,
+  parseExfilDetail,
+} from "./exfiltration";
 
 const IGNORE = {
   ignoreGlobalFilter: true,
@@ -128,6 +137,29 @@ export const useGovControlPlane = (s: GovScope) => {
   return useMemo(
     () => ({ rows: parseControlPlane(recs(res.data)), isLoading: res.isLoading }),
     [res.data, res.isLoading],
+  );
+};
+
+/**
+ * Cross-region / data-exfiltration deep-dive — the four datasets behind the
+ * Cross-region tile modal: per-destination-country breakdown, the actors
+ * driving out-of-country inference (with client classification), the
+ * out-of-country-vs-same-country timeline, and the raw per-call detail list.
+ */
+export const useExfiltration = (s: GovScope) => {
+  const dest = useScopedDql<ResultRecord>(buildExfilByDestinationQuery(s), IGNORE);
+  const actors = useScopedDql<ResultRecord>(buildExfilActorsQuery(s), IGNORE);
+  const series = useScopedDql<ResultRecord>(buildExfilTimeseriesQuery(s), IGNORE);
+  const detail = useScopedDql<ResultRecord>(buildExfilDetailQuery(s), IGNORE);
+  return useMemo(
+    () => ({
+      destinations: parseExfilDestinations(recs(dest.data)),
+      actors: parseExfilActors(recs(actors.data)),
+      timeseries: foldGovTimeseries(recs(series.data), "calls", "category"),
+      detail: parseExfilDetail(recs(detail.data)),
+      isLoading: dest.isLoading || actors.isLoading || series.isLoading || detail.isLoading,
+    }),
+    [dest.data, dest.isLoading, actors.data, actors.isLoading, series.data, series.isLoading, detail.data, detail.isLoading],
   );
 };
 

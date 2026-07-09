@@ -1,14 +1,16 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Heading } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { AreaChart } from "../../../components/charts/AreaChart";
 import { EmptyState } from "../../../components/EmptyState";
+import { MaximizablePanel } from "../../../components/MaximizablePanel";
+import { DataTable, type DataColumn } from "../../../components/DataTable";
 import { CATEGORICAL } from "../../../theme/palette";
 import { STATUS_COLOR } from "../../../theme/statusColor";
 import { fmtCount } from "../../../data/format";
 import { useGovErrorsSeries, useGovControlPlane } from "../../../bedrock/governance/useGovernance";
-import type { GovScope } from "../../../bedrock/governance/types";
+import type { GovScope, ControlPlaneRow } from "../../../bedrock/governance/types";
 
 export interface GovSecurityDetailProps {
   scope: GovScope;
@@ -34,40 +36,28 @@ const buildAxisTicks = (labels: string[]): { index: number; label: string }[] =>
     .filter((_, i) => i % step === 0);
 };
 
-const TH_STYLE: React.CSSProperties = {
-  textAlign: "left",
-  fontSize: 11,
-  fontWeight: 600,
-  color: "var(--text-3)",
-  padding: "0 8px 6px 8px",
-  borderBottom: "1px solid var(--border)",
-  whiteSpace: "nowrap",
-};
+const SUBHEAD: React.CSSProperties = { fontSize: 12.5, fontWeight: 600 };
 
-const TD_STYLE: React.CSSProperties = {
-  fontSize: 12,
-  padding: "6px 8px",
-  borderBottom: "1px solid var(--border)",
-  verticalAlign: "middle",
-};
-
-const truncateStyle: React.CSSProperties = {
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  maxWidth: 160,
-  display: "inline-block",
-  verticalAlign: "bottom",
-};
+const controlColumns: DataColumn<ControlPlaneRow>[] = [
+  { key: "time", header: "Time", render: (r) => fmtTimestamp(r.timestamp), width: 110 },
+  { key: "action", header: "Action", render: (r) => r.eventName || "—", width: 220 },
+  // "Identity/Account", shown in FULL (noTruncate) per request — resize/wrap
+  // keeps it inside the column instead of clipping with an ellipsis.
+  { key: "identity", header: "Identity/Account", render: (r) => r.identity || "—", mono: true, noTruncate: true, width: 260 },
+  { key: "region", header: "Region", render: (r) => r.region || "—", width: 120 },
+  { key: "ip", header: "Source IP", render: (r) => r.sourceIp || "—", mono: true, width: 160 },
+];
 
 /**
  * Errors & control-plane changes (D8 detail): left half plots the
  * `errorCode`-grouped denial/error timeseries (AreaChart, one series per
- * distinct error code, sorted busiest-first by `foldGovTimeseries`); right
- * half lists the raw control-plane WRITE events (`readOnly=false` CloudTrail
- * rows, e.g. StartIngestionJob) — the audit trail of configuration changes
- * to Bedrock resources, as opposed to the data-plane invocation traffic
- * shown elsewhere on this tab.
+ * distinct error code, sorted busiest-first by `foldGovTimeseries`), with an
+ * interactive legend (click a series to isolate it); right half lists the raw
+ * control-plane WRITE events (`readOnly=false` CloudTrail rows, e.g.
+ * StartIngestionJob) in a resizable DataTable — the audit trail of
+ * configuration changes to Bedrock resources, as opposed to the data-plane
+ * invocation traffic shown elsewhere on this tab. Wrapped in MaximizablePanel
+ * for a full-screen focused view.
  */
 export const GovSecurityDetail = ({ scope }: GovSecurityDetailProps) => {
   const { timeseries, isLoading: errorsLoading } = useGovErrorsSeries(scope);
@@ -88,143 +78,94 @@ export const GovSecurityDetail = ({ scope }: GovSecurityDetailProps) => {
   const errorsInitial = errorsLoading && timeseries.series.length === 0;
   const controlInitial = controlLoading && rows.length === 0;
 
-  return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={16}>
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Errors & control-plane changes
+  const totalErrors = useMemo(
+    () => timeseries.series.reduce((sum, s) => sum + s.values.reduce((a, b) => a + b, 0), 0),
+    [timeseries.series],
+  );
+  const stats = [
+    { label: "Total errors", value: fmtCount(totalErrors) },
+    { label: "Error codes", value: fmtCount(areaSeries.length) },
+    { label: "Control-plane events", value: fmtCount(rows.length) },
+  ];
+
+  const body = (expanded: boolean) => {
+    const chartH = expanded ? 320 : 200;
+    const tableH = expanded ? 460 : 220;
+    return (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: 24,
+        }}
+      >
+        <Flex flexDirection="column" gap={8}>
+          <Heading level={4} style={SUBHEAD}>
+            Errors & denials over time
           </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Denial/error trend by error code, plus the raw audit trail of Bedrock
-            configuration-changing API calls in scope.
-          </Text>
+          {errorsInitial ? (
+            <Skeleton style={{ height: chartH, borderRadius: 8 }} />
+          ) : areaSeries.length === 0 ? (
+            <EmptyState
+              bare
+              title="No errors in this window"
+              description={
+                <>
+                  No CloudTrail rows carrying an error code were found in the
+                  current scope —{" "}
+                  <span style={{ color: STATUS_COLOR.good, fontWeight: 600 }}>
+                    a clean signal
+                  </span>
+                  , not a data gap.
+                </>
+              }
+            />
+          ) : (
+            <AreaChart
+              series={areaSeries}
+              height={chartH}
+              formatLeft={fmtCount}
+              xLabels={timeseries.labels}
+              axisTicks={axisTicks}
+              ariaLabel="Errors and denials over time by error code"
+              interactiveLegend
+            />
+          )}
         </Flex>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 24,
-          }}
-        >
-          <Flex flexDirection="column" gap={8}>
-            <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-              Errors & denials over time
-            </Heading>
-            {errorsInitial ? (
-              <Skeleton style={{ height: 200, borderRadius: 8 }} />
-            ) : areaSeries.length === 0 ? (
-              <EmptyState
-                bare
-                title="No errors in this window"
-                description={
-                  <>
-                    No CloudTrail rows carrying an error code were found in the
-                    current scope —{" "}
-                    <span style={{ color: STATUS_COLOR.good, fontWeight: 600 }}>
-                      a clean signal
-                    </span>
-                    , not a data gap.
-                  </>
-                }
-              />
-            ) : (
-              <>
-                <AreaChart
-                  series={areaSeries}
-                  height={200}
-                  formatLeft={fmtCount}
-                  xLabels={timeseries.labels}
-                  axisTicks={axisTicks}
-                  ariaLabel="Errors and denials over time by error code"
-                />
-                <Flex gap={12} style={{ flexWrap: "wrap" }}>
-                  {areaSeries.map((s) => (
-                    <Flex key={s.key} alignItems="center" gap={4}>
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 2,
-                          background: s.color,
-                          flex: "0 0 auto",
-                        }}
-                      />
-                      <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{s.label}</Text>
-                    </Flex>
-                  ))}
-                </Flex>
-              </>
-            )}
-          </Flex>
+        <Flex flexDirection="column" gap={8}>
+          <Heading level={4} style={SUBHEAD}>
+            Control-plane changes (write events)
+          </Heading>
+          {controlInitial ? (
+            <Skeleton style={{ height: chartH, borderRadius: 8 }} />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              bare
+              title="No control-plane write events"
+              description="No configuration-changing Bedrock API calls in scope."
+            />
+          ) : (
+            <DataTable
+              columns={controlColumns}
+              rows={rows}
+              rowKey={(r, i) => `${r.timestamp}-${r.identity}-${i}`}
+              maxHeight={tableH}
+            />
+          )}
+        </Flex>
+      </div>
+    );
+  };
 
-          <Flex flexDirection="column" gap={8}>
-            <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-              Control-plane changes (write events)
-            </Heading>
-            {controlInitial ? (
-              <Skeleton style={{ height: 200, borderRadius: 8 }} />
-            ) : rows.length === 0 ? (
-              <EmptyState
-                bare
-                title="No control-plane write events"
-                description="No configuration-changing Bedrock API calls in scope."
-              />
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr>
-                      <th style={TH_STYLE}>Time</th>
-                      <th style={TH_STYLE}>Action</th>
-                      <th style={TH_STYLE}>Identity</th>
-                      <th style={TH_STYLE}>Region</th>
-                      <th style={TH_STYLE}>Source IP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={`${r.timestamp}-${r.identity}-${i}`}>
-                        <td
-                          style={{
-                            ...TD_STYLE,
-                            fontVariantNumeric: "tabular-nums",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {fmtTimestamp(r.timestamp)}
-                        </td>
-                        <td style={TD_STYLE} title={r.eventName}>
-                          <span style={truncateStyle}>{r.eventName || "—"}</span>
-                        </td>
-                        <td style={TD_STYLE} title={r.identity}>
-                          <span
-                            style={{ ...truncateStyle, fontFamily: "var(--mono, monospace)" }}
-                          >
-                            {r.identity || "—"}
-                          </span>
-                        </td>
-                        <td style={TD_STYLE} title={r.region}>
-                          <span style={truncateStyle}>{r.region || "—"}</span>
-                        </td>
-                        <td style={TD_STYLE} title={r.sourceIp}>
-                          <span
-                            style={{ ...truncateStyle, fontFamily: "var(--mono, monospace)" }}
-                          >
-                            {r.sourceIp || "—"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Flex>
-        </div>
-      </Flex>
-    </Surface>
+  return (
+    <MaximizablePanel
+      title="Errors & control-plane changes"
+      subtitle="Denial/error trend by error code, plus the raw audit trail of Bedrock configuration-changing API calls in scope."
+      stats={stats}
+      expanded={body(true)}
+    >
+      {body(false)}
+    </MaximizablePanel>
   );
 };

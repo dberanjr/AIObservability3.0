@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
-import { Heading, Text } from "@dynatrace/strato-components/typography";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { EmptyState } from "../../../components/EmptyState";
-import { InfoTooltip } from "../../../components/InfoTooltip";
+import { MaximizablePanel } from "../../../components/MaximizablePanel";
+import { DataTable, type DataColumn } from "../../../components/DataTable";
 import { CATEGORICAL } from "../../../theme/palette";
 import { STATUS_COLOR } from "../../../theme/statusColor";
 import { fmtCount, fmtPercent } from "../../../data/format";
@@ -78,6 +79,15 @@ const CompareBar = ({
 const rowsByCallsDesc = (rows: AccountRegionRow[]): AccountRegionRow[] =>
   [...rows].sort((a, b) => b.calls - a.calls);
 
+const accountColumns: DataColumn<AccountRegionRow>[] = [
+  // Full account id shown untruncated per request — resize/wrap keeps it
+  // inside the column instead of clipping with an ellipsis.
+  { key: "account", header: "Account", render: (r) => r.accountId || "—", mono: true, noTruncate: true, width: 200 },
+  { key: "region", header: "Region", render: (r) => r.region || "—", width: 140 },
+  { key: "calls", header: "Calls", render: (r) => fmtCount(r.calls), align: "right", width: 110 },
+  { key: "identities", header: "Identities", render: (r) => fmtCount(r.identities), align: "right", width: 120 },
+];
+
 /**
  * Access & Governance reconciliation card (D-band): the bridge that proves
  * CloudTrail (the invoke-API call record) and ModelInvocationLog (the metered
@@ -85,7 +95,9 @@ const rowsByCallsDesc = (rows: AccountRegionRow[]): AccountRegionRow[] =>
  * calls Bedrock accepted that never made it into the metering log, which
  * would silently under-count cost/token telemetry everywhere else in this
  * app. Below the headline, an account/region breakdown of raw CloudTrail
- * call volume gives the gap a "where" to start investigating.
+ * call volume gives the gap a "where" to start investigating. Wrapped in
+ * MaximizablePanel for a full-screen focused view; the account/region
+ * breakdown uses the resizable DataTable with the full account id shown.
  */
 export const GovReconciliation = ({ scope }: GovReconciliationProps) => {
   const { reconciliation, accountRegion, isLoading } = useGovReconciliation(scope);
@@ -105,26 +117,17 @@ export const GovReconciliation = ({ scope }: GovReconciliationProps) => {
   const maxVal = Math.max(1, ctVal, logVal);
   const hasReconciliation = ctVal > 0 || logVal > 0;
 
-  return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={16}>
-        <Flex flexDirection="column" gap={2}>
-          <Flex alignItems="center" gap={4}>
-            <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-              Logging coverage (CloudTrail vs metering)
-            </Heading>
-            <InfoTooltip
-              text="CloudTrail records the invoke API call; ModelInvocationLog records the metered invocation. A gap means calls happened that the metering log didn't capture — a logging blind spot."
-              size={12}
-            />
-          </Flex>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            CloudTrail records the invoke API call; ModelInvocationLog records the metered
-            invocation. A gap means calls happened that the metering log didn't capture — a
-            logging blind spot.
-          </Text>
-        </Flex>
+  const stats = [
+    { label: "CloudTrail invokes", value: fmtCount(ctVal) },
+    { label: "Metering count", value: fmtCount(logVal) },
+    { label: "Gap", value: fmtCount(gap) },
+    { label: "Coverage", value: fmtPercent(coveragePct) },
+  ];
 
+  const body = (expanded: boolean) => {
+    const tableH = expanded ? 460 : 220;
+    return (
+      <Flex flexDirection="column" gap={16}>
         {initial ? (
           <Skeleton style={{ height: 180, borderRadius: 8 }} />
         ) : !hasReconciliation ? (
@@ -183,117 +186,26 @@ export const GovReconciliation = ({ scope }: GovReconciliationProps) => {
               description="No CloudTrail rows carried an account and region in the current scope."
             />
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "6px 8px",
-                        color: "var(--text-3)",
-                        fontWeight: 600,
-                        fontSize: 11,
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
-                      Account
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "6px 8px",
-                        color: "var(--text-3)",
-                        fontWeight: 600,
-                        fontSize: 11,
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
-                      Region
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "right",
-                        padding: "6px 8px",
-                        color: "var(--text-3)",
-                        fontWeight: 600,
-                        fontSize: 11,
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
-                      Calls
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "right",
-                        padding: "6px 8px",
-                        color: "var(--text-3)",
-                        fontWeight: 600,
-                        fontSize: 11,
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
-                      Identities
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {acctRows.map((r) => (
-                    <tr key={`${r.accountId}-${r.region}`}>
-                      <td
-                        title={r.accountId}
-                        style={{
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--border)",
-                          fontFamily: "var(--mono, monospace)",
-                          color: "var(--text)",
-                          maxWidth: 180,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {r.accountId}
-                      </td>
-                      <td
-                        style={{
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--border)",
-                          color: "var(--text-2)",
-                        }}
-                      >
-                        {r.region}
-                      </td>
-                      <td
-                        style={{
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--border)",
-                          textAlign: "right",
-                          fontVariantNumeric: "tabular-nums",
-                          color: "var(--text)",
-                        }}
-                      >
-                        {fmtCount(r.calls)}
-                      </td>
-                      <td
-                        style={{
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--border)",
-                          textAlign: "right",
-                          fontVariantNumeric: "tabular-nums",
-                          color: "var(--text-2)",
-                        }}
-                      >
-                        {fmtCount(r.identities)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={accountColumns}
+              rows={acctRows}
+              rowKey={(r) => `${r.accountId}-${r.region}`}
+              maxHeight={tableH}
+            />
           )}
         </Flex>
       </Flex>
-    </Surface>
+    );
+  };
+
+  return (
+    <MaximizablePanel
+      title="Logging coverage (CloudTrail vs metering)"
+      subtitle="CloudTrail records the invoke API call; ModelInvocationLog records the metered invocation. A gap means calls happened that the metering log didn't capture — a logging blind spot."
+      stats={stats}
+      expanded={body(true)}
+    >
+      {body(false)}
+    </MaximizablePanel>
   );
 };

@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { AreaChart, type AxisTick } from "../../components/charts/AreaChart";
 import { EmptyState } from "../../components/EmptyState";
+import { MaximizablePanel } from "../../components/MaximizablePanel";
 import { CATEGORICAL } from "../../theme/palette";
 import { STATUS_COLOR } from "../../theme/statusColor";
 import { fmtMs } from "../../data/format";
@@ -25,25 +26,19 @@ const sampleAxisTicks = (labels: string[]): AxisTick[] => {
     .filter((_, i) => i % step === 0);
 };
 
-const LEGEND: Array<{ key: keyof Omit<MetricBands, "labels">; label: string; color: string }> = [
-  { key: "max", label: "max", color: CATEGORICAL[5] },
-  { key: "avg", label: "avg", color: STATUS_COLOR.info },
-  { key: "min", label: "min", color: CATEGORICAL[2] },
-];
+/** Mean of a numeric array, ignoring NaN/empty input (0 when nothing to average). */
+const mean = (values: number[]): number => {
+  const finite = values.filter((v) => Number.isFinite(v));
+  if (finite.length === 0) return 0;
+  return finite.reduce((sum, v) => sum + v, 0) / finite.length;
+};
 
-const Legend = () => (
-  <Flex gap={12} style={{ flexWrap: "wrap" }}>
-    {LEGEND.map((l) => (
-      <Flex key={l.key} alignItems="center" gap={4}>
-        <span
-          aria-hidden
-          style={{ width: 8, height: 8, borderRadius: 2, background: l.color, flex: "0 0 auto" }}
-        />
-        <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{l.label}</Text>
-      </Flex>
-    ))}
-  </Flex>
-);
+/** Max of a numeric array, ignoring NaN/empty input (0 when nothing to compare). */
+const maxOf = (values: number[]): number => {
+  const finite = values.filter((v) => Number.isFinite(v));
+  if (finite.length === 0) return 0;
+  return Math.max(...finite);
+};
 
 /**
  * One trend chart for a min/avg/max metric band. Series are drawn in
@@ -55,11 +50,13 @@ const BandChart = ({
   title,
   description,
   ariaLabel,
+  height,
 }: {
   bands: MetricBands;
   title: string;
   description: string;
   ariaLabel: string;
+  height: number;
 }) => {
   const axisTicks = useMemo(() => sampleAxisTicks(bands.labels), [bands.labels]);
 
@@ -72,18 +69,18 @@ const BandChart = ({
         <Text style={{ fontSize: 11, color: "var(--text-3)" }}>{description}</Text>
       </Flex>
       <AreaChart
-        height={200}
+        height={height}
         formatLeft={fmtMs}
         xLabels={bands.labels}
         axisTicks={axisTicks}
         ariaLabel={ariaLabel}
+        interactiveLegend
         series={[
           { values: bands.max, color: CATEGORICAL[5], label: "max" },
           { values: bands.avg, color: STATUS_COLOR.info, label: "avg" },
           { values: bands.min, color: CATEGORICAL[2], label: "min" },
         ]}
       />
-      <Legend />
     </Flex>
   );
 };
@@ -104,74 +101,87 @@ export const BedrockLatencyTrends = ({ scope }: BedrockLatencyTrendsProps) => {
   const ttftEmpty = ttft.avg.length === 0 && ttft.max.length === 0 && ttft.min.length === 0;
   const bothEmpty = latencyEmpty && ttftEmpty;
 
-  return (
-    <Surface elevation="raised" padding={16}>
-      <Flex flexDirection="column" gap={16}>
-        <Flex flexDirection="column" gap={2}>
-          <Heading level={3} style={{ fontSize: 14, fontWeight: 600 }}>
-            Latency & time-to-first-token trends
-          </Heading>
-          <Text style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-            Min / average / max over time, from cloud metric bucket statistics (not per-invocation
-            percentiles).
-          </Text>
-        </Flex>
+  const stats = [
+    { label: "Avg latency", value: fmtMs(mean(latency.avg)) },
+    { label: "Max latency", value: fmtMs(maxOf(latency.max)) },
+    { label: "Avg time to first token", value: fmtMs(mean(ttft.avg)) },
+  ];
 
-        {initialLoading ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-              gap: 24,
-            }}
-          >
-            <Skeleton style={{ height: 260, borderRadius: 8 }} />
-            <Skeleton style={{ height: 260, borderRadius: 8 }} />
-          </div>
-        ) : bothEmpty ? (
-          <EmptyState bare title="No latency metric in scope" />
+  const body = (expanded: boolean) => {
+    const chartH = expanded ? 320 : 200;
+
+    if (initialLoading) {
+      return (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+            gap: 24,
+          }}
+        >
+          <Skeleton style={{ height: chartH + 60, borderRadius: 8 }} />
+          <Skeleton style={{ height: chartH + 60, borderRadius: 8 }} />
+        </div>
+      );
+    }
+
+    if (bothEmpty) {
+      return <EmptyState bare title="No latency metric in scope" />;
+    }
+
+    return (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gap: 24,
+        }}
+      >
+        {latencyEmpty ? (
+          <Flex flexDirection="column" gap={8}>
+            <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
+              Invocation latency
+            </Heading>
+            <EmptyState bare title="No latency metric in scope" />
+          </Flex>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-              gap: 24,
-            }}
-          >
-            {latencyEmpty ? (
-              <Flex flexDirection="column" gap={8}>
-                <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-                  Invocation latency
-                </Heading>
-                <EmptyState bare title="No latency metric in scope" />
-              </Flex>
-            ) : (
-              <BandChart
-                bands={latency}
-                title="Invocation latency"
-                description="cloud.aws.bedrock.InvocationLatency — min / avg / max per bucket"
-                ariaLabel="Invocation latency min, average, and max over time"
-              />
-            )}
-
-            {ttftEmpty ? (
-              <Flex flexDirection="column" gap={8}>
-                <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
-                  Time to first token
-                </Heading>
-                <EmptyState bare title="No TTFT metric in scope" />
-              </Flex>
-            ) : (
-              <BandChart
-                bands={ttft}
-                title="Time to first token"
-                description="cloud.aws.bedrock.TimeToFirstToken — min / avg / max per bucket"
-                ariaLabel="Time to first token min, average, and max over time"
-              />
-            )}
-          </div>
+          <BandChart
+            bands={latency}
+            title="Invocation latency"
+            description="cloud.aws.bedrock.InvocationLatency — min / avg / max per bucket"
+            ariaLabel="Invocation latency min, average, and max over time"
+            height={chartH}
+          />
         )}
-      </Flex>
-    </Surface>
+
+        {ttftEmpty ? (
+          <Flex flexDirection="column" gap={8}>
+            <Heading level={4} style={{ fontSize: 12.5, fontWeight: 600 }}>
+              Time to first token
+            </Heading>
+            <EmptyState bare title="No TTFT metric in scope" />
+          </Flex>
+        ) : (
+          <BandChart
+            bands={ttft}
+            title="Time to first token"
+            description="cloud.aws.bedrock.TimeToFirstToken — min / avg / max per bucket"
+            ariaLabel="Time to first token min, average, and max over time"
+            height={chartH}
+          />
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <MaximizablePanel
+      title="Latency & time-to-first-token trends"
+      subtitle="Min / average / max over time, from cloud metric bucket statistics (not per-invocation percentiles)."
+      stats={stats}
+      expanded={body(true)}
+    >
+      {body(false)}
+    </MaximizablePanel>
   );
 };

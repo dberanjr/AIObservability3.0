@@ -106,11 +106,21 @@ export const parseTpmByModel = (records: Rec[]): TpmModelRow[] =>
 export interface LogDelivery {
   total: number;
   values: number[];
+  /** Per-bucket time labels ("M/D" for day+ buckets, "M/D HH:MM" sub-day). */
+  labels: string[];
 }
 
 export const parseLogDelivery = (records: Rec[]): LogDelivery => {
-  const values = arr(records[0]?.delivered);
-  return { total: values.reduce((s, v) => s + v, 0), values };
+  const r = records[0] ?? {};
+  const values = arr(r.delivered);
+  const tf = r.timeframe as TimeframeLike | undefined;
+  const startMs = tf?.start != null ? Date.parse(String(tf.start)) : NaN;
+  const intervalMs = r.interval != null ? Number(r.interval) / 1e6 : NaN;
+  const hasAxis = Number.isFinite(startMs) && Number.isFinite(intervalMs);
+  const labels = values.map((_, i) =>
+    hasAxis ? bucketLabel(startMs + i * intervalMs, intervalMs) : String(i),
+  );
+  return { total: values.reduce((s, v) => s + v, 0), values, labels };
 };
 
 export interface MetricBands {
