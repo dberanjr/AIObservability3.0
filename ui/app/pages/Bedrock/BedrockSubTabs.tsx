@@ -47,12 +47,13 @@ export const BedrockSubTabs = ({ value, onChange }: BedrockSubTabsProps) => (
             cursor: "pointer",
             padding: "6px 16px",
             borderRadius: 999,
+            border: active ? "1px solid var(--blue)" : "1px solid transparent",
             fontSize: 12.5,
             fontWeight: active ? 600 : 500,
             color: active ? "var(--text)" : "var(--text-2)",
             background: active ? "var(--surface)" : "transparent",
             boxShadow: active ? "var(--shadow, 0 1px 3px rgba(0,0,0,0.12))" : undefined,
-            transition: "background 120ms ease, color 120ms ease",
+            transition: "background 120ms ease, color 120ms ease, border-color 120ms ease",
           }}
         >
           <Text as="span" style={{ fontSize: 12.5, fontWeight: active ? 600 : 500, color: "inherit" }}>
