@@ -11,6 +11,9 @@ export interface ScopeSelectorsProps {
   models: string[];
   setAccounts: React.Dispatch<React.SetStateAction<string[]>>;
   setModels: React.Dispatch<React.SetStateAction<string[]>>;
+  /** Hide the Model picker (governance / CloudTrail has no per-model
+   *  dimension). Account + timeframe stay shared across sub-tabs. */
+  showModel?: boolean;
 }
 
 interface PickerOption {
@@ -216,6 +219,7 @@ export const ScopeSelectors = ({
   models,
   setAccounts,
   setModels,
+  showModel = true,
 }: ScopeSelectorsProps) => {
   const { accounts: accountOpts, modelGroups, isLoading } = useBedrockFacets(timeframe);
 
@@ -255,14 +259,16 @@ export const ScopeSelectors = ({
         isLoading={isLoading}
         emptyHint="No accounts found in this timeframe."
       />
-      <Picker
-        label="Model"
-        options={modelOptions}
-        selected={selectedModelLabels}
-        onChange={handleModelChange}
-        isLoading={isLoading}
-        emptyHint="No models found in this timeframe."
-      />
+      {showModel && (
+        <Picker
+          label="Model"
+          options={modelOptions}
+          selected={selectedModelLabels}
+          onChange={handleModelChange}
+          isLoading={isLoading}
+          emptyHint="No models found in this timeframe."
+        />
+      )}
     </Flex>
   );
 };

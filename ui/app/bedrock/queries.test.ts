@@ -32,21 +32,23 @@ describe("buildBedrockOverviewQuery", () => {
 });
 
 describe("bedrockCostIntervalSec", () => {
-  // The interval ladder: shortest scopes get minute-level resolution, the
-  // longest get day-level, so the chart is never a single collapsed bucket
-  // (sub-day scope). 1h buckets run up to 14 days; 14 days or more use 1d.
-  // Expressed in SECONDS — DQL's `m` duration unit is ambiguous between
-  // minutes and months, so the app never emits `1m`.
+  // The interval ladder is tuned to keep column count roughly ≤ 30–48 so bars
+  // never overflow the container and axis labels stay readable: sub-day scopes
+  // keep intraday shape, but anything ≥ ~4 days folds to DAILY buckets (a 7-day
+  // scope → 7 columns, a 30-day scope → 30). A prior ladder used 1h buckets up
+  // to 14 days, turning 7 days into 168 overflowing columns.
+  // Expressed in SECONDS — DQL's `m` duration unit is ambiguous between minutes
+  // and months, so the app never emits `1m`.
   it.each([
-    ["now()-1h", 60],
-    ["now()-2h", 60],
-    ["now()-6h", 300],
-    ["now()-12h", 900],
-    ["now()-18h", 1800],
+    ["now()-1h", 300],
+    ["now()-2h", 300],
+    ["now()-6h", 1800],
+    ["now()-12h", 1800],
+    ["now()-18h", 3600],
     ["now()-24h", 3600],
-    ["now()-72h", 3600],
-    ["now()-7d", 3600],
-    ["now()-13d", 3600],
+    ["now()-72h", 21600],
+    ["now()-7d", 86400],
+    ["now()-13d", 86400],
     ["now()-14d", 86400],
     ["now()-30d", 86400],
     ["now()-90d", 86400],
@@ -56,21 +58,21 @@ describe("bedrockCostIntervalSec", () => {
 });
 
 describe("buildBedrockDailyCostQuery", () => {
-  it("makes a per-model token timeseries bucketed to the adaptive interval for a 7d scope (1h buckets)", () => {
-    const q = buildBedrockDailyCostQuery(scope);
+  it("makes a per-model token timeseries bucketed to the adaptive interval for a 24h scope (1h buckets)", () => {
+    const q = buildBedrockDailyCostQuery({ ...scope, timeframe: { from: "now()-24h", to: "now()" } });
     expect(q).toContain("makeTimeseries");
     expect(q).toContain("interval: 3600s");
     expect(q).toContain("by:");
   });
 
-  it("switches to 1-day buckets for a scope of 14 days or more", () => {
-    const q = buildBedrockDailyCostQuery({ ...scope, timeframe: { from: "now()-30d", to: "now()" } });
+  it("folds a 7-day scope to 1-day buckets (7 readable columns, no overflow)", () => {
+    const q = buildBedrockDailyCostQuery(scope);
     expect(q).toContain("interval: 86400s");
   });
 
   it("narrows the bucket for a short (1h) scope instead of always using 1 day", () => {
     const q = buildBedrockDailyCostQuery({ ...scope, timeframe: { from: "now()-1h", to: "now()" } });
-    expect(q).toContain("interval: 60s");
+    expect(q).toContain("interval: 300s");
   });
 });
 

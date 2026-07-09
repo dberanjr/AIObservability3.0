@@ -46,23 +46,24 @@ const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Adaptive bucket width (seconds) for the daily-cost chart, keyed off the
- * scope's `from` expression via {@link parseScopeMs}. A fixed `interval: 1d`
- * collapsed every sub-day scope into a single bucket (the chart went blank
- * for a 1h or 6h window) while still being too coarse to show intraday
- * shape for a several-hour incident window. This ladder snaps to a bucket
- * that keeps the chart legible from a 1-hour scope up through a 90-day one.
- * Always expressed in SECONDS — DQL's `m` duration unit is ambiguous
- * between minutes and months, so this (like the rest of the app) never
- * emits a bare `1m`.
+ * scope's `from` expression via {@link parseScopeMs}. Tuned to keep the column
+ * count roughly ≤ 30–48 across every window so the bars never overflow the
+ * container (each column has a 4px min width) and the x-axis labels stay
+ * readable: multi-day windows fold to DAILY buckets (a 7-day scope → 7 columns
+ * labelled M/D, a 30-day scope → 30), while sub-day windows keep intraday shape.
+ * A prior ladder used 1h buckets for anything under 14 days, which turned a
+ * 7-day scope into 168 unreadable, overflowing hourly columns.
+ *
+ * Always expressed in SECONDS — DQL's `m` duration unit is ambiguous between
+ * minutes and months, so this (like the rest of the app) never emits a bare `1m`.
  */
 export const bedrockCostIntervalSec = (from: string): number => {
   const ms = parseScopeMs(from);
-  if (ms <= 2 * HOUR_MS) return 60; // 1m
-  if (ms <= 6 * HOUR_MS) return 300; // 5m
-  if (ms <= 12 * HOUR_MS) return 900; // 15m
-  if (ms < DAY_MS) return 1800; // 30m
-  if (ms < 14 * DAY_MS) return 3600; // 1h — up to 14 days
-  return 86400; // 1d — 14 days or more
+  if (ms <= 2 * HOUR_MS) return 300; // 5m — ≤24 cols up to 2h
+  if (ms <= 12 * HOUR_MS) return 1800; // 30m — ≤24 cols up to 12h
+  if (ms < 2 * DAY_MS) return 3600; // 1h — 24 cols at 1d, ≤48 up to 2d
+  if (ms < 4 * DAY_MS) return 6 * 3600; // 6h — ≤16 cols for 2–4 day windows
+  return 86400; // 1d — 7d → 7 cols, 30d → 30, 90d → 90 (labels thinned)
 };
 
 export const buildBedrockDailyCostQuery = (s: BedrockScope): string =>

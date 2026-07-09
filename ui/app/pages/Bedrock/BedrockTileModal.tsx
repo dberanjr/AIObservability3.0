@@ -10,6 +10,7 @@ import { AreaChart, type AxisTick } from "../../components/charts/AreaChart";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import {
   fmtCount,
+  fmtCountCompact,
   fmtMs,
   fmtPercent,
   fmtTokens,
@@ -70,8 +71,8 @@ const MODAL_META: Record<BedrockTileKind, { title: string; subtitle: string }> =
     subtitle: "Invocations whose log row carries a non-null errorCode",
   },
   tpm: {
-    title: "TPM headroom",
-    subtitle: "Peak observed usage of the account's tokens-per-minute quota",
+    title: "Peak TPM",
+    subtitle: "Peak estimated tokens-per-minute against the account's Bedrock quota (absolute rate)",
   },
   sessions: {
     title: "Sessions",
@@ -369,8 +370,8 @@ export const BedrockTileModal = ({
       case "tpm":
         return (
           <StatGrid cols={2}>
-            <Stat label="Peak TPM usage" value={fmtPercent(tpmPeakPct)} emphasize />
-            <Stat label="Headroom remaining" value={fmtPercent(Math.max(0, 100 - tpmPeakPct))} sub="100% − peak usage" />
+            <Stat label="Peak TPM usage" value={`${fmtCountCompact(tpmPeakPct)} tok/min`} emphasize />
+            <Stat label="% of quota" value="—" sub="per-model quota ceiling not ingested" />
           </StatGrid>
         );
 

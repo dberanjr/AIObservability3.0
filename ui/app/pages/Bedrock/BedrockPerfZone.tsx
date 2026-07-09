@@ -6,7 +6,7 @@ import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { InfoTooltip } from "../../components/InfoTooltip";
 import { CATEGORICAL } from "../../theme/palette";
 import { STATUS_COLOR } from "../../theme/statusColor";
-import { fmtCount, fmtMs, fmtPercent } from "../../data/format";
+import { fmtCount, fmtCountCompact, fmtMs, fmtPercent } from "../../data/format";
 import { useBedrockOverview, useBedrockPerf } from "../../bedrock/useBedrock";
 import type { BedrockScope } from "../../bedrock/types";
 import type { PerfByModelRow } from "../../bedrock/parse";
@@ -43,35 +43,6 @@ const perfBarItems = (
     }));
 
 /**
- * Peak-usage headroom bar for `tpmPeakPct`. `useBedrockPerf` only returns a
- * single tenant-wide peak scalar — there's no per-bucket TPM history to plot
- * — so this deliberately renders a static gauge instead of fabricating a
- * fake trend line out of one number (an AreaChart/Sparkline would imply a
- * time axis that doesn't exist here).
- */
-const TpmHeadroomBar = ({ pct }: { pct: number }) => {
-  const clamped = Math.max(0, Math.min(100, pct));
-  const color =
-    pct > 90 ? STATUS_COLOR.critical : pct > 75 ? STATUS_COLOR.warning : STATUS_COLOR.good;
-  return (
-    <div
-      role="img"
-      aria-label={`${fmtPercent(pct)} of TPM quota used at peak`}
-      title={`${fmtPercent(pct)} of TPM quota used at peak`}
-      style={{
-        position: "relative",
-        height: 8,
-        background: "var(--surface-3)",
-        borderRadius: 999,
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ width: `${clamped}%`, height: "100%", background: color, borderRadius: 999 }} />
-    </div>
-  );
-};
-
-/**
  * Performance zone (D6): latency-by-model and TTFT-by-model BarLists (both
  * sorted worst-first), a peak-TPM headroom gauge, and an honest errors
  * summary sourced from the log `errorCode` field (there's no dedicated
@@ -94,8 +65,6 @@ export const BedrockPerfZone = ({ scope }: BedrockPerfZoneProps) => {
   const perfInitial = perfLoading && rows.length === 0;
   const overviewInitial = overviewLoading && totals.invocations === 0;
   const errorRatePct = totals.invocations > 0 ? (totals.errors / totals.invocations) * 100 : 0;
-  const tpmColor =
-    tpmPeakPct > 90 ? STATUS_COLOR.critical : tpmPeakPct > 75 ? STATUS_COLOR.warning : "var(--text)";
 
   return (
     <Surface elevation="raised" padding={16}>
@@ -173,7 +142,7 @@ export const BedrockPerfZone = ({ scope }: BedrockPerfZoneProps) => {
             <Flex alignItems="center" gap={4}>
               <Text style={EYEBROW}>Peak TPM usage</Text>
               <InfoTooltip
-                text="Peak observed usage of the account's tokens-per-minute Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). Higher = closer to the throughput limit and potential throttling. A single tenant-wide peak, not broken out per model, and not narrowed by the Account/Model selectors (this metric carries no per-account/model dimension)."
+                text="Peak estimated tokens-per-minute against the account's Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). This metric is an ABSOLUTE tokens/min rate, not a percentage — expressing it as % of quota needs the per-model quota ceiling, which isn't ingested. See the per-model breakdown in the Runtime 2.0 section below."
                 size={12}
               />
             </Flex>
@@ -185,14 +154,19 @@ export const BedrockPerfZone = ({ scope }: BedrockPerfZoneProps) => {
                   style={{
                     fontSize: 20,
                     fontWeight: 600,
-                    color: tpmColor,
+                    color: "var(--text)",
                     fontVariantNumeric: "tabular-nums",
                     lineHeight: 1,
                   }}
                 >
-                  {fmtPercent(tpmPeakPct)}
+                  {fmtCountCompact(tpmPeakPct)}{" "}
+                  <Text as="span" style={{ fontSize: 12, fontWeight: 500, color: "var(--text-3)" }}>
+                    tok/min
+                  </Text>
                 </Text>
-                <TpmHeadroomBar pct={tpmPeakPct} />
+                <Text style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                  % of quota needs the per-model ceiling (not ingested)
+                </Text>
               </>
             )}
           </Flex>

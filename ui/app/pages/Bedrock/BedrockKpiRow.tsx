@@ -11,7 +11,7 @@ import {
 import type { BedrockScope } from "../../bedrock/types";
 import type { Timeframe } from "../../scope/types";
 import type { PerfByModelRow } from "../../bedrock/parse";
-import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
+import { fmtCount, fmtCountCompact, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
 import { BedrockTileModal, type BedrockTileKind } from "./BedrockTileModal";
 import { windowDays } from "../../scope/chartInterval";
 
@@ -233,11 +233,9 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
         />
         <StatTile
           label="Peak TPM"
-          value={fmtPercent(tpmPeakPct)}
-          sub="% of quota (peak)"
-          info="Peak observed usage of the account's tokens-per-minute Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). Higher = closer to the throughput limit and potential throttling. A single tenant-wide peak; not broken out per model."
-          tone={tpmPeakPct > 90 ? "critical" : tpmPeakPct > 75 ? "warn" : "neutral"}
-          cue
+          value={fmtCountCompact(tpmPeakPct)}
+          sub="tok/min (peak)"
+          info="Peak estimated tokens-per-minute against the account's Bedrock quota in scope (cloud.aws.bedrock.EstimatedTPMQuotaUsage). This is an ABSOLUTE tokens/min rate, not a percentage — expressing it as % of quota needs the per-model quota ceiling, which isn't ingested. See the per-model TPM breakdown on this tab."
           window={win}
           loading={perfInitial}
           onClick={() => setModal("tpm")}
@@ -248,7 +246,7 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
                 values={perfSeries.tpm}
                 color="var(--blue)"
                 height={28}
-                valueFormatter={(n) => fmtPercent(n)}
+                valueFormatter={(n) => fmtCountCompact(n)}
                 ariaLabel="Peak TPM trend"
               />
             ) : undefined

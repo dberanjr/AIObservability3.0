@@ -3,7 +3,7 @@
   "environmentUrl": "https://your-tenant.apps.dynatrace.com/",
   "app": {
     "name": "AI Observability 3.0 App",
-    "version": "0.2.52",
+    "version": "0.2.53",
     "description": "End-to-end observability for agentic AI workloads",
     "id": "my.ai.observability.3.0.app",
     "scopes": [
