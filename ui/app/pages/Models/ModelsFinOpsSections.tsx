@@ -30,14 +30,24 @@ export interface ModelsFinOpsSectionsProps {
   /** The page's active model-type filter, for the scope-mismatch caption. */
   typeFilter?: ModelTypeFilter;
   onSelectFinding: (f: Finding) => void;
+  /**
+   * Demo Mode / no-telemetry fallback — true when the global Demo Mode Tweak
+   * is on, or the page's own capability probe found no AI spans at all. Every
+   * FinOps section below renders its bundled demo dataset instead of
+   * querying Grail. The prompt-cache section's CapabilityGate is bypassed in
+   * this case (its narrow attribute-presence gate would otherwise hide the
+   * demo panel on a tenant with zero telemetry).
+   */
+  showExample?: boolean;
 }
 
 export const ModelsFinOpsSections = ({
   models,
   typeFilter = "all",
   onSelectFinding,
+  showExample = false,
 }: ModelsFinOpsSectionsProps) => {
-  const finOps = useFinOps();
+  const finOps = useFinOps(showExample);
   const upstream = useUpstreamServices();
 
   // AI service names for the A/B "service being compared" dropdown.
@@ -85,27 +95,41 @@ export const ModelsFinOpsSections = ({
         </Flex>
       </CollapsibleSection>
 
-      <CapabilityGate
-        id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}
-        label="Prompt cache & reported cost — available with instrumentation"
-        hint={
-          <>
-            Emit <code>gen_ai.usage.cached_tokens</code>,{" "}
-            <code>cache_creation_input_tokens</code>, or{" "}
-            <code>gen_ai.usage.cost</code> to surface prompt-cache hit rate and
-            provider-reported spend here.
-          </>
-        }
-      >
+      {showExample ? (
+        // Demo Mode / no-telemetry: force the panel visible with the canned
+        // dataset rather than gating on a capability probe that (by
+        // definition, in this case) sees no telemetry at all.
         <CollapsibleSection
           title="Prompt cache & reported cost"
           subtitle="auto-detected"
         >
           <ScanScopedTile name="Prompt cache & cost">
-            <CacheCostPanel />
+            <CacheCostPanel showExample />
           </ScanScopedTile>
         </CollapsibleSection>
-      </CapabilityGate>
+      ) : (
+        <CapabilityGate
+          id={["cacheTokens", "cacheWriteTokens", "sdkCost"]}
+          label="Prompt cache & reported cost — available with instrumentation"
+          hint={
+            <>
+              Emit <code>gen_ai.usage.cached_tokens</code>,{" "}
+              <code>cache_creation_input_tokens</code>, or{" "}
+              <code>gen_ai.usage.cost</code> to surface prompt-cache hit rate
+              and provider-reported spend here.
+            </>
+          }
+        >
+          <CollapsibleSection
+            title="Prompt cache & reported cost"
+            subtitle="auto-detected"
+          >
+            <ScanScopedTile name="Prompt cache & cost">
+              <CacheCostPanel />
+            </ScanScopedTile>
+          </CollapsibleSection>
+        </CapabilityGate>
+      )}
 
       <CollapsibleSection title="Daily cost & concentration">
         <div
@@ -131,6 +155,7 @@ export const ModelsFinOpsSections = ({
           <ModelComparisonPanel
             services={serviceNames}
             upstreamOptions={upstreamOptions}
+            showExample={showExample}
           />
         </ScanScopedTile>
       </CollapsibleSection>

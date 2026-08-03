@@ -42,6 +42,7 @@ import { useClientUpstream, type ClientUpstream } from "./useClientUpstream";
 import type { Finding } from "../../../components/drawers/types";
 import type { LayerKey } from "../../../data/ai-layer-patterns";
 import type { LensId } from "../architectureLenses";
+import { DEMO_ARCH_REC } from "./demoData";
 import {
   EDGES,
   edgeKey,
@@ -201,27 +202,36 @@ const blankNodes = (): NodeViewMap => {
   return m;
 };
 
-export const useArchitectureData = (): ArchData => {
+/**
+ * `showExample` (Demo Mode Tweak, or the app-wide "no AI telemetry yet"
+ * fallback computed by PulsePage) is threaded into every sub-hook below —
+ * each already returns its own canned dataset when set, so the derivation
+ * logic further down runs unmodified over demo inputs; only the map's own
+ * tier-summarize query needs an explicit swap-in (`DEMO_ARCH_REC`) and a
+ * `samplingRatio` override (demo counts are already "real", not extrapolated).
+ */
+export const useArchitectureData = (showExample = false): ArchData => {
   const { scope } = useScope();
-  const { samplingRatio } = useSampling();
-  const loops = useAgentLoops();
-  const highFreq = useHighFrequencyAgents();
-  const counts = useResolvedCounts();
-  const { anomalies, isLoading: anomLoading } = useAnomalies();
-  const clientUpstream = useClientUpstream();
+  const { samplingRatio: realSamplingRatio } = useSampling();
+  const samplingRatio = showExample ? 1 : realSamplingRatio;
+  const loops = useAgentLoops(showExample);
+  const highFreq = useHighFrequencyAgents(showExample);
+  const counts = useResolvedCounts(showExample);
+  const { anomalies, isLoading: anomLoading } = useAnomalies(showExample);
+  const clientUpstream = useClientUpstream(showExample);
 
   const { data, isLoading, error, refetch } = useScopedDql<Rec>(
     buildQuery(scope.timeframe.from, scope.timeframe.to ?? "now()"),
-    { staleTime: 60_000 },
+    { staleTime: 60_000, enabled: !showExample },
   );
 
   // Shared per-bucket series (node sparklines + tier drawer + finding charts).
   // Its own scan, kept out of the map's isLoading gate so the map paints
   // immediately and the charts fill in when ready.
-  const pulse = usePulseSeries();
+  const pulse = usePulseSeries(true, showExample);
   // Accurate fleet LLM spend (per-model actual rates; blended only for models
   // missing from the pricing table) — used instead of a flat blended rate.
-  const spendBreakdown = useSpendBreakdown();
+  const spendBreakdown = useSpendBreakdown(showExample);
 
   // Fleet-wide loop rate + worst attributed agent (see file header).
   const fleetLoop = useMemo(() => {
@@ -252,7 +262,7 @@ export const useArchitectureData = (): ArchData => {
   }, [anomalies]);
 
   return useMemo<ArchData>(() => {
-    const rec = data?.records?.[0];
+    const rec = showExample ? DEMO_ARCH_REC : data?.records?.[0];
     const ex = (n: number) => n * samplingRatio;
     const pct = (n: number, d: number) => (d > 0 ? n / d : 0);
     const nodes = blankNodes();
@@ -720,6 +730,7 @@ export const useArchitectureData = (): ArchData => {
       },
     };
   }, [
+    showExample,
     data,
     refetch,
     pulse,

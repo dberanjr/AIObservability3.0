@@ -5,11 +5,12 @@ import { Skeleton } from "@dynatrace/strato-components/content";
 import { Donut, type DonutSlice } from "../../components/charts/Donut";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { MaximizablePanel } from "../../components/MaximizablePanel";
-import { fmtUSDPrecise, fmtUSDCompact, fmtPercent } from "../../data/format";
+import { fmtAccount, fmtUSDPrecise, fmtUSDCompact, fmtPercent } from "../../data/format";
 import { useBedrockCost, useBedrockAccountCost } from "../../bedrock/useBedrock";
 import { bedrockCostIntervalSec } from "../../bedrock/queries";
 import { intervalPhrase } from "../../scope/chartInterval";
 import type { BedrockScope } from "../../bedrock/types";
+import { useAccountNames } from "../../scope/AccountNamesContext";
 import { BedrockCostChart, buildModelColorMap, modelTotals } from "./BedrockCostChart";
 
 export interface BedrockCostZoneProps {
@@ -39,6 +40,7 @@ const SUBHEAD: React.CSSProperties = { fontSize: 12.5, fontWeight: 600 };
 export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
   const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
   const { rows: accountRows, isLoading: accountLoading } = useBedrockAccountCost(scope);
+  const { names: accountNames } = useAccountNames();
   const [showGhost, setShowGhost] = useState(true);
 
   const modelSlices = useMemo<DonutSlice[]>(() => {
@@ -72,12 +74,12 @@ export const BedrockCostZone = ({ scope }: BedrockCostZoneProps) => {
         .slice(0, 10)
         .map((r) => ({
           key: r.account || "(unknown account)",
-          label: r.account || "(unknown account)",
+          label: fmtAccount(r.account, accountNames[r.account]) || "(unknown account)",
           value: r.cost,
           displayValue: fmtUSDPrecise(r.cost),
           secondary: r.blended ? "includes an estimated-rate model" : undefined,
         })),
-    [accountRows],
+    [accountRows, accountNames],
   );
 
   const costInitial = costLoading && daily.length === 0;

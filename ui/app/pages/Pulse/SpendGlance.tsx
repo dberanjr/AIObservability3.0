@@ -111,11 +111,13 @@ const barsCaptionStyle: React.CSSProperties = {
 
 const SpendGlanceBody = ({
   expander,
+  showExample = false,
 }: {
   expander: ReturnType<typeof useChartExpander>;
+  showExample?: boolean;
 }) => {
   const { spend24h, spend7d, projected30d, delta24h, bars, barLabels, samplingRatio } =
-    useDailySpend();
+    useDailySpend(showExample);
   const { samplingRatio: toolbarRatio } = useSampling();
   // scan-6: these per-day scans force their own sampling floor, so when it's
   // coarser than the toolbar the numbers are a rougher estimate than the global
@@ -181,7 +183,7 @@ const SpendGlanceBody = ({
   );
 };
 
-export const SpendGlance = () => {
+export const SpendGlance = ({ showExample = false }: { showExample?: boolean }) => {
   const expander = useChartExpander();
   return (
     <CollapsibleCard
@@ -189,7 +191,7 @@ export const SpendGlance = () => {
       defaultOpen
       headerRight={expander.expandButton("Expand spend glance")}
     >
-      <SpendGlanceBody expander={expander} />
+      <SpendGlanceBody expander={expander} showExample={showExample} />
     </CollapsibleCard>
   );
 };

@@ -14,6 +14,7 @@ import {
 import { promptsFocusChip } from "./focus";
 import { ErrorBanner } from "../../components/ErrorState";
 import { DataGapNote } from "../../components/DataGapNote";
+import { ExampleDataNotice } from "../../components/ExampleDataNotice";
 import { PromptQualityAnalytics } from "./PromptQualityAnalytics";
 import { PromptsSidebar, type PrivacyMode } from "./PromptsSidebar";
 import { PromptsTable, type PromptView } from "./PromptsTable";
@@ -25,6 +26,8 @@ import { type PromptSort } from "./promptsSort";
 import { decodePromptsFilter } from "./findingFilter";
 import { describeFilter } from "./filterScope";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+import { useCapability } from "../../scope/CapabilityContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
 
 /**
  * A single dismissible/expandable "Data coverage" callout that folds the two
@@ -141,6 +144,15 @@ const DataCoverageCallout = ({
 export const PromptsPage = () => {
   const { search, pathname } = useLocation();
   const navigate = useNavigate();
+  // Demo Mode (app-wide mechanism, see ui/app/bedrock for the reference
+  // implementation): force the bundled demo dataset when the global Tweak is
+  // on, OR automatically once the app-wide capability probe resolves and
+  // finds no AI telemetry anywhere in scope. `capability.isLoading` gates the
+  // automatic case so the page doesn't flash real-then-demo on first load.
+  const capability = useCapability();
+  const { pageConfig } = useTweaks();
+  const showExample =
+    pageConfig.demoMode || (!capability.isLoading && !capability.hasAnyAiSpans);
   // Pulse problem-pattern drill-down (PP-3): the RAW `?focus` id (not the typed
   // useFocusParam union, which only covers architecture-layer keys). A known id
   // applies that pattern's predicate to the list; unknown/absent is a no-op.
@@ -255,7 +267,7 @@ export const PromptsPage = () => {
     refetch,
     hasContent,
     hasEval,
-  } = usePrompts(filter, focus, sort);
+  } = usePrompts(filter, focus, sort, showExample);
 
   const firstError = promptsError ?? null;
 
@@ -364,6 +376,9 @@ export const PromptsPage = () => {
             scores, and drill into the full trace behind any response.
           </Text>
         </Flex>
+        {showExample && !pageConfig.demoMode && (
+          <ExampleDataNotice tabLabel="Prompts" />
+        )}
         {firstError && <ErrorBanner error={firstError} />}
         {focusChip && (
           <Flex alignItems="center" gap={8}>
@@ -416,11 +431,12 @@ export const PromptsPage = () => {
         )}
         {/* Guardrails gate the prompt/response I/O analyzed below — surface the
             fleet intervention context (Bedrock metrics; full view on Pulse). */}
-        <GuardrailsStrip />
+        <GuardrailsStrip showExample={showExample} />
         <PromptsTilesRow
           filter={filter}
           onFilterChange={setFilter}
           focus={focus}
+          showExample={showExample}
         />
         {/* One consolidated, dismissible coverage callout instead of two stacked
             always-on caveat blocks (Prompts-10). */}
@@ -434,6 +450,7 @@ export const PromptsPage = () => {
           focus={focus}
           rows={filtered}
           onFilterChange={setFilter}
+          showExample={showExample}
         />
 
         <PromptsTable
@@ -447,6 +464,7 @@ export const PromptsPage = () => {
           filterSummary={describeFilter(filter, focusChip?.label ?? null)}
           sort={sort}
           onSortChange={setSort}
+          showExample={showExample}
         />
       </Flex>
     </div>

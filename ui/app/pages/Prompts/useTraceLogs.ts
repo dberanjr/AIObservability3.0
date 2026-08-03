@@ -1,17 +1,8 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { buildTraceLogsQuery } from "./queries";
-
-const str = (v: unknown): string => (typeof v === "string" ? v : "");
-
-const parseTimestamp = (v: unknown): number => {
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const parsed = Date.parse(v);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return 0;
-};
+import { RAW_DEMO_TRACE_LOG_RECORDS_BY_TRACE_ID } from "./demoData";
+import { parseTraceLogRecords } from "./promptsParse";
 
 export interface TraceLogLine {
   timestampMs: number;
@@ -23,7 +14,7 @@ export interface TraceLogLine {
   namespace: string | null;
 }
 
-interface TraceLogRecord {
+export interface TraceLogRecord {
   timestamp?: string | number;
   status?: string;
   loglevel?: string;
@@ -39,6 +30,22 @@ export interface UseTraceLogsResult {
   error?: Error;
 }
 
+// `parseTraceLogRecords` (raw DQL row → TraceLogLine[]) lives in
+// `./promptsParse` — a dependency-free pure module — so both this hook and
+// the Demo Mode dataset can share it without either importing the other's
+// Context-dependent runtime code. Re-exported for anything that still
+// imports it from this hook file.
+export { parseTraceLogRecords };
+
+/** Precomputed once at module load, per demo trace id, via the SAME
+ *  `parseTraceLogRecords` the real query path uses above. */
+const DEMO_TRACE_LOGS_BY_TRACE_ID: Record<string, TraceLogLine[]> = Object.fromEntries(
+  Object.entries(RAW_DEMO_TRACE_LOG_RECORDS_BY_TRACE_ID).map(([traceId, records]) => [
+    traceId,
+    parseTraceLogRecords(records),
+  ]),
+);
+
 /**
  * Logs correlated to a trace (by trace_id), for the detail panel's Logs tab.
  * Opts out of the global attribute filter — a trace's logs should always
@@ -47,26 +54,20 @@ export interface UseTraceLogsResult {
 export const useTraceLogs = (
   traceId: string | null,
   startMs?: number,
+  /** True to render the bundled Demo Mode log fixture instead of querying Grail. */
+  showExample = false,
 ): UseTraceLogsResult => {
   const { data, isLoading, error } = useScopedDql<TraceLogRecord>(
     traceId ? buildTraceLogsQuery(traceId, startMs) : "",
-    { enabled: !!traceId, staleTime: 30_000, ignoreGlobalFilter: true },
+    { enabled: !!traceId && !showExample, staleTime: 30_000, ignoreGlobalFilter: true },
   );
 
   return useMemo<UseTraceLogsResult>(() => {
     if (!traceId) return { logs: [], isLoading: false };
-    const logs: TraceLogLine[] = [];
-    for (const r of data?.records ?? []) {
-      logs.push({
-        timestampMs: parseTimestamp(r.timestamp),
-        status: str(r.status) || str(r.loglevel) || "INFO",
-        level: str(r.loglevel),
-        content: str(r.content),
-        spanId: r.span_id ?? null,
-        source: str(r.source),
-        namespace: r.namespace ?? null,
-      });
+    if (showExample) {
+      return { logs: DEMO_TRACE_LOGS_BY_TRACE_ID[traceId] ?? [], isLoading: false };
     }
+    const logs = parseTraceLogRecords(data?.records ?? []);
     return { logs, isLoading, error: error ?? undefined };
-  }, [data, isLoading, error, traceId]);
+  }, [data, isLoading, error, traceId, showExample]);
 };

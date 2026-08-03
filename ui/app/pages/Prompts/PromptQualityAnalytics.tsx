@@ -298,6 +298,8 @@ export interface PromptQualityAnalyticsProps {
   rows?: PromptRow[];
   /** Toggle a metric's fail-filter on the table from a tile click (Prompts-4). */
   onFilterChange?: (next: PromptsFilter) => void;
+  /** True to render the bundled Demo Mode aggregate instead of querying Grail. */
+  showExample?: boolean;
 }
 
 // Body is a separate component so the query (usePromptQuality) only runs while
@@ -308,8 +310,9 @@ const PromptQualityBody = ({
   focus,
   rows = [],
   onFilterChange,
+  showExample,
 }: PromptQualityAnalyticsProps) => {
-  const quality = usePromptQuality(filter, focus);
+  const quality = usePromptQuality(filter, focus, showExample);
   const scoped = isScopeFiltered(filter, focus);
   // Clicking a metric tile toggles that metric's fail-filter on the table
   // (Prompts-4) — the SAME PromptsFilter mechanism the sidebar/tiles use.

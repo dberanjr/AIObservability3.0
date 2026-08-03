@@ -47,6 +47,16 @@ const StatCol = ({
   </Flex>
 );
 
+export interface BedrockGuardrailsSummaryProps {
+  /** True to show canned Demo Mode data instead of the real fleet-wide query
+   *  — either the global Demo Mode Tweak or the Bedrock page's own
+   *  no-telemetry fallback (see the `showExample` field on the Bedrock scope
+   *  type). This panel has no `scope` prop of its own (guardrail metrics are
+   *  fleet-wide, not filterable by the page's Account/Model selectors), so
+   *  the page passes this one flag straight through instead. */
+  showExample?: boolean;
+}
+
 /**
  * Compact AI Guardrails summary for the Bedrock page (D6). Reuses
  * `useGuardrails()` as-is — no new query, no Bedrock-scope wiring: guardrail
@@ -57,8 +67,8 @@ const StatCol = ({
  * rows carry it (see guardrailsLogic.ts's `GuardrailRow`) — so the fleet
  * total is summed here from `g.rows`.
  */
-export const BedrockGuardrailsSummary = () => {
-  const g = useGuardrails();
+export const BedrockGuardrailsSummary = ({ showExample = false }: BedrockGuardrailsSummaryProps) => {
+  const g = useGuardrails(showExample);
   const goToTab = useTabNav();
   const tone = guardrailTone(g.fleet.interventionRate, g.fleet.invocations);
   const textUnits = useMemo(() => g.rows.reduce((s, r) => s + r.textUnits, 0), [g.rows]);

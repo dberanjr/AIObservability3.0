@@ -50,8 +50,8 @@ const GuardrailRowView = ({ r }: { r: GuardrailRow }) => {
  * table (invocations · intervention-rate bar · latency), and configured-vs-active
  * coverage. Rich view; the Summary card + Prompts strip link here.
  */
-export const GuardrailsPanel = () => {
-  const g = useGuardrails();
+export const GuardrailsPanel = ({ showExample = false }: { showExample?: boolean }) => {
+  const g = useGuardrails(showExample);
   const tone = guardrailTone(g.fleet.interventionRate, g.fleet.invocations);
   const rows = g.rows.slice(0, 12);
   const dormant = GUARDRAIL_PROVIDERS.filter((p) => !p.available).map((p) => p.label);

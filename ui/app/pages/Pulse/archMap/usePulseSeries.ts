@@ -17,6 +17,7 @@ import { dqlTimeArg, LOGICAL_ERROR_EXPR } from "../../../scope/queries";
 import { AI_SPAN_POPULATION } from "../../../detection/attributeFields";
 import { toNum } from "../../../data/format";
 import type { LayerKey } from "../../../data/ai-layer-patterns";
+import { DEMO_PULSE_SERIES_REC } from "./demoData";
 
 export interface PulseSeries {
   /** Per-tier span volume (throughput) per bucket. */
@@ -46,7 +47,7 @@ export interface PulseSeries {
   isLoading: boolean;
 }
 
-interface Rec {
+export interface PulseSeriesRec {
   o_calls?: A;
   a_calls?: A;
   t_calls?: A;
@@ -68,6 +69,7 @@ interface Rec {
   timeframe?: { start?: string; end?: string };
   interval?: string | number;
 }
+type Rec = PulseSeriesRec;
 type A = Array<number | null>;
 
 // Coerce to a finite number — percentile() returns null for empty buckets, and
@@ -156,51 +158,66 @@ const EMPTY: PulseSeries = {
   isLoading: false,
 };
 
-export const usePulseSeries = (enabled = true): PulseSeries => {
+/** Pure fold: a raw `Rec` summarize/makeTimeseries row -> the typed
+ *  `PulseSeries` every chart consumes. Exported so the demo dataset can build
+ *  a fixture row shaped exactly like the real query and run it through the
+ *  SAME fold, instead of hand-typing per-series numbers. */
+export const foldPulseSeries = (rec: Rec | undefined, isLoading: boolean): PulseSeries => {
+  if (!rec) return { ...EMPTY, isLoading };
+  const n = arr(rec.l_calls).length;
+  return {
+    throughput: {
+      orchestrator: arr(rec.o_calls),
+      agent: arr(rec.a_calls),
+      tools: arr(rec.t_calls),
+      llm: arr(rec.l_calls),
+    },
+    latencyMs: {
+      orchestrator: arrMs(rec.o_p90),
+      agent: arrMs(rec.a_p90),
+      tools: arrMs(rec.t_p90),
+      llm: arrMs(rec.l_p90),
+    },
+    errors: {
+      orchestrator: arr(rec.o_err),
+      agent: arr(rec.a_err),
+      tools: arr(rec.t_err),
+      llm: arr(rec.l_err),
+    },
+    truncation: arr(rec.l_trunc),
+    rateLimit: arr(rec.l_429),
+    tokens: arr(rec.l_tok),
+    inputTokens: arr(rec.l_in),
+    outputTokens: arr(rec.l_out),
+    p95Ms: arrMs(rec.p95),
+    labels: buildLabels(rec, n),
+    intervalLabel: intervalLabelOf(rec.interval),
+    intervalMs: Number.isFinite(Number(rec.interval)) ? Number(rec.interval) / 1_000_000 : 0,
+    isLoading,
+  };
+};
+
+/**
+ * `showExample` is a separate trailing parameter (like `enabled`) rather than
+ * part of a scope object, since this hook takes none — set by Pulse's
+ * architecture map / token-efficiency tiles when Demo Mode (or the app-wide
+ * "no AI telemetry yet" fallback) is active. `FindingDrawer`'s caller never
+ * passes it, so it defaults to false there.
+ */
+export const usePulseSeries = (enabled = true, showExample = false): PulseSeries => {
   const { scope } = useScope();
   // Always build a valid query and gate execution with the `enabled` option —
   // passing "" to useDql triggers a DQL PARSE_ERROR ("end of query isn't
   // allowed here") rather than disabling the query.
   const { data, isLoading } = useScopedDql<Rec>(
     buildQuery(scope.timeframe.from, scope.timeframe.to ?? "now()"),
-    { staleTime: 60_000, enabled },
+    { staleTime: 60_000, enabled: enabled && !showExample },
   );
 
   return useMemo<PulseSeries>(() => {
-    const rec = data?.records?.[0];
-    if (!rec) return { ...EMPTY, isLoading };
-    const n = arr(rec.l_calls).length;
-    return {
-      throughput: {
-        orchestrator: arr(rec.o_calls),
-        agent: arr(rec.a_calls),
-        tools: arr(rec.t_calls),
-        llm: arr(rec.l_calls),
-      },
-      latencyMs: {
-        orchestrator: arrMs(rec.o_p90),
-        agent: arrMs(rec.a_p90),
-        tools: arrMs(rec.t_p90),
-        llm: arrMs(rec.l_p90),
-      },
-      errors: {
-        orchestrator: arr(rec.o_err),
-        agent: arr(rec.a_err),
-        tools: arr(rec.t_err),
-        llm: arr(rec.l_err),
-      },
-      truncation: arr(rec.l_trunc),
-      rateLimit: arr(rec.l_429),
-      tokens: arr(rec.l_tok),
-      inputTokens: arr(rec.l_in),
-      outputTokens: arr(rec.l_out),
-      p95Ms: arrMs(rec.p95),
-      labels: buildLabels(rec, n),
-      intervalLabel: intervalLabelOf(rec.interval),
-      intervalMs: Number.isFinite(Number(rec.interval)) ? Number(rec.interval) / 1_000_000 : 0,
-      isLoading,
-    };
-  }, [data, isLoading]);
+    if (showExample) return foldPulseSeries(DEMO_PULSE_SERIES_REC, false);
+    return foldPulseSeries(data?.records?.[0], isLoading);
+  }, [showExample, data, isLoading]);
 };
 
 /** Pick the metric series that best shows WHEN a finding's condition occurred. */

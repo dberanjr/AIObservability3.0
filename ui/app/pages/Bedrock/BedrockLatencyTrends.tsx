@@ -43,7 +43,9 @@ const maxOf = (values: number[]): number => {
 /**
  * One trend chart for a min/avg/max metric band. Series are drawn in
  * max → avg → min order so the avg line reads on top of the max band
- * (min is thin and mostly sits at/near the baseline).
+ * (min is thin and mostly sits at/near the baseline). Min/max start toggled
+ * off in the legend — avg is the headline trend — but stay one legend click
+ * away for anyone who wants the full band.
  */
 const BandChart = ({
   bands,
@@ -75,6 +77,7 @@ const BandChart = ({
         axisTicks={axisTicks}
         ariaLabel={ariaLabel}
         interactiveLegend
+        initiallyHiddenSeries={["max", "min"]}
         series={[
           { values: bands.max, color: CATEGORICAL[5], label: "max" },
           { values: bands.avg, color: STATUS_COLOR.info, label: "avg" },

@@ -9,6 +9,9 @@ export interface GovScope {
   timeframe: Timeframe;
   /** Selected AWS account ids (ct[recipientAccountId]); empty = all. */
   accounts: string[];
+  /** See {@link import("../types").BedrockScope.showExample} — same meaning,
+   *  computed once by `BedrockPage` and threaded into both sub-tab scopes. */
+  showExample?: boolean;
 }
 
 /** Six headline governance counters (one summarize row). */

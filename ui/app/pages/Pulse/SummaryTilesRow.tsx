@@ -304,6 +304,12 @@ export interface SummaryTilesRowProps {
   /** Initial column count before the ResizeObserver measures (avoids a flash
    * when rendered in the narrow hero side-column, where 2 columns is right). */
   initialColumns?: number;
+  /** Demo Mode Tweak, or the app-wide "no AI telemetry yet" fallback — see
+   *  PulsePage. Threaded into this row's own `useTileBreakdowns` /
+   *  `useSpendBreakdown` / `useAnomalies` calls (the `summary` prop above is
+   *  already demo-aware from the caller). MCP tiles (`useMcpHealth`) are not
+   *  yet wired for Demo Mode — see PulsePage's wiring notes. */
+  showExample?: boolean;
 }
 
 /**
@@ -336,9 +342,13 @@ const pickColumns = (width: number): number => {
   return 1;
 };
 
-export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRowProps) => {
-  const breakdowns = useTileBreakdowns();
-  const spend = useSpendBreakdown();
+export const SummaryTilesRow = ({
+  summary,
+  initialColumns = 9,
+  showExample = false,
+}: SummaryTilesRowProps) => {
+  const breakdowns = useTileBreakdowns(showExample);
+  const spend = useSpendBreakdown(showExample);
   // MCP tiles (Tool calls + MCP error rate) fold into this row; shown only when
   // MCP / tool spans are present (replaces the old standalone MCP strip).
   const mcp = useMcpHealth();
@@ -357,7 +367,7 @@ export const SummaryTilesRow = ({ summary, initialColumns = 9 }: SummaryTilesRow
       : null;
 
   // Active findings broken down by severity (for the donut).
-  const { anomalies } = useAnomalies();
+  const { anomalies } = useAnomalies(showExample);
   const sev = { critical: 0, warning: 0, info: 0 };
   for (const a of anomalies) sev[a.severity] += 1;
   const findingsTotal = sev.critical + sev.warning + sev.info;

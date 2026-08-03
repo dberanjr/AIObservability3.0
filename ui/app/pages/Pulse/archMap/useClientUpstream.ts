@@ -54,11 +54,30 @@ interface UpRec { upstreamId?: string; upstream?: string; aiServices?: number }
 interface RedRec { svcId?: string; svc?: string; requests?: number; errors?: number; p90ns?: number }
 interface SeriesRec { svcId?: string; throughput?: (number | null)[] | null }
 
-export const useClientUpstream = (): ClientUpstream => {
+/** Canned upstream-caller set — used when `showExample` is set (global Demo
+ *  Mode Tweak or the app-wide "no AI telemetry yet" fallback). Hand-built
+ *  (rather than fixture-plus-fold) since this hook's real pipeline is a
+ *  4-query Smartscape-topology join with no single reusable fold function;
+ *  every number below is nonetheless internally consistent (errPct = errors /
+ *  requests, p90Ms = worst caller). */
+const DEMO_CLIENT_UPSTREAM: ClientUpstream = {
+  count: 3,
+  totalRequests: 48_600,
+  errPct: 1.4,
+  p90Ms: 340,
+  services: [
+    { id: "SERVICE-checkout-web", name: "checkout-web", requests: 26_400, errPct: 0.9, p90Ms: 210, series: [820, 860, 910, 875, 940, 990, 1020, 980, 1050, 1110, 1080, 1140, 1190, 1160] },
+    { id: "SERVICE-mobile-bff", name: "mobile-bff", requests: 15_800, errPct: 1.8, p90Ms: 340, series: [480, 510, 495, 520, 540, 560, 555, 585, 600, 610, 590, 620, 640, 630] },
+    { id: "SERVICE-partner-api-gateway", name: "partner-api-gateway", requests: 6_400, errPct: 2.6, p90Ms: 290, series: [190, 205, 198, 210, 220, 215, 230, 225, 240, 235, 245, 250, 248, 255] },
+  ],
+  isLoading: false,
+};
+
+export const useClientUpstream = (showExample = false): ClientUpstream => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
   const resolution = useResolvedServices();
-  const canQuery = canQueryScope(resolution);
+  const canQuery = canQueryScope(resolution) && !showExample;
 
   // 1 — AI service entity ids (scope/filter aware).
   const idsResult = useScopedDql<IdRec>(
@@ -112,6 +131,7 @@ export const useClientUpstream = (): ClientUpstream => {
   );
 
   return useMemo<ClientUpstream>(() => {
+    if (showExample) return DEMO_CLIENT_UPSTREAM;
     const seriesById = new Map<string, number[]>();
     for (const r of seriesResult.data?.records ?? []) {
       if (!r.svcId) continue;
@@ -157,6 +177,7 @@ export const useClientUpstream = (): ClientUpstream => {
         redResult.isLoading,
     };
   }, [
+    showExample,
     redResult.data,
     redResult.isLoading,
     seriesResult.data,

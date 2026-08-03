@@ -1,9 +1,17 @@
 import type { BedrockScope } from "./types";
 import type { Timeframe } from "../scope/types";
-import { parseScopeMs } from "../scope/chartInterval";
+import { parseScopeMs, pickChartIntervalSec } from "../scope/chartInterval";
 
 const arr = (xs: string[]): string => xs.map((x) => `"${x}"`).join(",");
 const tf = (s: BedrockScope): string => `from: ${s.timeframe.from}, to: ${s.timeframe.to ?? "now()"}`;
+
+/** Cheap existence probe: any bedrock log group row in the ACTIVE timeframe
+ *  (not a hardcoded rolling window — a fixed lookback disagrees with every
+ *  other query on the page whenever the user picks a different range,
+ *  producing a false "no telemetry" result over a window that's actually
+ *  populated). See `useBedrockAvailable`. */
+export const buildBedrockAvailableQuery = (timeframe: Timeframe): string =>
+  `fetch logs, from: ${timeframe.from}, to: ${timeframe.to ?? "now()"}\n| filter contains(dt.da.aws.log_group, "bedrock")\n| limit 1\n| fields timestamp`;
 
 /** Base pipeline: bedrock log group (indexed prefilter) → ModelInvocationLog →
  *  parse JSON → optional account/model scope. `b` holds the parsed record. */
@@ -75,22 +83,6 @@ export const buildBedrockDailyCostQuery = (
     cacheRead = sum(cacheRead), cacheWrite = sum(cacheWrite)
   }, interval: ${intervalSec}s, by: { modelId }`;
 
-/**
- * Finer bucket width (seconds) for the Total Spend HERO sparkline only — about
- * one notch finer than {@link bedrockCostIntervalSec} so the spark shows a
- * smoother trend (a 7-day scope → 28 points at 6h instead of 7 daily columns)
- * without changing the readable daily bar chart. Kept as a separate ladder so
- * the two visualizations tune independently.
- */
-export const bedrockSparkIntervalSec = (from: string): number => {
-  const ms = parseScopeMs(from);
-  if (ms <= 2 * HOUR_MS) return 300; // 5m
-  if (ms <= 12 * HOUR_MS) return 900; // 15m
-  if (ms < 2 * DAY_MS) return 1800; // 30m
-  if (ms < 4 * DAY_MS) return 3 * 3600; // 3h
-  return 6 * 3600; // 6h — 7d → 28 pts, 30d → 120
-};
-
 /** One row per (session, account, modelId) — NOT per session — so a
  *  multi-model agent session (e.g. Opus for planning + Nova for tool calls)
  *  can be priced model-by-model in `parseAgentSessions` instead of the whole
@@ -131,3 +123,25 @@ export const buildBedrockFacetsQuery = (tf: Timeframe): string =>
     `| parse content, "JSON:b"`,
     `| summarize accounts = collectDistinct(b[accountId]), models = collectDistinct(b[modelId])`,
   ].join("\n");
+
+/** Bucketed invocations/errors for the Error rate KPI tile's sparkline — same
+ *  {@link pickChartIntervalSec} ladder as every other KPI-row/hero sparkline
+ *  on this page, so they all read at identical granularity. */
+export const buildBedrockErrorRateSparkQuery = (
+  s: BedrockScope,
+  intervalSec: number = pickChartIntervalSec(s.timeframe.from),
+): string =>
+  `${bedrockLogBase(s)}\n${FLATTEN}\n| makeTimeseries {
+    invocations = count(),
+    errors = sum(hasError)
+  }, interval: ${intervalSec}s`;
+
+/** Bucketed distinct-session-count for the Sessions KPI tile's sparkline.
+ *  `countDistinct` inside `makeTimeseries` is HyperLogLog-approximate — fine
+ *  for a trend line; the exact headline Sessions count still comes from
+ *  `useBedrockOverview`'s `summarize`-based `countDistinct`. */
+export const buildAgentSessionsSparkQuery = (
+  s: BedrockScope,
+  intervalSec: number = pickChartIntervalSec(s.timeframe.from),
+): string =>
+  `${bedrockLogBase(s)}\n${FLATTEN}\n| makeTimeseries sessions = countDistinct(session), interval: ${intervalSec}s`;

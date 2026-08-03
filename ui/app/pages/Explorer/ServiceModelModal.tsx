@@ -132,6 +132,9 @@ export interface ServiceModelModalProps {
   rawModels: string[];
   /** Canonical model label for the header (e.g. the heatmap column label). */
   modelLabel: string;
+  /** Demo Mode / no-telemetry fallback — resolves the demo fixture for this
+   *  cell instead of querying Grail (see ExplorerPage). Defaults to false. */
+  showExample?: boolean;
   onClose: () => void;
 }
 
@@ -145,11 +148,13 @@ export const ServiceModelModal = ({
   service,
   rawModels,
   modelLabel,
+  showExample = false,
   onClose,
 }: ServiceModelModalProps) => {
   const { metrics, cost, isLoading, error } = useServiceModelDetail(
     service,
     rawModels,
+    showExample,
   );
   // Read the modal's own scan telemetry (its <ScanScope> is set by the heatmap
   // at the render site) so a truncated detail scan surfaces the amber "Scan

@@ -3,8 +3,11 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { useSearchParams } from "react-router-dom";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+import { useCapability } from "../../scope/CapabilityContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { ErrorBanner } from "../../components/ErrorState";
 import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
+import { ExampleDataNotice } from "../../components/ExampleDataNotice";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import {
   DEFAULT_FINDING_INTENTS,
@@ -132,7 +135,17 @@ export const ExplorerPage = () => {
     [registerResetHandler, setFilter],
   );
 
-  const aiServices = useAIServices(filter);
+  // Demo Mode: force every tile to render its bundled demo dataset when the
+  // global Tweak is on, OR automatically once the app-wide capability probe
+  // resolves and finds no AI telemetry at all in scope (fresh trial install) —
+  // mirrors the Bedrock page's `showExample` fallback, reusing the SAME
+  // shared probe (no new existence-check query).
+  const capability = useCapability();
+  const { pageConfig } = useTweaks();
+  const showExample =
+    pageConfig.demoMode || (!capability.isLoading && !capability.hasAnyAiSpans);
+
+  const aiServices = useAIServices(filter, showExample);
   const summary = useExplorerSummary(aiServices.services);
   const findings = useExplorerFindings(aiServices.services, summary);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
@@ -185,6 +198,12 @@ export const ExplorerPage = () => {
               service and model, with retrieval and framework attribution.
             </Text>
           </Flex>
+          {/* Only the AUTOMATIC no-telemetry fallback gets this inline notice —
+              when the global Demo Mode Tweak is on, the app-wide banner
+              already covers it (avoid double messaging). */}
+          {showExample && !pageConfig.demoMode && (
+            <ExampleDataNotice tabLabel="Explorer" />
+          )}
           {firstError && <ErrorBanner error={firstError} />}
           <ExplorerTiles
             summary={summary}
@@ -209,24 +228,35 @@ export const ExplorerPage = () => {
               <ServiceModelHeatmap
                 open={heatmapOpen}
                 onOpenChange={setHeatmapOpen}
+                showExample={showExample}
               />
             </ScanScopedTile>
           </div>
-          <CapabilityGate
-            id="vectorDb"
-            label="Retrieval (RAG) — available with instrumentation"
-            hint={
-              <>
-                Emit vector-store retrieval spans (<code>db.system</code> /{" "}
-                <code>vector_db.*</code>) and this panel lights up with
-                retrievals, vector stores and average top-k automatically.
-              </>
-            }
-          >
+          {/* CapabilityGate decides visibility from REAL telemetry coverage, so
+              it can't see demo data — bypass it in showExample and render the
+              panel directly (its own demo dataset lights up unconditionally),
+              matching every other tile's Demo Mode behaviour on this page. */}
+          {showExample ? (
             <ScanScopedTile name="Retrieval (RAG)">
-              <RagPanel />
+              <RagPanel showExample={showExample} />
             </ScanScopedTile>
-          </CapabilityGate>
+          ) : (
+            <CapabilityGate
+              id="vectorDb"
+              label="Retrieval (RAG) — available with instrumentation"
+              hint={
+                <>
+                  Emit vector-store retrieval spans (<code>db.system</code> /{" "}
+                  <code>vector_db.*</code>) and this panel lights up with
+                  retrievals, vector stores and average top-k automatically.
+                </>
+              }
+            >
+              <ScanScopedTile name="Retrieval (RAG)">
+                <RagPanel />
+              </ScanScopedTile>
+            </CapabilityGate>
+          )}
           <div id={SECTION_IDS.servicesTable} style={{ scrollMarginTop: 12 }}>
           <AIServicesTable
             rows={aiServices.filtered}

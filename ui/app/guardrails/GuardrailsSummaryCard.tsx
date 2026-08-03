@@ -23,8 +23,8 @@ export const GUARDRAIL_TONE_COLOR: Record<GuardrailTone, string> = {
  * evaluated), a mini trend, and active/configured coverage + top blocker.
  * Drills to Pulse where the full guardrails panel lives.
  */
-export const GuardrailsSummaryCard = () => {
-  const g = useGuardrails();
+export const GuardrailsSummaryCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const g = useGuardrails(showExample);
   const tone = guardrailTone(g.fleet.interventionRate, g.fleet.invocations);
   const trendVals = g.trendRate.map((v) => (v == null ? 0 : v));
 

@@ -33,9 +33,18 @@ export interface ModelConcentration {
  * into "Others". There is no model-level concentration hook in the app —
  * useFinOps.concentrationPct is service-level — so this derives it from the
  * already-priced ModelRow set with no extra query. Drills to Models / FinOps.
+ *
+ * `showExample` (default false, mirrors useGuardrails.ts) is passed straight
+ * through to the shared `useModels` hook, which already carries its own Demo
+ * Mode dataset (`DEMO_MODEL_RECORDS`) — reusing it here keeps FinOpsCard's
+ * concentration donut priced by the exact same cost math as everywhere else
+ * useModels feeds, with no parallel dataset to keep in sync.
  */
-export const useModelConcentration = (topN = 4): ModelConcentration => {
-  const { models, isLoading, error } = useModels();
+export const useModelConcentration = (
+  topN = 4,
+  showExample = false,
+): ModelConcentration => {
+  const { models, isLoading, error } = useModels(undefined, showExample);
 
   return useMemo<ModelConcentration>(() => {
     const priced = models

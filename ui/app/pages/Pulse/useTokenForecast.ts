@@ -97,7 +97,40 @@ const pickSeries = (
 const sleep = (ms: number): Promise<void> =>
   new Promise((res) => setTimeout(res, ms));
 
-export const useTokenForecast = (enabled: boolean): UseTokenForecastResult => {
+/**
+ * Synthetic forecast for Demo Mode — the real path calls an external Davis
+ * analyzer (no DQL/fold to reuse), so this extends the demo token series'
+ * own trend with a mild seasonal wave and a widening confidence band, rather
+ * than calling out to the analyzer at all.
+ */
+const buildDemoForecast = (intervalSec: number): TokenForecast => {
+  const horizon = 12;
+  const base = 3_500_000; // roughly the demo fleet's per-bucket token rate
+  const values: number[] = [];
+  const lower: number[] = [];
+  const upper: number[] = [];
+  for (let i = 0; i < horizon; i++) {
+    const wave = Math.sin((i / horizon) * Math.PI * 1.5) * 0.18;
+    const trend = 1 + i * 0.01; // mild upward drift
+    const v = Math.round(base * (1 + wave) * trend);
+    const band = 0.08 + (i / horizon) * 0.12; // widens with distance
+    values.push(v);
+    lower.push(Math.round(v * (1 - band)));
+    upper.push(Math.round(v * (1 + band)));
+  }
+  return { values, lower, upper, intervalSec };
+};
+
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders a synthetic
+ * forecast instead of calling the Davis analyzer — set by Pulse's
+ * TokenConsumptionChart when Demo Mode (or the app-wide "no AI telemetry yet"
+ * fallback) is active.
+ */
+export const useTokenForecast = (
+  enabled: boolean,
+  showExample = false,
+): UseTokenForecastResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { serviceIds } = resolution;
@@ -108,7 +141,20 @@ export const useTokenForecast = (enabled: boolean): UseTokenForecastResult => {
   const [error, setError] = useState<Error | undefined>();
 
   useEffect(() => {
-    if (!enabled || !canQuery) {
+    if (!enabled) {
+      setForecast(null);
+      setError(undefined);
+      return;
+    }
+    if (showExample) {
+      const totalMs = parseScopeMs(scope.timeframe.from);
+      const intervalSec = Math.max(60, Math.floor(totalMs / FORECAST_INPUT_BUCKETS / 1000));
+      setForecast(buildDemoForecast(intervalSec));
+      setError(undefined);
+      setLoading(false);
+      return;
+    }
+    if (!canQuery) {
       setForecast(null);
       setError(undefined);
       return;
@@ -204,7 +250,7 @@ export const useTokenForecast = (enabled: boolean): UseTokenForecastResult => {
       cancelled = true;
       ctl.abort();
     };
-  }, [enabled, canQuery, scope.timeframe.from, scope.timeframe.to, serviceIds]);
+  }, [enabled, showExample, canQuery, scope.timeframe.from, scope.timeframe.to, serviceIds]);
 
   return { forecast, isLoading, error };
 };

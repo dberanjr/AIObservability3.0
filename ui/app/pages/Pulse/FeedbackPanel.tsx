@@ -13,8 +13,8 @@ import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCount } from "../../data/format";
 import { useFeedback } from "./useFeedback";
 
-const FeedbackBody = () => {
-  const r = useFeedback();
+const FeedbackBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const r = useFeedback(showExample);
 
   const items: BarListItem[] = r.labels.map((l) => ({
     key: l.label,
@@ -70,7 +70,7 @@ const FeedbackBody = () => {
   );
 };
 
-export const FeedbackPanel = () => (
+export const FeedbackPanel = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard
     title="Feedback & prompt versions"
     subtitle={
@@ -82,6 +82,6 @@ export const FeedbackPanel = () => (
     }
     defaultOpen
   >
-    <FeedbackBody />
+    <FeedbackBody showExample={showExample} />
   </CollapsibleCard>
 );

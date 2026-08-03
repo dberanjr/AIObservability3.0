@@ -256,7 +256,15 @@ const AgentVerdict = ({ parts }: { parts: string[] }) => {
 };
 
 /** The expandable / full-screen detail body: stage mix, percentiles, cost + tabs. */
-const AgentDetailContent = ({ row, verdict }: { row: AgentRow; verdict: string[] }) => {
+const AgentDetailContent = ({
+  row,
+  verdict,
+  showExample = false,
+}: {
+  row: AgentRow;
+  verdict: string[];
+  showExample?: boolean;
+}) => {
   const [tab, setTab] = useState<DetailTab>("tools");
   return (
     <Flex flexDirection="column" gap={8}>
@@ -310,7 +318,7 @@ const AgentDetailContent = ({ row, verdict }: { row: AgentRow; verdict: string[]
 
       <SubTabBar active={tab} onSelect={setTab} />
       <div style={{ paddingTop: 8 }}>
-        {tab === "tools" && <AgentToolsSubview agentName={row.agent} />}
+        {tab === "tools" && <AgentToolsSubview agentName={row.agent} showExample={showExample} />}
         {tab === "topology" && <AgentTopologySubview agentName={row.agent} />}
         {tab === "context" && <AgentContextStoresSubview />}
       </div>
@@ -322,10 +330,12 @@ const ExpandedDetail = ({
   row,
   verdict,
   onFullScreen,
+  showExample,
 }: {
   row: AgentRow;
   verdict: string[];
   onFullScreen: () => void;
+  showExample: boolean;
 }) => (
   <Flex
     flexDirection="column"
@@ -335,7 +345,7 @@ const ExpandedDetail = ({
     <Flex justifyContent="flex-end">
       <FullScreenButton onClick={onFullScreen} />
     </Flex>
-    <AgentDetailContent row={row} verdict={verdict} />
+    <AgentDetailContent row={row} verdict={verdict} showExample={showExample} />
   </Flex>
 );
 
@@ -346,6 +356,8 @@ export interface AgentsTableProps {
   operation: AgentOperation;
   onViewChange: (v: AgentView) => void;
   onOperationChange: (o: AgentOperation) => void;
+  /** Demo Mode / no-telemetry fallback — see BedrockPage's doc comment. */
+  showExample?: boolean;
 }
 
 export const AgentsTable = ({
@@ -355,12 +367,13 @@ export const AgentsTable = ({
   operation,
   onViewChange,
   onOperationChange,
+  showExample = false,
 }: AgentsTableProps) => {
   const { thresholds, hasActive } = useSLA();
   const { pageConfig } = useTweaks();
   const showTtft = pageConfig.agentsShowTtft;
-  const highFreqAgents = useHighFrequencyAgents();
-  const loops = useAgentLoops();
+  const highFreqAgents = useHighFrequencyAgents(showExample);
+  const loops = useAgentLoops(showExample);
   const loopRateByAgent = useMemo(() => {
     const m = new Map<string, number>();
     for (const lr of loops.rows) {
@@ -635,6 +648,7 @@ export const AgentsTable = ({
                     row={r}
                     verdict={verdict}
                     onFullScreen={() => setFullScreen(r)}
+                    showExample={showExample}
                   />
                 )}
               </React.Fragment>
@@ -655,7 +669,7 @@ export const AgentsTable = ({
       >
         {fullScreen && (
           <Surface elevation="raised" padding={16}>
-            <AgentDetailContent row={fullScreen} verdict={verdictFor(fullScreen)} />
+            <AgentDetailContent row={fullScreen} verdict={verdictFor(fullScreen)} showExample={showExample} />
           </Surface>
         )}
       </ChartModal>

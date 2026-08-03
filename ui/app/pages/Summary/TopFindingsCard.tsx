@@ -37,10 +37,12 @@ const IntelBadge = () => (
  */
 export const TopFindingsCard = ({
   onSelect,
+  showExample = false,
 }: {
   onSelect: (finding: Finding) => void;
+  showExample?: boolean;
 }) => {
-  const { anomalies, isLoading, error } = useAnomalies();
+  const { anomalies, isLoading, error } = useAnomalies(showExample);
   const cards = anomalies.slice(0, MAX_CARDS);
 
   return (

@@ -13,10 +13,11 @@ import { BarList, type BarListItem } from "../../components/charts/BarList";
 import { EmptyState } from "../../components/EmptyState";
 import { MaximizablePanel } from "../../components/MaximizablePanel";
 import { DataTable, type DataColumn } from "../../components/DataTable";
-import { fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
+import { fmtAccount, fmtCount, fmtMs, fmtPercent, fmtTokens, fmtUSDPrecise } from "../../data/format";
 import { useAgentSessions, useBedrockPerf } from "../../bedrock/useBedrock";
 import type { AgentSessionRow } from "../../bedrock/parse";
 import type { BedrockScope } from "../../bedrock/types";
+import { useAccountNames } from "../../scope/AccountNamesContext";
 import { perfForSession, sessionModelPerf } from "./agentSessionPerf";
 
 export interface AgentSessionTableProps {
@@ -24,9 +25,13 @@ export interface AgentSessionTableProps {
 }
 
 /** Row enriched with its joined P95 (see agentSessionPerf.ts for the
- *  shortModelName-vs-normalizeBedrockModelId re-key this requires). */
+ *  shortModelName-vs-normalizeBedrockModelId re-key this requires) and its
+ *  "Name (id)"-formatted account label (see useAccountNames) — precomputed
+ *  here, not in the column's render, since `sessionColumns` is a plain
+ *  module-level array and can't call hooks itself. */
 interface EnrichedRow extends AgentSessionRow {
   p95Ms: number | undefined;
+  accountLabel: string;
 }
 
 const Dash = () => <Text style={{ fontSize: 11.5, color: "var(--text-4)" }}>—</Text>;
@@ -86,19 +91,19 @@ const CostCell = ({ row }: { row: EnrichedRow }) => (
   </span>
 );
 
-/** "Identity/Account" shown in FULL (noTruncate) per request — resize/wrap
+/** "User/Agent" shown in FULL (noTruncate) per request — resize/wrap
  *  keeps the session identity inside the column instead of clipping with an
  *  ellipsis. Account stays a separate, narrower column. */
 const sessionColumns: DataColumn<EnrichedRow>[] = [
   {
     key: "session",
-    header: "Identity/Account",
+    header: "User/Agent",
     render: (r) => <span title={r.session || "(unknown session)"}>{r.session || "(unknown session)"}</span>,
     mono: true,
     noTruncate: true,
     width: 220,
   },
-  { key: "account", header: "Account", render: (r) => r.account || "—", mono: true, width: 130 },
+  { key: "account", header: "Account", render: (r) => r.accountLabel || "—", mono: true, width: 130 },
   { key: "models", header: "Models", render: (r) => <ModelChips models={r.models} />, width: 220, noTruncate: true },
   { key: "invocations", header: "Invocations", render: (r) => fmtCount(r.invocations), align: "right", width: 100 },
   {
@@ -149,6 +154,7 @@ const SessionDetailModal = ({
   perfRows: ReturnType<typeof useBedrockPerf>["rows"];
   onClose: () => void;
 }) => {
+  const { names: accountNames } = useAccountNames();
   const modelPerf = useMemo(() => sessionModelPerf(row, perfRows), [row, perfRows]);
   const latencyItems = useMemo<BarListItem[]>(
     () =>
@@ -177,7 +183,7 @@ const SessionDetailModal = ({
     <DetailModalShell
       title={row.session || "(unknown session)"}
       monoTitle
-      subtitle={`${row.account || "unknown account"} · ${fmtCount(row.invocations)} invocations`}
+      subtitle={`${fmtAccount(row.account, accountNames[row.account]) || "unknown account"} · ${fmtCount(row.invocations)} invocations`}
       onClose={onClose}
     >
       <Section title="Summary">
@@ -231,7 +237,7 @@ const SessionDetailModal = ({
  * invocations desc / capped at 200 server-side) and re-sorts by est cost desc
  * — the FinOps-relevant ordering for a cost zone. Wrapped in MaximizablePanel
  * for a full-screen focused view; the table uses the resizable DataTable, with
- * "Identity/Account" shown in full (no ellipsis). Row click opens
+ * "User/Agent" shown in full (no ellipsis). Row click opens
  * `SessionDetailModal`.
  *
  * P95 is joined from `useBedrockPerf` by the row's PRIMARY model — see
@@ -242,11 +248,17 @@ const SessionDetailModal = ({
 export const AgentSessionTable = ({ scope }: AgentSessionTableProps) => {
   const { rows, isLoading } = useAgentSessions(scope);
   const { rows: perfRows, isLoading: perfLoading } = useBedrockPerf(scope);
+  const { names: accountNames } = useAccountNames();
   const [selected, setSelected] = useState<AgentSessionRow | null>(null);
 
   const enriched = useMemo<EnrichedRow[]>(
-    () => rows.map((r) => ({ ...r, p95Ms: perfForSession(r, perfRows)?.latencyMs })),
-    [rows, perfRows],
+    () =>
+      rows.map((r) => ({
+        ...r,
+        p95Ms: perfForSession(r, perfRows)?.latencyMs,
+        accountLabel: fmtAccount(r.account, accountNames[r.account]),
+      })),
+    [rows, perfRows, accountNames],
   );
 
   const sorted = useMemo(

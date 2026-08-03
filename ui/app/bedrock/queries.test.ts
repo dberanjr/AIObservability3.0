@@ -2,9 +2,22 @@ import { describe, expect, it } from "vitest";
 import {
   bedrockLogBase, buildBedrockOverviewQuery, buildBedrockDailyCostQuery,
   buildAgentSessionsQuery, buildBedrockFacetsQuery, bedrockCostIntervalSec,
+  buildBedrockAvailableQuery,
 } from "./queries";
 
 const scope = { timeframe: { from: "now()-7d", to: "now()" }, accounts: [] as string[], models: [] as string[] };
+
+describe("buildBedrockAvailableQuery", () => {
+  it("scopes the existence probe to the PASSED timeframe, not a hardcoded window", () => {
+    const q = buildBedrockAvailableQuery({ from: "now()-30d", to: "now()-7d" });
+    expect(q).toContain("from: now()-30d, to: now()-7d");
+    expect(q).not.toContain("now()-24h");
+  });
+  it("defaults `to` to now() when the timeframe is open-ended", () => {
+    const q = buildBedrockAvailableQuery({ from: "now()-7d" });
+    expect(q).toContain("from: now()-7d, to: now()");
+  });
+});
 
 describe("bedrockLogBase", () => {
   it("filters the bedrock log group BEFORE the content match (scan pruning)", () => {

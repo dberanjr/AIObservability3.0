@@ -140,7 +140,7 @@ export const TopModelsPanel = ({
  * the fetcher (via a nonce key) to re-run the failed query, since useModels does
  * not expose its own refetch.
  */
-export const TopModelsCard = () => {
+export const TopModelsCard = ({ showExample = false }: { showExample?: boolean }) => {
   const [reloadNonce, setReloadNonce] = useState(0);
   return (
     <CollapsibleCard
@@ -152,14 +152,21 @@ export const TopModelsCard = () => {
         <TopModelsFetcher
           key={reloadNonce}
           onRetry={() => setReloadNonce((n) => n + 1)}
+          showExample={showExample}
         />
       </ScanScope>
     </CollapsibleCard>
   );
 };
 
-const TopModelsFetcher = ({ onRetry }: { onRetry: () => void }) => {
-  const { models, isLoading, error } = useModels();
+const TopModelsFetcher = ({
+  onRetry,
+  showExample = false,
+}: {
+  onRetry: () => void;
+  showExample?: boolean;
+}) => {
+  const { models, isLoading, error } = useModels(null, showExample);
   return (
     <TopModelsPanel
       models={models}

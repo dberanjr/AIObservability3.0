@@ -65,6 +65,8 @@ export interface PromptsTilesRowProps {
   onFilterChange?: (next: PromptsFilter) => void;
   /** Active problem-pattern focus (raw `?focus`) — scopes the totals (Prompts-2). */
   focus?: string | null;
+  /** True to render the bundled Demo Mode totals instead of querying Grail. */
+  showExample?: boolean;
 }
 
 const ScopeCaption = () => (
@@ -78,8 +80,8 @@ const ScopeCaption = () => (
 // expanded — CollapsibleCard renders children solely when open. Threads the
 // sidebar filter + focus so the tiles respond to the same scope as the list
 // (Prompts-2).
-const PromptsTilesBody = ({ filter, onFilterChange, focus }: PromptsTilesRowProps) => {
-  const summary = usePromptSummary(filter, focus);
+const PromptsTilesBody = ({ filter, onFilterChange, focus, showExample }: PromptsTilesRowProps) => {
+  const summary = usePromptSummary(filter, focus, showExample);
   const filtered = isScopeFiltered(filter, focus);
   // The KPI row is user-customizable (drag to reorder, drag a corner to resize)
   // via the shared CustomizableGrid, revealed by the global header "Customize"

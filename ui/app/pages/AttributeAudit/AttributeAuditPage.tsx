@@ -18,6 +18,7 @@ import { SectionCard, TierBadge, TIER_META } from "./SectionCard";
 import { AttributeDetailModal } from "./AttributeDetailModal";
 import { InstrumentationChecklist } from "./InstrumentationChecklist";
 import { coverageRampColor } from "./coverage";
+import { AwsTelemetrySection } from "./awsTelemetry/AwsTelemetrySection";
 
 const timeframeLabel = (from: string, to?: string): string => {
   const m = /^now\(\)-(\d+)([smhd])$/i.exec(from);
@@ -467,7 +468,7 @@ export const AttributeAuditPage = () => {
           <Flex alignItems="center" gap={8}>
             <AnalyticsIcon size={20} style={{ color: "var(--blue)" }} />
             <Heading level={1} style={{ fontSize: 20, fontWeight: 600 }}>
-              AI Attribute Audit
+              AI Telemetry Audit
             </Heading>
           </Flex>
           <Text style={{ fontSize: 12, color: "var(--text-3)" }}>{subtitle}</Text>
@@ -479,7 +480,9 @@ export const AttributeAuditPage = () => {
             <span style={{ color: "var(--red)", fontWeight: 600 }}>missing</span> based on
             live span data — honouring the selected timeframe, scan limit, sampling,
             segments, and global filters. Attributes are rated{" "}
-            <strong>M</strong> (Mandatory) through <strong>O</strong> (Other).
+            <strong>M</strong> (Mandatory) through <strong>O</strong> (Other). A separate
+            AWS Bedrock Telemetry audit (below) covers raw CloudWatch logs/metrics and
+            CloudTrail events, which aren't OTel span attributes.
           </Text>
 
           <SearchInput
@@ -1216,6 +1219,13 @@ export const AttributeAuditPage = () => {
             </div>
           </>
         )}
+
+        {/* Separate audit domain: AWS Bedrock's own raw telemetry (CloudWatch
+            logs/metrics + CloudTrail), not OTel span attributes. Always
+            renders, independent of the span audit's own isEmpty state above —
+            see AwsTelemetrySection's doc comment for why these aren't blended
+            into one coverage %. */}
+        <AwsTelemetrySection />
       </Flex>
 
       <AttributeDetailModal

@@ -7,9 +7,10 @@ import { MaximizablePanel } from "../../../components/MaximizablePanel";
 import { DataTable, type DataColumn } from "../../../components/DataTable";
 import { CATEGORICAL } from "../../../theme/palette";
 import { STATUS_COLOR } from "../../../theme/statusColor";
-import { fmtCount, fmtPercent } from "../../../data/format";
+import { fmtAccount, fmtCount, fmtPercent } from "../../../data/format";
 import { useGovReconciliation } from "../../../bedrock/governance/useGovernance";
 import type { AccountRegionRow, GovScope } from "../../../bedrock/governance/types";
+import { useAccountNames } from "../../../scope/AccountNamesContext";
 
 export interface GovReconciliationProps {
   scope: GovScope;
@@ -76,13 +77,20 @@ const CompareBar = ({
   );
 };
 
-const rowsByCallsDesc = (rows: AccountRegionRow[]): AccountRegionRow[] =>
+/** Row enriched with its "Name (id)"-formatted account label (see
+ *  useAccountNames) — precomputed here since `accountColumns` is a plain
+ *  module-level array and can't call hooks itself. */
+interface EnrichedAccountRow extends AccountRegionRow {
+  accountLabel: string;
+}
+
+const rowsByCallsDesc = (rows: EnrichedAccountRow[]): EnrichedAccountRow[] =>
   [...rows].sort((a, b) => b.calls - a.calls);
 
-const accountColumns: DataColumn<AccountRegionRow>[] = [
+const accountColumns: DataColumn<EnrichedAccountRow>[] = [
   // Full account id shown untruncated per request — resize/wrap keeps it
   // inside the column instead of clipping with an ellipsis.
-  { key: "account", header: "Account", render: (r) => r.accountId || "—", mono: true, noTruncate: true, width: 200 },
+  { key: "account", header: "Account", render: (r) => r.accountLabel || "—", mono: true, noTruncate: true, width: 200 },
   { key: "region", header: "Region", render: (r) => r.region || "—", width: 140 },
   { key: "calls", header: "Calls", render: (r) => fmtCount(r.calls), align: "right", width: 110 },
   { key: "identities", header: "Identities", render: (r) => fmtCount(r.identities), align: "right", width: 120 },
@@ -101,6 +109,7 @@ const accountColumns: DataColumn<AccountRegionRow>[] = [
  */
 export const GovReconciliation = ({ scope }: GovReconciliationProps) => {
   const { reconciliation, accountRegion, isLoading } = useGovReconciliation(scope);
+  const { names: accountNames } = useAccountNames();
   const initial = isLoading && reconciliation.length === 0 && accountRegion.length === 0;
 
   const { ctVal, logVal, gap, coveragePct } = useMemo(() => {
@@ -113,7 +122,13 @@ export const GovReconciliation = ({ scope }: GovReconciliationProps) => {
     return { ctVal: ctV, logVal: logV, gap: g, coveragePct: cov };
   }, [reconciliation]);
 
-  const acctRows = useMemo(() => rowsByCallsDesc(accountRegion), [accountRegion]);
+  const acctRows = useMemo(
+    () =>
+      rowsByCallsDesc(
+        accountRegion.map((r) => ({ ...r, accountLabel: fmtAccount(r.accountId, accountNames[r.accountId]) })),
+      ),
+    [accountRegion, accountNames],
+  );
   const maxVal = Math.max(1, ctVal, logVal);
   const hasReconciliation = ctVal > 0 || logVal > 0;
 

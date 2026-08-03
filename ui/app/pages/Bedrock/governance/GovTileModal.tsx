@@ -3,6 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { DetailModalShell, Section, Stat, StatGrid } from "../../../components/DetailModal";
 import { DataTable, type DataColumn } from "../../../components/DataTable";
 import { AreaChart } from "../../../components/charts/AreaChart";
+import { StackedBarChart } from "../../../components/charts/StackedBarChart";
 import { BarList, type BarListItem } from "../../../components/charts/BarList";
 import { EmptyState } from "../../../components/EmptyState";
 import { CATEGORICAL } from "../../../theme/palette";
@@ -87,6 +88,12 @@ const TsChart = ({ ts, ariaLabel }: { ts: GovTimeseries; ariaLabel: string }) =>
 const CallsDetail = ({ scope }: { scope: GovScope }) => {
   const { rows, timeseries } = useGovApiActions(scope);
   const total = rows.reduce((s, r) => s + r.calls, 0);
+  const stackedSeries = timeseries.series.map((s, i) => ({
+    key: s.key,
+    label: s.key,
+    color: CATEGORICAL[i % CATEGORICAL.length],
+    values: s.values,
+  }));
   return (
     <>
       <StatGrid cols={3}>
@@ -95,7 +102,17 @@ const CallsDetail = ({ scope }: { scope: GovScope }) => {
         <Stat label="Top action" value={rows[0]?.eventName ?? "—"} sub={rows[0] ? fmtCount(rows[0].calls) : undefined} />
       </StatGrid>
       <Section title="Calls over time by action">
-        <TsChart ts={timeseries} ariaLabel="Bedrock API calls over time by action" />
+        {timeseries.series.length === 0 ? (
+          <EmptyState bare title="No time-series data" description="Nothing in this scope." />
+        ) : (
+          <StackedBarChart
+            series={stackedSeries}
+            labels={timeseries.labels}
+            formatValue={fmtCount}
+            height={260}
+            ariaLabel="Bedrock API calls over time by action"
+          />
+        )}
       </Section>
       <Section title="API actions">
         <BarList
@@ -167,6 +184,12 @@ const ErroredDetail = ({ scope }: { scope: GovScope }) => {
   const { timeseries } = useGovErrorsSeries(scope);
   const { rows } = useGovAccessDenied(scope);
   const denied = rows.reduce((s, r) => s + r.deniedCalls, 0);
+  const stackedSeries = timeseries.series.map((s, i) => ({
+    key: s.key,
+    label: s.key,
+    color: CATEGORICAL[i % CATEGORICAL.length],
+    values: s.values,
+  }));
   const cols: DataColumn<(typeof rows)[number]>[] = [
     { key: "identity", header: "Identity/Account", render: (r) => r.identity, mono: true, width: 220, noTruncate: true },
     { key: "action", header: "Action", render: (r) => r.eventName, width: 150 },
@@ -180,7 +203,17 @@ const ErroredDetail = ({ scope }: { scope: GovScope }) => {
         <Stat label="Denied principals" value={fmtCount(rows.length)} />
       </StatGrid>
       <Section title="Errors & denials over time">
-        <TsChart ts={timeseries} ariaLabel="Bedrock errors over time by error code" />
+        {timeseries.series.length === 0 ? (
+          <EmptyState bare title="No time-series data" description="Nothing in this scope." />
+        ) : (
+          <StackedBarChart
+            series={stackedSeries}
+            labels={timeseries.labels}
+            formatValue={fmtCount}
+            height={260}
+            ariaLabel="Bedrock errors over time by error code"
+          />
+        )}
       </Section>
       <Section title="Access denied — who, from where, doing what">
         {rows.length === 0 ? (

@@ -8,54 +8,17 @@ import {
   ALL_PROVIDER_IDS,
   PROVIDER_COLOR,
   PROVIDER_DISPLAY,
-  normalizeProvider,
-  canonicalizeModel,
   type ProviderId,
 } from "../../detection/attributes";
-import { toNum } from "../../data/format";
+import { toService, type ServiceRecord, type AIService } from "./parseAIServices";
+import { DEMO_SERVICE_RECORDS } from "./demoData";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-interface ServiceRecord {
-  service?: string;
-  service_id?: string;
-  requests?: number;
-  tokens?: number;
-  in_tokens?: number;
-  out_tokens?: number;
-  errors?: number;
-  logical_errors?: number;
-  agents?: number;
-  agent_names?: Array<string | null>;
-  models?: string[];
-  framework?: string;
-  tok_per_req?: number;
-  error_rate_pct?: number;
-}
-
-export interface AIService {
-  serviceId: string;
-  service: string;
-  framework: string | null;
-  models: string[];
-  modelDisplay: string[];
-  agentNames: string[];
-  providers: ProviderId[];
-  requests: number;
-  tokens: number;
-  /** Aggregate input tokens across the service's models (for cost estimation). */
-  inTok: number;
-  /** Aggregate output tokens across the service's models (for cost estimation). */
-  outTok: number;
-  tokPerReq: number;
-  agents: number;
-  errors: number;
-  errorRatePct: number;
-  logicalErrors: number;
-}
+// Re-exported so existing call sites keep importing the record/service shape
+// and the pure parser from this hook module; the implementations live in the
+// React-free ./parseAIServices so demoData.ts (and its test) can reuse the
+// exact same parse function without pulling in React/DOM-dependent imports.
+export { toService };
+export type { ServiceRecord, AIService };
 
 export interface ExplorerFacets {
   providers: Array<{ id: ProviderId; label: string; count: number; color: string }>;
@@ -80,40 +43,6 @@ export interface UseAIServicesResult {
   error?: Error;
 }
 
-const toService = (r: ServiceRecord): AIService | null => {
-  if (!r.service || !r.service_id) return null;
-  // DQL's collectDistinct(gen_ai.request.model) can include nulls for spans
-  // that have an agent but no model — strip them before any string ops.
-  const models = (r.models ?? []).filter(
-    (m): m is string => typeof m === "string" && m.length > 0,
-  );
-  const providers = Array.from(
-    new Set(models.map((m) => normalizeProvider(undefined, m).id)),
-  );
-  return {
-    serviceId: r.service_id,
-    service: r.service,
-    framework: r.framework ?? null,
-    models,
-    agentNames: (r.agent_names ?? []).filter(
-      (a): a is string => typeof a === "string" && a.length > 0,
-    ),
-    modelDisplay: Array.from(
-      new Set(models.map((m) => canonicalizeModel(m).label)),
-    ),
-    providers,
-    requests: num(r.requests),
-    tokens: num(r.tokens),
-    inTok: num(r.in_tokens),
-    outTok: num(r.out_tokens),
-    tokPerReq: num(r.tok_per_req),
-    agents: num(r.agents),
-    errors: num(r.errors),
-    errorRatePct: num(r.error_rate_pct),
-    logicalErrors: num(r.logical_errors),
-  };
-};
-
 const countFacet = <T>(rows: AIService[], pick: (s: AIService) => T[]) => {
   const counts = new Map<T, number>();
   for (const s of rows) {
@@ -124,7 +53,19 @@ const countFacet = <T>(rows: AIService[], pick: (s: AIService) => T[]) => {
   return counts;
 };
 
-export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult => {
+/**
+ * `showExample` (defaulting to false so no existing call site changes
+ * behaviour) forces the catalog to fold from the bundled demo fixtures
+ * (`DEMO_SERVICE_RECORDS`) through the SAME `toService` parser real rows go
+ * through, instead of querying Grail — used by ExplorerPage's Demo Mode /
+ * no-telemetry fallback. Search/facet filtering below is unchanged and runs
+ * identically over demo or real services, so the sidebar stays interactive
+ * in demo mode too.
+ */
+export const useAIServices = (
+  filter: ExplorerFilter = {},
+  showExample = false,
+): UseAIServicesResult => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
   const _resolution = useResolvedServices();
@@ -133,12 +74,13 @@ export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult 
 
   const { data, isLoading, error } = useScopedDql<ServiceRecord>(
     canQuery ? buildAIServicesQuery(serviceIds, scope.timeframe, filters) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseAIServicesResult>(() => {
+    const rawRecords = showExample ? DEMO_SERVICE_RECORDS : (data?.records ?? []);
     const services: AIService[] = [];
-    for (const r of data?.records ?? []) {
+    for (const r of rawRecords) {
       const s = toService(r);
       if (s) services.push(s);
     }
@@ -200,10 +142,11 @@ export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult 
           .map(([value, count]) => ({ value, count }))
           .sort((a, b) => b.count - a.count),
       },
-      isLoading: servicesLoading || isLoading,
-      error: error ?? undefined,
+      isLoading: showExample ? false : servicesLoading || isLoading,
+      error: showExample ? undefined : (error ?? undefined),
     };
   }, [
+    showExample,
     data,
     isLoading,
     error,
@@ -212,6 +155,5 @@ export const useAIServices = (filter: ExplorerFilter = {}): UseAIServicesResult 
     filter.providers,
     filter.frameworks,
     filter.models,
-    filters,
   ]);
 };

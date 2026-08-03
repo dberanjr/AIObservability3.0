@@ -21,27 +21,16 @@ import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useSampling } from "../../scope/SamplingContext";
 import { dqlTimeArg } from "../../scope/queries";
-import { costOf } from "../../data/pricing";
-import { toNum } from "../../data/format";
+import { computeDailySpend, type DayRec, type DailySpendCore } from "./parse";
+import { DEMO_DAILY_SPEND } from "./demoData";
 
-const DAYS = 8;
+export type { DayRec };
 
 // Floor sampling ratio for the per-day scans. At 1-in-100 a 24h window drops
 // from ~1.7 TB / >10 s (times out) to ~21 GB / <1 s on the validated tenant,
 // while extrapolated token sums stay representative. Honor a heavier toolbar
 // ratio if the user picked one.
 const DAILY_SPEND_MIN_SAMPLING = 100;
-
-interface DayRec {
-  model?: string;
-  in_tok?: number;
-  out_tok?: number;
-}
-
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
 
 /** Per-day window query: day d (0 = the most recent 24h). Per-model tokens. */
 const dayQuery = (d: number): string => {
@@ -57,28 +46,17 @@ fetch spans, samplingRatio: 1, from: ${from}, to: ${to}
 `.trim();
 };
 
-const dayLabel = (d: number): string => (d === 0 ? "Last 24h" : `${d}d ago`);
-
-export interface DailySpend {
-  /** Daily cost oldest → newest (for left-to-right bars). */
-  bars: number[];
-  /** Labels aligned with `bars`. */
-  barLabels: string[];
-  spend24h: number;
-  spend7d: number;
-  projected30d: number;
-  /** 24h day-over-day % change (vs the prior day), or null. */
-  delta24h: number | null;
-  /**
-   * The sampling ratio these per-day scans actually ran at (the floor, or the
-   * heavier toolbar ratio). Exposed so the tile can disclose when this estimate
-   * was sampled more coarsely than the toolbar setting implies (scan-6).
-   */
-  samplingRatio: number;
+export interface DailySpend extends DailySpendCore {
   isLoading: boolean;
 }
 
-export const useDailySpend = (): DailySpend => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — used by the Summary page's
+ * PostureBand. Pulse's own SpendGlance never passes it, so its behavior is
+ * unchanged.
+ */
+export const useDailySpend = (showExample = false): DailySpend => {
   const { samplingRatio } = useSampling();
   // Heavy per-day scans run at a sampling floor so they complete within the
   // platform execution-time limit; the toolbar ratio wins if it's heavier.
@@ -86,6 +64,7 @@ export const useDailySpend = (): DailySpend => {
   const opts = {
     staleTime: 60_000,
     samplingRatioOverride: effectiveRatio,
+    enabled: !showExample,
   } as const;
 
   // Eight independent per-day scans (unrolled — fixed hook order).
@@ -100,38 +79,15 @@ export const useDailySpend = (): DailySpend => {
   const results = [r0, r1, r2, r3, r4, r5, r6, r7];
 
   return useMemo<DailySpend>(() => {
-    const dayCost = (recs: DayRec[] | undefined): number =>
-      (recs ?? []).reduce(
-        (acc, row) =>
-          acc + costOf(num(row.in_tok) * effectiveRatio, num(row.out_tok) * effectiveRatio, row.model ?? null),
-        0,
-      );
-
-    // totals[d]: cost of day d (0 = most recent 24h).
-    const totals = results.map((r) => dayCost(r.data?.records));
-    const bars: number[] = [];
-    const barLabels: string[] = [];
-    for (let i = DAYS - 1; i >= 0; i--) {
-      bars.push(totals[i]);
-      barLabels.push(dayLabel(i));
-    }
-
-    const spend24h = totals[0] ?? 0;
-    const spend7d = totals.slice(0, 7).reduce((a, b) => a + b, 0);
-    const projected30d = spend7d > 0 ? (spend7d / 7) * 30 : 0;
-    const prev = totals[1] ?? 0;
-    const delta24h = prev > 0 ? ((spend24h - prev) / prev) * 100 : null;
-
+    if (showExample) return { ...DEMO_DAILY_SPEND, isLoading: false };
+    const core = computeDailySpend(
+      results.map((r) => r.data?.records),
+      effectiveRatio,
+    );
     return {
-      bars,
-      barLabels,
-      spend24h,
-      spend7d,
-      projected30d,
-      delta24h,
-      samplingRatio: effectiveRatio,
+      ...core,
       isLoading: results.some((r) => r.isLoading),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [r0.data, r1.data, r2.data, r3.data, r4.data, r5.data, r6.data, r7.data, effectiveRatio]);
+  }, [showExample, r0.data, r1.data, r2.data, r3.data, r4.data, r5.data, r6.data, r7.data, effectiveRatio]);
 };

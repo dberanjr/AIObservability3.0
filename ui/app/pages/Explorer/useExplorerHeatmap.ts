@@ -5,43 +5,20 @@ import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildServiceModelHeatmapQuery } from "./queries";
 import {
-  PROVIDER_COLOR,
-  normalizeProvider,
-  canonicalizeModel,
-  type ProviderId,
-} from "../../detection/attributes";
+  foldHeatmapRecords,
+  type CellRecord,
+  type HeatmapCell,
+  type HeatmapColumn,
+  type HeatmapRow,
+} from "./foldHeatmap";
+import { DEMO_CELL_RECORDS } from "./demoData";
 
-interface CellRecord {
-  service?: string;
-  service_id?: string;
-  model?: string;
-  system?: string;
-  requests?: number;
-  tokens?: number;
-}
-
-export interface HeatmapCell {
-  service: string;
-  model: string;
-  tokens: number;
-  requests: number;
-}
-
-export interface HeatmapColumn {
-  model: string;
-  /** Raw gen_ai.request.model values that map to this canonical column. */
-  rawModels: string[];
-  providerId: ProviderId;
-  color: string;
-  totalTokens: number;
-}
-
-export interface HeatmapRow {
-  service: string;
-  serviceId: string;
-  totalTokens: number;
-  cells: Map<string, HeatmapCell>;
-}
+// Re-exported so existing call sites keep importing the record/row/column
+// shapes and the pure fold from this hook module; the implementation lives in
+// the React-free ./foldHeatmap so demoData.ts (and its test) can reuse the
+// exact same fold function without pulling in React/DOM-dependent imports.
+export { foldHeatmapRecords };
+export type { CellRecord, HeatmapCell, HeatmapColumn, HeatmapRow };
 
 export interface UseExplorerHeatmapResult {
   rows: HeatmapRow[];
@@ -51,7 +28,14 @@ export interface UseExplorerHeatmapResult {
   error?: Error;
 }
 
-export const useExplorerHeatmap = (): UseExplorerHeatmapResult => {
+/**
+ * `showExample` (defaulting to false so no existing call site changes
+ * behaviour) forces the heatmap to fold from the bundled demo fixtures
+ * (`DEMO_CELL_RECORDS`) through the SAME `foldHeatmapRecords` fold real rows
+ * go through, instead of querying Grail — used by ExplorerPage's Demo Mode /
+ * no-telemetry fallback.
+ */
+export const useExplorerHeatmap = (showExample = false): UseExplorerHeatmapResult => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
   const _resolution = useResolvedServices();
@@ -60,71 +44,16 @@ export const useExplorerHeatmap = (): UseExplorerHeatmapResult => {
 
   const { data, isLoading, error } = useScopedDql<CellRecord>(
     canQuery ? buildServiceModelHeatmapQuery(serviceIds, scope.timeframe, filters) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseExplorerHeatmapResult>(() => {
-    const rowMap = new Map<string, HeatmapRow>();
-    const colMap = new Map<string, HeatmapColumn>();
-    let maxCellTokens = 0;
-
-    for (const r of data?.records ?? []) {
-      if (!r.service || !r.service_id || !r.model) continue;
-      const modelKey = canonicalizeModel(r.model).label;
-      const provider = normalizeProvider(r.system, r.model);
-
-      let row = rowMap.get(r.service_id);
-      if (!row) {
-        row = {
-          service: r.service,
-          serviceId: r.service_id,
-          totalTokens: 0,
-          cells: new Map(),
-        };
-        rowMap.set(r.service_id, row);
-      }
-      const existingCell = row.cells.get(modelKey);
-      const tokens = (existingCell?.tokens ?? 0) + (r.tokens ?? 0);
-      const requests = (existingCell?.requests ?? 0) + (r.requests ?? 0);
-      row.cells.set(modelKey, {
-        service: r.service,
-        model: modelKey,
-        tokens,
-        requests,
-      });
-      row.totalTokens += r.tokens ?? 0;
-      if (tokens > maxCellTokens) maxCellTokens = tokens;
-
-      const existingCol = colMap.get(modelKey);
-      if (existingCol) {
-        existingCol.totalTokens += r.tokens ?? 0;
-        if (r.model && !existingCol.rawModels.includes(r.model)) {
-          existingCol.rawModels.push(r.model);
-        }
-      } else {
-        colMap.set(modelKey, {
-          model: modelKey,
-          rawModels: r.model ? [r.model] : [],
-          providerId: provider.id,
-          color: PROVIDER_COLOR[provider.id],
-          totalTokens: r.tokens ?? 0,
-        });
-      }
-    }
-
-    const rows = Array.from(rowMap.values()).sort(
-      (a, b) => b.totalTokens - a.totalTokens,
-    );
-    const columns = Array.from(colMap.values()).sort(
-      (a, b) => b.totalTokens - a.totalTokens,
-    );
-
+    const records = showExample ? DEMO_CELL_RECORDS : (data?.records ?? []);
+    const folded = foldHeatmapRecords(records);
     return {
-      rows,
-      columns,
-      maxCellTokens,
-      isLoading: servicesLoading || isLoading,
-      error: error ?? undefined,
+      ...folded,
+      isLoading: showExample ? false : servicesLoading || isLoading,
+      error: showExample ? undefined : (error ?? undefined),
     };
-  }, [data, isLoading, error, servicesLoading, filters]);
+  }, [showExample, data, isLoading, error, servicesLoading]);
 };

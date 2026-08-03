@@ -5,8 +5,11 @@ import { EstimatedBadge } from "../../components/DetailModal";
 import {
   useBedrockOverview,
   useBedrockCost,
+  useBedrockCostSpark,
   useBedrockPerf,
+  useBedrockErrorRateSpark,
   useAgentSessions,
+  useAgentSessionsSpark,
 } from "../../bedrock/useBedrock";
 import type { BedrockScope } from "../../bedrock/types";
 import type { Timeframe } from "../../scope/types";
@@ -33,6 +36,10 @@ const GRID: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: "var(--d-gap)",
+  // Explicit (grid's own default) so every tile in the row stretches to match
+  // the tallest — StatTile's body/media fill that stretched height instead of
+  // leaving blank space below a fixed-size sparkline.
+  alignItems: "stretch",
 };
 
 /** A sparkline is only worth rendering when the series actually shows a
@@ -49,16 +56,23 @@ const hasSignal = (values: number[]): boolean => values.filter((v) => v !== 0).l
  * over-read (P95 latency, TTFT, Error rate, TPM headroom, Sessions all carry
  * one).
  *
- * Sparklines: "Est cost" plots its real daily cost series (`useBedrockCost`).
- * "Invocations", "Tokens", "Latency (avg)", "TTFT" and "Peak TPM" plot
- * `useBedrockPerf`'s `series` — a fine-grained (`pickChartIntervalSec`)
- * cross-model fold of the same metric timeseries each tile's headline number
- * derives from (see `aggregatePerfSeries` in parse.ts), so the trend is an
- * honest zoom-in on the same signal, not a fabricated one. "Error rate" has
- * no metric series (its only signal is the log `errorCode` field, which
- * arrives as a scope-aggregated total, not a timeseries) and "Sessions"
- * (a distinct-count) has no meaningful sparkline shape either — both are
- * deliberately left without one.
+ * Sparklines: every tile in this row plots at the SAME granularity
+ * (`pickChartIntervalSec`, see chartInterval.ts) so the row reads as one
+ * consistent chart, not a mix of chart densities. "Est cost" plots
+ * `useBedrockCostSpark`'s fine-grained series (falling back to the coarser
+ * daily-bar-chart series only until the finer query resolves) rather than
+ * `useBedrockCost`'s own `daily`, which is deliberately coarse for the
+ * (bar, not line) cost-by-model chart lower on the page. "Invocations",
+ * "Tokens", "Latency (avg)", "TTFT" and "Peak TPM" plot `useBedrockPerf`'s
+ * `series` — a fine-grained cross-model fold of the same metric timeseries
+ * each tile's headline number derives from (see `aggregatePerfSeries` in
+ * parse.ts), so the trend is an honest zoom-in on the same signal, not a
+ * fabricated one. "Error rate" plots a bucketed invocations/errors ratio
+ * (`useBedrockErrorRateSpark`) and "Sessions" plots a bucketed
+ * (HyperLogLog-approximate) distinct-session-count series
+ * (`useAgentSessionsSpark`) — both are separate `makeTimeseries` queries over
+ * the same log source `useBedrockOverview` aggregates, since neither signal
+ * has a metric-based timeseries to reuse.
  *
  * Modal open-state lives here (not lifted to BedrockPage) since this row is
  * both the only producer and only consumer of which tile is drilled into.
@@ -68,8 +82,11 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
 
   const { totals, isLoading: overviewLoading } = useBedrockOverview(scope);
   const { daily, summary, isLoading: costLoading } = useBedrockCost(scope);
+  const { values: costSparkValues, labels: costSparkLabels } = useBedrockCostSpark(scope);
   const { rows: perfRows, tpmPeakPct, series: perfSeries, isLoading: perfLoading } = useBedrockPerf(scope);
+  const { values: errorRateSpark } = useBedrockErrorRateSpark(scope);
   const { rows: sessionRows } = useAgentSessions(scope);
+  const { values: sessionsSpark } = useAgentSessionsSpark(scope);
   // Invocations/Tokens headline numbers come from the SCOPED overview logs, but
   // their sparklines come from the (account/model-unscoped) metric series — so
   // hide those two sparklines when a scope filter is active, to avoid a scoped
@@ -110,6 +127,12 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
       : summary.total > 0
         ? "fully priced"
         : undefined;
+
+  // Prefer the fine-grained spark series (same granularity as every other
+  // tile in this row); fall back to the coarser daily-bar-chart series only
+  // until the finer query resolves, mirroring BedrockHero's own fallback.
+  const costSparkFallbackValues = costSparkValues.length > 0 ? costSparkValues : daily.map((d) => d.actual);
+  const costSparkFallbackLabels = costSparkValues.length > 0 ? costSparkLabels : daily.map((d) => d.day);
 
   return (
     <>
@@ -167,14 +190,14 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           onClick={() => setModal("cost")}
           actionLabel="Open Est cost details"
           media={
-            daily.length > 1 ? (
+            costSparkFallbackValues.length > 1 ? (
               <Sparkline
-                values={daily.map((d) => d.actual)}
-                labels={daily.map((d) => d.day)}
+                values={costSparkFallbackValues}
+                labels={costSparkFallbackLabels}
                 color="var(--blue)"
                 height={28}
                 valueFormatter={(n) => fmtUSDPrecise(n)}
-                ariaLabel="Daily Bedrock spend"
+                ariaLabel="Bedrock spend trend"
               />
             ) : undefined
           }
@@ -230,6 +253,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={overviewInitial}
           onClick={() => setModal("errors")}
           actionLabel="Open Error rate details"
+          media={
+            hasSignal(errorRateSpark) ? (
+              <Sparkline
+                values={errorRateSpark}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtPercent(n)}
+                ariaLabel="Error rate trend"
+              />
+            ) : undefined
+          }
         />
         <StatTile
           label="Peak TPM"
@@ -261,6 +295,17 @@ export const BedrockKpiRow = ({ scope }: BedrockKpiRowProps) => {
           loading={overviewInitial}
           onClick={() => setModal("sessions")}
           actionLabel="Open Sessions details"
+          media={
+            hasSignal(sessionsSpark) ? (
+              <Sparkline
+                values={sessionsSpark}
+                color="var(--blue)"
+                height={28}
+                valueFormatter={(n) => fmtCount(n)}
+                ariaLabel="Sessions trend"
+              />
+            ) : undefined
+          }
         />
       </div>
 

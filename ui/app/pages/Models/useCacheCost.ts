@@ -17,8 +17,9 @@ import { useSampling } from "../../scope/SamplingContext";
 import { dqlTimeArg } from "../../scope/queries";
 import { toNum } from "../../data/format";
 import { AI_SPAN_POPULATION, firstNonNull } from "../../detection/attributeFields";
+import { DEMO_CACHE_COST_RECORD } from "./demoData";
 
-interface CacheRecord {
+export interface CacheRecord {
   cache_read?: number | string;
   cache_write?: number | string;
   input?: number | string;
@@ -60,7 +61,14 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
   }
 `.trim();
 
-export const useCacheCost = (): UseCacheCostResult => {
+/**
+ * `showExample` defaults to false so this hook's behaviour is unchanged for
+ * any other caller. When true, the real query is skipped and the fold below
+ * runs over the canned `DEMO_CACHE_COST_RECORD` instead — same shape, same
+ * extrapolation math, with the sampling multiplier pinned to 1 (the canned
+ * totals already represent full-population counts).
+ */
+export const useCacheCost = (showExample = false): UseCacheCostResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const tf = scope.timeframe;
@@ -70,9 +78,27 @@ export const useCacheCost = (): UseCacheCostResult => {
   );
   const { data, isLoading, error } = useScopedDql<CacheRecord>(query, {
     staleTime: 60_000,
+    enabled: !showExample,
   });
 
   return useMemo<UseCacheCostResult>(() => {
+    if (showExample) {
+      const rec = DEMO_CACHE_COST_RECORD;
+      const cacheReadTokens = num(rec.cache_read);
+      const inputTokens = num(rec.input);
+      const billableInput = cacheReadTokens + inputTokens;
+      return {
+        cacheReadTokens,
+        cacheWriteTokens: num(rec.cache_write),
+        inputTokens,
+        outputTokens: num(rec.output),
+        cacheHitRate: billableInput > 0 ? cacheReadTokens / billableInput : 0,
+        sdkCost: num(rec.sdk_cost),
+        spans: num(rec.spans),
+        isLoading: false,
+        error: undefined,
+      };
+    }
     const rec = data?.records?.[0];
     const ex = (v: unknown): number => num(v) * samplingRatio;
     const cacheReadTokens = ex(rec?.cache_read);
@@ -89,5 +115,5 @@ export const useCacheCost = (): UseCacheCostResult => {
       isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, samplingRatio]);
+  }, [data, isLoading, error, samplingRatio, showExample]);
 };

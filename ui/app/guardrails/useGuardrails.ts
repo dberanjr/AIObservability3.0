@@ -23,6 +23,7 @@ import {
   type FleetGuardrails,
 } from "./guardrailsLogic";
 import { GUARDRAIL_PROVIDERS } from "./providers";
+import { DEMO_GUARDRAIL_ROWS, DEMO_GUARDRAIL_FLEET, DEMO_GUARDRAIL_TREND_RATE } from "./demoData";
 
 const AWS = GUARDRAIL_PROVIDERS.find((p) => p.id === "aws-bedrock")!;
 
@@ -47,7 +48,13 @@ export interface GuardrailsData {
   error?: Error;
 }
 
-export const useGuardrails = (): GuardrailsData => {
+/**
+ * `showExample` defaults to false so the Prompts page's GuardrailsStrip (the
+ * other caller of this shared hook) is completely unaffected — only the
+ * Bedrock page's summary panel passes it, computed from its own Demo Mode /
+ * no-telemetry `showExample` flag.
+ */
+export const useGuardrails = (showExample = false): GuardrailsData => {
   const { scope } = useScope();
 
   const summary = useScopedDql<ResultRecord>(AWS.summaryQuery!(scope.timeframe), {
@@ -55,15 +62,27 @@ export const useGuardrails = (): GuardrailsData => {
     ignoreGlobalFilter: true,
     ignoreBucketFilter: true,
     ignoreSegments: true,
+    enabled: !showExample,
   });
   const trend = useScopedDql<ResultRecord>(AWS.trendQuery!(scope.timeframe), {
     staleTime: 60_000,
     ignoreGlobalFilter: true,
     ignoreBucketFilter: true,
     ignoreSegments: true,
+    enabled: !showExample,
   });
 
   return useMemo<GuardrailsData>(() => {
+    if (showExample) {
+      return {
+        rows: DEMO_GUARDRAIL_ROWS,
+        fleet: DEMO_GUARDRAIL_FLEET,
+        trendRate: DEMO_GUARDRAIL_TREND_RATE,
+        hasData: true,
+        isLoading: false,
+        error: undefined,
+      };
+    }
     const rows = AWS.parseRows!(summary.data?.records ?? []);
     const fleet = aggregateFleet(rows);
     const trec = trend.data?.records?.[0] as TrendRecord | undefined;
@@ -79,6 +98,7 @@ export const useGuardrails = (): GuardrailsData => {
       error: summary.error ?? trend.error ?? undefined,
     };
   }, [
+    showExample,
     summary.data,
     summary.isLoading,
     summary.error,

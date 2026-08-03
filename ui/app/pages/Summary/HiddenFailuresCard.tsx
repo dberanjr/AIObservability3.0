@@ -15,8 +15,8 @@ import { useHiddenFailures } from "./useHiddenFailures";
  * finish_reasons signal on this tenant). Drills to Explorer, where the
  * logical-error catalog lives.
  */
-export const HiddenFailuresCard = () => {
-  const hidden = useHiddenFailures();
+export const HiddenFailuresCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const hidden = useHiddenFailures(showExample);
 
   const items: BarListItem[] = hidden.categories.map((c) => ({
     key: c.key,

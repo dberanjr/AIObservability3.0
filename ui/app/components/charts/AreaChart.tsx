@@ -7,7 +7,7 @@ import { useTweaks, type ChartLabels } from "../../tweaks/TweaksContext";
  * through transparently). Capped at ~12 labels in `all` mode so a dense
  * series doesn't overlap labels into illegibility.
  */
-const pickLabelIndices = (
+export const pickLabelIndices = (
   values: (number | null)[],
   mode: ChartLabels,
 ): number[] => {
@@ -171,6 +171,13 @@ export interface AreaChartProps {
    * legend if it wants one.
    */
   interactiveLegend?: boolean;
+  /**
+   * Series labels that start toggled OFF when `interactiveLegend` is on —
+   * consulted only once, on mount (e.g. a latency band chart that opens
+   * showing just "avg" with min/max one legend click away). Ignored when
+   * `interactiveLegend` is false.
+   */
+  initiallyHiddenSeries?: string[];
 }
 
 // Visually-hidden but screen-reader-available. Used for the keyboard cursor
@@ -229,12 +236,17 @@ export const AreaChart = ({
   ariaLabel,
   rightAxisFromLeftMax,
   interactiveLegend,
+  initiallyHiddenSeries,
 }: AreaChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   // Series hidden via the interactive legend (keyed by label). Only consulted
-  // when `interactiveLegend` is set; otherwise every series renders.
-  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  // when `interactiveLegend` is set; otherwise every series renders. Seeded
+  // once from `initiallyHiddenSeries` (mount-only — later prop changes don't
+  // re-seed, matching a normal uncontrolled-toggle expectation).
+  const [hidden, setHidden] = useState<Set<string>>(
+    () => new Set(initiallyHiddenSeries ?? []),
+  );
   // Screen-reader readout for the current keyboard cursor position. Updated
   // ONLY on key nav (never on mouse move) so a pointer sweep doesn't spam the
   // aria-live region.

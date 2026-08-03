@@ -4,6 +4,7 @@ import { useScope } from "../../scope/ScopeContext";
 import { useSampling } from "../../scope/SamplingContext";
 import { useResolvedServices } from "../../scope/useResolvedServices";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
+import { canonicalizeModel } from "../../detection/attributes";
 import { buildServiceModelDetailQuery } from "./queries";
 import {
   computeServiceModelCost,
@@ -14,6 +15,7 @@ import {
   type DetailRow,
   type ServiceModelMetrics,
 } from "./foldDetailMetrics";
+import { DEMO_SERVICE_MODEL_DETAIL } from "./demoData";
 
 // Re-exported so existing call sites keep importing the row/metrics types and
 // the pure folder from this hook module; the implementations live in the
@@ -37,10 +39,19 @@ export interface UseServiceModelDetailResult {
  * all of them so the metrics/cost equal the cell's aggregate (no undercount).
  * The sampling ratio is the toolbar's "1 in N" selector; cost extrapolation
  * needs the FRACTION observed, so we pass `1 / N` to computeServiceModelCost.
+ *
+ * `showExample` (defaulting to false so no existing call site changes
+ * behaviour) looks up the clicked (service, canonical model) pair in the
+ * bundled demo fixtures instead of querying Grail, then runs the SAME
+ * `foldDetailMetrics` + `computeServiceModelCost` real math over that raw row
+ * — used by ExplorerPage's Demo Mode / no-telemetry fallback so the heatmap's
+ * detail modal stays interactive (real sampling/timeframe math) even in demo
+ * mode. Only used by Explorer's ServiceModelModal.
  */
 export const useServiceModelDetail = (
   service: string | null,
   models: string[] | null,
+  showExample = false,
 ): UseServiceModelDetailResult => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
@@ -49,18 +60,19 @@ export const useServiceModelDetail = (
 
   const enabled = !!service && !!models && models.length > 0;
 
-  const query = enabled
-    ? buildServiceModelDetailQuery(
-        serviceIds,
-        scope.timeframe,
-        service,
-        models,
-        filters,
-      )
-    : "";
+  const query =
+    enabled && !showExample
+      ? buildServiceModelDetailQuery(
+          serviceIds,
+          scope.timeframe,
+          service,
+          models,
+          filters,
+        )
+      : "";
 
   const { data, isLoading, error } = useScopedDql<DetailRow>(query, {
-    enabled,
+    enabled: enabled && !showExample,
     staleTime: 60_000,
   });
 
@@ -69,28 +81,34 @@ export const useServiceModelDetail = (
       return { metrics: null, cost: null, isLoading: false };
     }
 
-    if (error) {
+    if (!showExample && error) {
       return { metrics: null, cost: null, isLoading, error };
     }
 
-    const row = data?.records?.[0];
+    // All raw variants in `models` canonicalize to the same pricing/label, so
+    // the first one is a correct representative for the single-model cost
+    // lookup and (in demo mode) the demo fixture lookup key.
+    const representativeModel = (models)[0];
+
+    const row = showExample
+      ? DEMO_SERVICE_MODEL_DETAIL[
+          `${service}::${canonicalizeModel(representativeModel).label}`
+        ]
+      : data?.records?.[0];
     if (!row) {
-      return { metrics: null, cost: null, isLoading };
+      return { metrics: null, cost: null, isLoading: showExample ? false : isLoading };
     }
 
     const metrics = foldDetailMetrics(row);
     const { inTok, outTok } = metrics;
 
     // Toolbar samplingRatio is "1 in N" (1 = no sampling); the cost helper
-    // wants the fraction observed.
-    const samplingFraction =
-      Number.isFinite(samplingRatio) && samplingRatio > 0
+    // wants the fraction observed. Demo fixtures are never sampled (fraction 1).
+    const samplingFraction = showExample
+      ? 1
+      : Number.isFinite(samplingRatio) && samplingRatio > 0
         ? 1 / samplingRatio
         : 1;
-
-    // All raw variants in `models` canonicalize to the same pricing, so the
-    // first one is a correct representative for the single-model cost lookup.
-    const representativeModel = (models)[0];
 
     const tf = scope.timeframe;
     const cost = computeServiceModelCost({
@@ -101,8 +119,18 @@ export const useServiceModelDetail = (
       timeframeMs: timeframeDurationMs(tf.from, tf.to),
     });
 
-    return { metrics, cost, isLoading };
-  }, [enabled, data, isLoading, error, samplingRatio, models, scope.timeframe]);
+    return { metrics, cost, isLoading: showExample ? false : isLoading };
+  }, [
+    enabled,
+    showExample,
+    service,
+    data,
+    isLoading,
+    error,
+    samplingRatio,
+    models,
+    scope.timeframe,
+  ]);
 };
 
 /**

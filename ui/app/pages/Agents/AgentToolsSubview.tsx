@@ -38,6 +38,7 @@ import { useAgentToolTraces } from "./useAgentToolTraces";
 import type { RepTrace } from "./representativeTraces";
 import { TraceModal } from "../Prompts/TraceModal";
 import { useTraceSpans } from "../Prompts/useTraceSpans";
+import { DEMO_TOOL_ROWS_BY_AGENT } from "./demoData";
 
 interface ToolRec {
   tool?: string;
@@ -317,7 +318,20 @@ const RepresentativeTraces = ({
   );
 };
 
-export const AgentToolsSubview = ({ agentName }: { agentName: string }) => {
+/**
+ * @param showExample Demo Mode / no-telemetry fallback — see BedrockPage's
+ * doc comment. Skips the real per-agent tool query and renders the canned
+ * per-agent demo tool table instead (falls back to an empty list — and the
+ * existing "no tool calls" empty state — for a demo agent without a
+ * curated tool table).
+ */
+export const AgentToolsSubview = ({
+  agentName,
+  showExample = false,
+}: {
+  agentName: string;
+  showExample?: boolean;
+}) => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
@@ -339,30 +353,31 @@ export const AgentToolsSubview = ({ agentName }: { agentName: string }) => {
     }
   };
 
-  const query = canQuery
+  const query = canQuery && !showExample
     ? strict
       ? buildToolsQuery(resolution.serviceIds, scope.timeframe, undefined, agentName)
       : buildDiscoveredToolsQuery(resolution.serviceIds, scope.timeframe, undefined, agentName)
     : "";
 
   const { data, isLoading } = useScopedDql<ToolRec>(query, {
-    enabled: canQuery,
+    enabled: canQuery && !showExample,
     staleTime: 60_000,
   });
 
-  const rows = useMemo<ToolRow[]>(
-    () =>
-      (data?.records ?? []).map((r) => ({
-        tool: r.tool ?? "—",
-        calls: num(r.calls) * samplingRatio,
-        avgMs: num(r.avg_ms),
-        p90Ms: num(r.p90_ms),
-        p99Ms: num(r.p99_ms),
-        errorPct: num(r.error_rate_pct),
-        retryPct: num(r.retry_rate_pct),
-      })),
-    [data, samplingRatio],
-  );
+  const rows = useMemo<ToolRow[]>(() => {
+    if (showExample) {
+      return (DEMO_TOOL_ROWS_BY_AGENT[agentName] ?? []).map((r) => ({ ...r }));
+    }
+    return (data?.records ?? []).map((r) => ({
+      tool: r.tool ?? "—",
+      calls: num(r.calls) * samplingRatio,
+      avgMs: num(r.avg_ms),
+      p90Ms: num(r.p90_ms),
+      p99Ms: num(r.p99_ms),
+      errorPct: num(r.error_rate_pct),
+      retryPct: num(r.retry_rate_pct),
+    }));
+  }, [showExample, agentName, data, samplingRatio]);
 
   const sorted = useMemo(() => {
     const arr = [...rows];
@@ -375,7 +390,7 @@ export const AgentToolsSubview = ({ agentName }: { agentName: string }) => {
     return arr;
   }, [rows, sortKey, dir]);
 
-  if (isLoading)
+  if (!showExample && isLoading)
     return (
       <Flex flexDirection="column" gap={6} style={{ padding: "4px 0" }}>
         {Array.from({ length: 5 }).map((_, i) => (

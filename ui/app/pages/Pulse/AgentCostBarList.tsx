@@ -27,8 +27,8 @@ import { useAgentCosts } from "./useAgentCosts";
 
 const TOP_N = 8;
 
-const AgentCostBody = () => {
-  const result = useAgentCosts();
+const AgentCostBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const result = useAgentCosts(showExample);
   // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
   // so a truncated scan surfaces the amber "Scan budget reached" empty rather
   // than a misleading "no activity" (STATE-4).
@@ -101,14 +101,14 @@ const AgentCostBody = () => {
   );
 };
 
-export const AgentCostBarList = () => (
+export const AgentCostBarList = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard
     title="Top agents by estimated cost"
     subtitle="cost = (input × in_price + output × out_price) per model"
     defaultOpen
   >
     <ScanScope name="Top agents by cost">
-      <AgentCostBody />
+      <AgentCostBody showExample={showExample} />
     </ScanScope>
   </CollapsibleCard>
 );

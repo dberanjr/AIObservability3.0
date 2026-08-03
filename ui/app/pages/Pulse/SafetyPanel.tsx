@@ -13,8 +13,8 @@ import { CollapsibleCard } from "../../components/CollapsibleCard";
 import { fmtCount } from "../../data/format";
 import { useSafety } from "./useSafety";
 
-const SafetyBody = () => {
-  const r = useSafety();
+const SafetyBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const r = useSafety(showExample);
 
   const items: BarListItem[] = r.actions.map((a) => ({
     key: a.action,
@@ -66,7 +66,7 @@ const SafetyBody = () => {
   );
 };
 
-export const SafetyPanel = () => (
+export const SafetyPanel = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard
     title="Safety & guardrails"
     subtitle={
@@ -78,6 +78,6 @@ export const SafetyPanel = () => (
     }
     defaultOpen
   >
-    <SafetyBody />
+    <SafetyBody showExample={showExample} />
   </CollapsibleCard>
 );

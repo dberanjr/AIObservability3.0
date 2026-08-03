@@ -58,6 +58,14 @@ export interface CapabilityContextValue {
   present: CapabilityId[];
   /** False when the probe hit the scan-limit budget (population truncated). */
   coverageComplete: boolean;
+  /**
+   * True once the probe resolves and finds at least one AI span at all in the
+   * active scope. Used app-wide as the automatic "no AI telemetry yet, show
+   * Demo Mode data" trigger (see Tweaks `demoMode` / `pageConfig.demoMode`) —
+   * the same role `useBedrockAvailable` plays for the Bedrock page, but
+   * span-based pages share this one probe instead of running their own.
+   */
+  hasAnyAiSpans: boolean;
   isLoading: boolean;
   error?: Error;
 }
@@ -128,6 +136,7 @@ export const CapabilityProvider = ({
         spansOf(id) > 0 ? "present" : coverageComplete ? "absent" : "unknown",
       present,
       coverageComplete,
+      hasAnyAiSpans: total > 0,
       isLoading: result.isLoading,
       error: result.error ?? undefined,
     };

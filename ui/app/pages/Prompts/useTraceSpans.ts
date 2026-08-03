@@ -1,19 +1,8 @@
 import { useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { buildTraceSpansQuery, TRACE_SPANS_LIMIT } from "./queries";
-import { toNum } from "../../data/format";
-
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const bool = (v: unknown): boolean => v === true || v === "true";
-
-const str = (v: unknown): string => (typeof v === "string" ? v : "");
-
-const strOrNull = (v: unknown): string | null =>
-  typeof v === "string" && v.length > 0 ? v : null;
+import { RAW_DEMO_TRACE_SPAN_RECORDS_BY_TRACE_ID } from "./demoData";
+import { parseTraceSpanRecords } from "./promptsParse";
 
 export interface TraceSpan {
   spanId: string;
@@ -59,28 +48,6 @@ export interface TraceSpan {
   attributes: Record<string, unknown>;
 }
 
-/** Derived helper columns added by buildTraceSpansQuery (not real span
- *  attributes) — stripped from the attribute map so the panel only shows true
- *  span data. */
-const DERIVED_KEYS = new Set([
-  "dur_ms",
-  "cpu_ms",
-  "cpu_self_ms",
-  "in_tok",
-  "out_tok",
-  "has_error",
-  "svc",
-]);
-
-const parseTimestamp = (v: unknown): number => {
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const parsed = Date.parse(v);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return Date.now();
-};
-
 export interface UseTraceSpansResult {
   spans: TraceSpan[];
   isLoading: boolean;
@@ -90,80 +57,47 @@ export interface UseTraceSpansResult {
   isTruncated: boolean;
 }
 
+// `parseTraceSpanRecords` (raw DQL row → TraceSpan[]) lives in
+// `./promptsParse` — a dependency-free pure module — so both this hook and
+// the Demo Mode dataset can share it without either importing the other's
+// Context-dependent runtime code. Re-exported for anything that still
+// imports it from this hook file.
+export { parseTraceSpanRecords };
+
+/** Precomputed once at module load, per demo trace id, via the SAME
+ *  `parseTraceSpanRecords` the real query path uses above. */
+const DEMO_TRACE_SPANS_BY_TRACE_ID: Record<string, TraceSpan[]> = Object.fromEntries(
+  Object.entries(RAW_DEMO_TRACE_SPAN_RECORDS_BY_TRACE_ID).map(([traceId, records]) => [
+    traceId,
+    parseTraceSpanRecords(records),
+  ]),
+);
+
 export const useTraceSpans = (
   traceId: string | null,
   startMs?: number,
+  /** True to render the bundled Demo Mode trace fixture instead of querying
+   *  Grail (Demo Mode Tweak or the page's own no-telemetry fallback). */
+  showExample = false,
 ): UseTraceSpansResult => {
   // ignoreGlobalFilter: a single-trace lookup must always resolve every span
   // in the trace. Injecting the toolbar's attribute filter (e.g. an agent
   // name) would drop most spans and break the waterfall.
   const { data, isLoading, error } = useScopedDql<Record<string, unknown>>(
     traceId ? buildTraceSpansQuery(traceId, startMs) : "",
-    { enabled: !!traceId, staleTime: 30_000, ignoreGlobalFilter: true },
+    { enabled: !!traceId && !showExample, staleTime: 30_000, ignoreGlobalFilter: true },
   );
 
   return useMemo<UseTraceSpansResult>(() => {
     if (!traceId) {
       return { spans: [], isLoading: false, isTruncated: false };
     }
-
-    const spans: TraceSpan[] = [];
-    for (const r of data?.records ?? []) {
-      const nOrNull = (v: unknown): number | null =>
-        v == null ? null : num(v);
-      // Raw span attributes minus the derived query helpers, for the panel.
-      const attributes: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(r)) {
-        if (!DERIVED_KEYS.has(k)) attributes[k] = v;
-      }
-      spans.push({
-        spanId: str(r["span.id"]),
-        parentSpanId: strOrNull(r["span.parent_id"]),
-        name: str(r["span.name"]),
-        service: str(r.svc) || str(r["service.name"]) || str(r["dt.service.name"]),
-        durationMs: num(r.dur_ms),
-        timestampMs: parseTimestamp(r.start_time),
-        endTimeMs: r.end_time == null ? null : parseTimestamp(r.end_time),
-        isError: bool(r.has_error),
-        spanKind: strOrNull(r["span.kind"]),
-        statusCode: strOrNull(r["span.status_code"]),
-        isRoot:
-          r["request.is_root_span"] == null
-            ? null
-            : bool(r["request.is_root_span"]),
-        endpoint: strOrNull(r["endpoint.name"]),
-        codeFunction: strOrNull(r["code.function"]),
-        codeNamespace: strOrNull(r["code.namespace"]),
-        cpuMs: r.cpu_ms == null ? null : nOrNull(r.cpu_ms),
-        cpuSelfMs: r.cpu_self_ms == null ? null : nOrNull(r.cpu_self_ms),
-        provider:
-          strOrNull(r["gen_ai.system"]) ?? strOrNull(r["gen_ai.provider.name"]),
-        model:
-          strOrNull(r["gen_ai.request.model"]) ??
-          strOrNull(r["gen_ai.response.model"]) ??
-          strOrNull(r["gen_ai.model"]),
-        operation: strOrNull(r["gen_ai.operation.name"]),
-        agentName: strOrNull(r["gen_ai.agent.name"]),
-        toolName: strOrNull(r["gen_ai.tool.name"]),
-        inTokens: num(r.in_tok),
-        outTokens: num(r.out_tok),
-        exceptionType: strOrNull(r["exception.type"]),
-        exceptionMsg: strOrNull(r["exception.message"]),
-        workflow: strOrNull(r["traceloop.workflow.name"]),
-        tlEntity: strOrNull(r["traceloop.entity.name"]),
-        tlEntityPath: strOrNull(r["traceloop.entity.path"]),
-        tlKind: strOrNull(r["traceloop.span.kind"]),
-        sessionId: strOrNull(r["dt.rum.session.id"]),
-        mcpMethod: strOrNull(r["mcp.method.name"]),
-        statusMessage: strOrNull(r["span.status_message"]),
-        httpStatus: nOrNull(r["http.response.status_code"]),
-        lgNode: strOrNull(r["traceloop.association.properties.langgraph_node"]),
-        lgCheckpoint: strOrNull(
-          r["traceloop.association.properties.langgraph_checkpoint_ns"],
-        ),
-        attributes,
-      });
+    if (showExample) {
+      const spans = DEMO_TRACE_SPANS_BY_TRACE_ID[traceId] ?? [];
+      return { spans, isLoading: false, isTruncated: false };
     }
+
+    const spans = parseTraceSpanRecords(data?.records ?? []);
 
     return {
       spans,
@@ -171,5 +105,5 @@ export const useTraceSpans = (
       error: error ?? undefined,
       isTruncated: spans.length >= TRACE_SPANS_LIMIT,
     };
-  }, [data, isLoading, error, traceId]);
+  }, [data, isLoading, error, traceId, showExample]);
 };

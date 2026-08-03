@@ -9,19 +9,10 @@ import {
 import { buildPromptQualityQuery } from "./queries";
 import { toSidebar } from "./filterScope";
 import type { PromptsFilter } from "./usePrompts";
-import { toNum } from "../../data/format";
+import { DEMO_PROMPT_QUALITY_RAW } from "./demoData";
+import { buildPromptQuality } from "./promptsParse";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const optionalPct = (v: unknown): number | null => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : null;
-};
-
-interface QualityRecord {
+export interface QualityRecord {
   total?: number;
   hallucination_pct?: number | null;
   correctness_pct?: number | null;
@@ -53,9 +44,18 @@ export interface PromptQuality {
   error?: Error;
 }
 
+// `buildPromptQuality` (aggregate query row → quality panel snapshot) lives
+// in `./promptsParse` — a dependency-free pure module — so both this hook
+// and the Demo Mode dataset can share it without either importing the
+// other's Context-dependent runtime code. Re-exported for anything that
+// still imports it from this hook file.
+export { buildPromptQuality };
+
 export const usePromptQuality = (
   filter?: PromptsFilter,
   focus?: string | null,
+  /** True to render the bundled Demo Mode aggregate instead of querying Grail. */
+  showExample = false,
 ): PromptQuality => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
@@ -72,43 +72,18 @@ export const usePromptQuality = (
           focus,
         )
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<PromptQuality>(() => {
+    if (showExample) {
+      return { ...buildPromptQuality(DEMO_PROMPT_QUALITY_RAW), isLoading: false, error: undefined };
+    }
     const row = data?.records?.[0];
-    const hallucCov = num(row?.with_halluc);
-    const correctCov = num(row?.with_correct);
-    const faithCov = num(row?.with_faith);
-    const relCov = num(row?.with_rel);
-    const hasAnyEval =
-      hallucCov + correctCov + faithCov + relCov > 0;
-
     return {
-      totalLlmSpans: num(row?.total),
-      hallucination: {
-        pct: hallucCov === 0 ? null : optionalPct(row?.hallucination_pct),
-        coverage: hallucCov,
-        attribute: "gen_ai.evaluation.hallucination",
-      },
-      correctness: {
-        pct: correctCov === 0 ? null : optionalPct(row?.correctness_pct),
-        coverage: correctCov,
-        attribute: "gen_ai.evaluation.correctness",
-      },
-      faithfulness: {
-        pct: faithCov === 0 ? null : optionalPct(row?.faithfulness_pct),
-        coverage: faithCov,
-        attribute: "gen_ai.evaluation.faithfulness",
-      },
-      relevance: {
-        pct: relCov === 0 ? null : optionalPct(row?.relevance_pct),
-        coverage: relCov,
-        attribute: "gen_ai.evaluation.relevance",
-      },
-      hasAnyEval,
+      ...buildPromptQuality(row),
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading]);
+  }, [data, isLoading, error, resolution.isLoading, showExample]);
 };

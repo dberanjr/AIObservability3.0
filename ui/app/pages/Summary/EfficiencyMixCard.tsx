@@ -17,9 +17,9 @@ import { useProviderMix } from "../Pulse/useProviderMix";
  * with output-per-dollar, and a provider-mix donut (Bedrock-proxied vendors
  * unwrapped, provider colors from the app palette). Drills to Models / FinOps.
  */
-export const EfficiencyMixCard = () => {
-  const eff = useTokenEfficiency();
-  const mix = useProviderMix();
+export const EfficiencyMixCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const eff = useTokenEfficiency(showExample);
+  const mix = useProviderMix(showExample);
 
   const slices: StackedSegment[] = mix.shares.map((s) => ({
     key: s.provider,

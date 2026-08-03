@@ -19,8 +19,8 @@ const formatHour = (h: number): string => {
   return h > 12 ? `${h - 12}p` : `${h}a`;
 };
 
-const ActivityHistogramBody = () => {
-  const result = useActivityHistogram();
+const ActivityHistogramBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const result = useActivityHistogram(showExample);
   const { setTimeframe } = useScope();
   const bars = result.buckets.map((b) => ({
     label: formatHour(b.hour),
@@ -108,13 +108,13 @@ const ActivityHistogramBody = () => {
   );
 };
 
-export const ActivityHistogramPanel = () => (
+export const ActivityHistogramPanel = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard
     title="24h activity"
     info="Hourly request counts across all GenAI spans in the last 24 hours, regardless of the active scope timeframe. Always scans 5 TB so the rollup stays accurate even when the toolbar's scan limit is lowered. Click-and-drag to brush a narrower range; the peak hour is highlighted in purple."
     subtitle="Requests per hour, last 24 hours · per 1 hour"
     defaultOpen
   >
-    <ActivityHistogramBody />
+    <ActivityHistogramBody showExample={showExample} />
   </CollapsibleCard>
 );

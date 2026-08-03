@@ -13,7 +13,8 @@ import { ModelPricingButton } from "../pricing/ModelPricingButton";
  *   OVERVIEW — Summary, Pulse                      (the front-door dashboards)
  *   ANALYZE  — Explorer, Agents, Models, Prompts,   (per-entity analytics)
  *              AWS Bedrock
- *   AUDIT    — Attributes                          (instrumentation coverage)
+ *   AUDIT    — Telemetry                           (instrumentation coverage:
+ *              OTel span attributes + AWS Bedrock raw logs/metrics/CloudTrail)
  * Field Notes + About are trailing utility items — right-aligned, outside any
  * group label — so low-frequency meta pages no longer compete with the core
  * analytics tabs. Folded routes still resolve: Tools/Topology → Agents, MCP
@@ -50,7 +51,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "audit",
     label: "Audit",
-    items: [{ to: "/attributes", label: "Attributes" }],
+    items: [{ to: "/attributes", label: "Telemetry" }],
   },
   {
     id: "utility",

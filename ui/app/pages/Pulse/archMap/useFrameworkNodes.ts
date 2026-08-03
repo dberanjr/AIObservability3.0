@@ -16,19 +16,22 @@ import {
   type FrameworkNodeRow,
   type FrameworkNode,
 } from "./frameworkNodes";
+import { DEMO_FRAMEWORK_NODE_ROWS } from "./demoData";
 
-export const useFrameworkNodes = (): {
+export const useFrameworkNodes = (
+  showExample = false,
+): {
   frameworks: FrameworkNode[];
   isLoading: boolean;
 } => {
   const { scope } = useScope();
   const { data, isLoading } = useScopedDql<FrameworkNodeRow>(
     buildFrameworkNodesQuery(null, scope.timeframe),
-    { staleTime: 60_000 },
+    { staleTime: 60_000, enabled: !showExample },
   );
   const frameworks = useMemo(
-    () => rowsToFrameworkNodes(data?.records ?? []),
-    [data],
+    () => rowsToFrameworkNodes(showExample ? DEMO_FRAMEWORK_NODE_ROWS : (data?.records ?? [])),
+    [showExample, data],
   );
-  return { frameworks, isLoading };
+  return { frameworks, isLoading: showExample ? false : isLoading };
 };

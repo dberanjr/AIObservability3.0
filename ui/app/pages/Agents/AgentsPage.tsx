@@ -4,6 +4,9 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { XmarkIcon } from "@dynatrace/strato-icons";
 import { ErrorBanner } from "../../components/ErrorState";
+import { ExampleDataNotice } from "../../components/ExampleDataNotice";
+import { useCapability } from "../../scope/CapabilityContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { AgentsCaveatNote } from "./AgentsCaveatNote";
 import {
   DegradedTrendPanel,
@@ -39,13 +42,23 @@ import { SLOW_P90_MS } from "./constants";
 
 const AgentsPageBody = () => {
   const { hasActive } = useSLA();
-  const agentsResult = useAgents();
-  const evalSnap = useAgentEval();
-  const upstream = useUpstreamServices();
-  const degraded = useDegradedAgents(agentsResult.all);
-  const orchestrationNodes = useOrchestrationNodes();
-  const highFreqAgents = useHighFrequencyAgents();
-  const agentLoops = useAgentLoops();
+
+  // Demo Mode: force every wired tile to render its bundled demo dataset when
+  // the global Tweak is on, OR automatically once the app-wide capability
+  // probe resolves and finds no AI telemetry at all in scope — mirrors
+  // BedrockPage's `showExample` pattern (see that page's doc comment).
+  const capability = useCapability();
+  const { pageConfig } = useTweaks();
+  const showExample =
+    pageConfig.demoMode || (!capability.isLoading && !capability.hasAnyAiSpans);
+
+  const agentsResult = useAgents(showExample);
+  const evalSnap = useAgentEval(showExample);
+  const upstream = useUpstreamServices(showExample);
+  const degraded = useDegradedAgents(agentsResult.all, showExample);
+  const orchestrationNodes = useOrchestrationNodes(showExample);
+  const highFreqAgents = useHighFrequencyAgents(showExample);
+  const agentLoops = useAgentLoops(showExample);
 
   // Pulse problem-pattern drill-down (PP-5): the RAW `?focus` id (not the typed
   // useFocusParam union, which only covers architecture-layer keys). A known id
@@ -168,6 +181,13 @@ const AgentsPageBody = () => {
           </Text>
         </Flex>
 
+        {/* Only the automatic no-telemetry case gets the inline notice — when
+            the global Demo Mode Tweak is on, the app-wide banner (App.tsx)
+            already covers it. */}
+        {showExample && !pageConfig.demoMode && (
+          <ExampleDataNotice tabLabel="Agents" />
+        )}
+
         {firstError && <ErrorBanner error={firstError} />}
         {focusPreset && (
           <Flex alignItems="center" gap={8}>
@@ -226,6 +246,7 @@ const AgentsPageBody = () => {
           <AgentsTilesRow
             agents={agentsResult.all}
             isLoading={agentsResult.isLoading}
+            showExample={showExample}
           />
         </ScanScopedTile>
 
@@ -242,7 +263,7 @@ const AgentsPageBody = () => {
             P90 column + Slow view + the Slow tile's expand), so the hero is just
             the invocations time series. */}
         <ScanScopedTile name="Invocations">
-          <InvocationsChart />
+          <InvocationsChart showExample={showExample} />
         </ScanScopedTile>
 
         {/* Agents table — full width, directly above the execution-tier
@@ -255,10 +276,11 @@ const AgentsPageBody = () => {
           operation={operation}
           onViewChange={setView}
           onOperationChange={setOperation}
+          showExample={showExample}
         />
 
         <ScanScopedTile name="Latency by tier">
-          <LatencyTierPanel />
+          <LatencyTierPanel showExample={showExample} />
         </ScanScopedTile>
 
         <OrchestrationSection rows={orchestrationNodes.nodes} />

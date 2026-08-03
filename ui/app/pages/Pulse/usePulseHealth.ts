@@ -9,221 +9,22 @@ import {
   buildOperationalQuery,
   buildQualityPresenceQuery,
 } from "./queries";
-import type { Pillar, PulseHealth } from "./types";
-import { QUALITY_EVAL_SETUP_GUIDE } from "./types";
-import { fmtCountCompact, toNum } from "../../data/format";
+import type { PulseHealth } from "./types";
+import {
+  operationalPillar,
+  qualityPillar,
+  costPillar,
+  type OperationalRecord,
+  type QualityRecord,
+  type CostRecord,
+  type CostBaselineRecord,
+} from "./parse";
+import { DEMO_PULSE_HEALTH } from "./demoData";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
+export type { OperationalRecord, QualityRecord, CostRecord, CostBaselineRecord };
+export { operationalPillar, qualityPillar, costPillar };
 
-interface OperationalRecord {
-  total?: number;
-  errors?: number;
-  p95_ms?: number;
-  p50_ms?: number;
-}
-
-interface QualityRecord {
-  total?: number;
-  with_eval?: number;
-  avg_score?: number | null;
-}
-
-interface CostRecord {
-  requests?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  distinct_models?: number;
-}
-
-interface CostBaselineRecord {
-  requests_7d?: number;
-  input_tokens_7d?: number;
-  output_tokens_7d?: number;
-}
-
-const HOURS_PER_WEEK = 24 * 7;
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, value));
-
-const round = (n: number): number => Math.round(n);
-
-const operationalPillar = (
-  rec: OperationalRecord | undefined,
-  samplingRatio: number,
-): Pillar => {
-  // Extrapolate count for the displayed span volume only — error rate and
-  // p95 are sampling-invariant statistics computed at sample size.
-  const total = num(rec?.total) * samplingRatio;
-  if (!rec || total === 0) {
-    return {
-      key: "operational",
-      label: "Operational",
-      status: "no-data",
-      score: null,
-      reasons: [{ text: "No AI spans observed in the current scope." }],
-    };
-  }
-  const p95 = num(rec.p95_ms);
-  const rawTotal = num(rec.total);
-  const errorRatePct =
-    rawTotal > 0 ? (num(rec.errors) / rawTotal) * 100 : 0;
-  const latencyPenalty = clamp((p95 - 2000) / 100, 0, 60);
-  const errorPenalty = clamp(errorRatePct * 10, 0, 40);
-  const score = clamp(round(100 - latencyPenalty - errorPenalty), 0, 100);
-  const status: Pillar["status"] =
-    score >= 80 ? "good" : score >= 50 ? "warning" : "critical";
-
-  const reasons: Pillar["reasons"] = [
-    {
-      text: `p95 latency ${p95.toFixed(0)} ms across ${fmtCountCompact(total)} spans`,
-      intent: p95 > 4000 ? "critical" : p95 > 2000 ? "warning" : "info",
-    },
-    {
-      text: `Error rate ${errorRatePct.toFixed(2)}%`,
-      intent:
-        errorRatePct > 5 ? "critical" : errorRatePct > 1 ? "warning" : "info",
-    },
-    {
-      text: "Active problems · pending Dynatrace Intelligence wire-up",
-    },
-  ];
-  return { key: "operational", label: "Operational", status, score, reasons };
-};
-
-const qualityPillar = (
-  rec: QualityRecord | undefined,
-  samplingRatio: number,
-): Pillar => {
-  // Extrapolate display-only counts; coverage and avg_score are ratios/stats
-  // that are sampling-invariant.
-  const total = num(rec?.total) * samplingRatio;
-  const withEval = num(rec?.with_eval) * samplingRatio;
-  const setupCta = {
-    label: "Setup eval pipeline",
-    href: QUALITY_EVAL_SETUP_GUIDE,
-  };
-
-  if (total === 0) {
-    return {
-      key: "quality",
-      label: "Quality",
-      status: "no-data",
-      score: null,
-      reasons: [
-        { text: "No LLM spans found in the current scope." },
-        { text: "Quality scoring requires gen_ai.evaluation.* attributes." },
-      ],
-      cta: setupCta,
-    };
-  }
-
-  if (withEval === 0) {
-    return {
-      key: "quality",
-      label: "Quality",
-      status: "no-data",
-      score: null,
-      reasons: [
-        {
-          text: `No gen_ai.evaluation.* attrs on ${fmtCountCompact(total)} LLM spans`,
-          intent: "warning",
-        },
-        { text: "Add evaluation attrs to LLM spans or run an LLM-as-judge workflow." },
-      ],
-      cta: setupCta,
-    };
-  }
-
-  const coverage = (withEval / total) * 100;
-  const rawAvg = toNum(rec?.avg_score);
-  const avgScore = Number.isFinite(rawAvg) ? rawAvg : null;
-  const score = avgScore != null ? clamp(round(avgScore * 100), 0, 100) : null;
-  const status: Pillar["status"] =
-    score == null
-      ? "no-data"
-      : score >= 80
-        ? "good"
-        : score >= 60
-          ? "warning"
-          : "critical";
-
-  return {
-    key: "quality",
-    label: "Quality",
-    status,
-    score,
-    reasons: [
-      {
-        text: `Eval coverage ${coverage.toFixed(0)}% (${fmtCountCompact(withEval)} / ${fmtCountCompact(total)} spans)`,
-      },
-      ...(avgScore != null
-        ? [{ text: `Avg evaluation score ${avgScore.toFixed(2)}` }]
-        : []),
-    ],
-    cta: setupCta,
-  };
-};
-
-const costPillar = (
-  current: CostRecord | undefined,
-  baseline: CostBaselineRecord | undefined,
-  scopeHours: number,
-  samplingRatio: number,
-): Pillar => {
-  // Extrapolate sums/counts. distinct_models is a distinctCount aggregate —
-  // sampling-invariant, do not multiply.
-  const inputTokens = num(current?.input_tokens) * samplingRatio;
-  const outputTokens = num(current?.output_tokens) * samplingRatio;
-  const totalTokens = inputTokens + outputTokens;
-  const requests = num(current?.requests) * samplingRatio;
-  const distinctModels = num(current?.distinct_models);
-
-  if (requests === 0 || totalTokens === 0) {
-    return {
-      key: "cost",
-      label: "Cost",
-      status: "no-data",
-      score: null,
-      reasons: [{ text: "No token usage observed in the current scope." }],
-    };
-  }
-
-  // Both current and baseline are sampled at the same ratio so the ratio
-  // (currentPerHour / baselinePerHour) is invariant. We still scale baseline
-  // tokens for display consistency with totalTokens above.
-  const baselineTokens =
-    (num(baseline?.input_tokens_7d) + num(baseline?.output_tokens_7d)) *
-    samplingRatio;
-  const baselinePerHour = baselineTokens / HOURS_PER_WEEK;
-  const currentPerHour = scopeHours > 0 ? totalTokens / scopeHours : totalTokens;
-  const ratio = baselinePerHour > 0 ? currentPerHour / baselinePerHour : 1;
-
-  const variancePenalty = clamp(Math.abs(ratio - 1) * 40, 0, 60);
-  const score = clamp(round(100 - variancePenalty), 0, 100);
-  const status: Pillar["status"] =
-    ratio > 1.5 ? "critical" : ratio > 1.2 ? "warning" : "good";
-
-  const reasons: Pillar["reasons"] = [
-    { text: `${fmtCountCompact(totalTokens)} tokens across ${fmtCountCompact(requests)} requests` },
-    {
-      text:
-        baselinePerHour > 0
-          ? `${ratio.toFixed(2)}× rolling 7d hourly baseline`
-          : "7d baseline still warming up",
-      intent: ratio > 1.5 ? "critical" : ratio > 1.2 ? "warning" : undefined,
-    },
-    {
-      text: `${distinctModels} distinct models in scope`,
-    },
-  ];
-  return { key: "cost", label: "Cost", status, score, reasons };
-};
-
-const parseScopeHours = (from: string): number => {
+export const parseScopeHours = (from: string): number => {
   const match = /now\(\)\s*-\s*(\d+)([mhd])/i.exec(from);
   if (!match) return 24;
   const n = Number(match[1]);
@@ -239,7 +40,15 @@ const parseScopeHours = (from: string): number => {
   }
 };
 
-export const usePulseHealth = (): PulseHealth => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — used by the Summary page's
+ * `useFleetPosture`. Pulse itself never passes it, so its own behavior is
+ * unchanged. The pillar scoring itself (`operationalPillar` / `qualityPillar`
+ * / `costPillar`) lives in `./parse`, shared with `demoData.ts`'s
+ * `DEMO_PULSE_HEALTH`.
+ */
+export const usePulseHealth = (showExample = false): PulseHealth => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
@@ -248,19 +57,19 @@ export const usePulseHealth = (): PulseHealth => {
 
   const opResult = useScopedDql<OperationalRecord>(
     canQuery ? buildOperationalQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
   const qualityResult = useScopedDql<QualityRecord>(
     canQuery ? buildQualityPresenceQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
   const costResult = useScopedDql<CostRecord>(
     canQuery ? buildCostQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
   const costBaselineResult = useScopedDql<CostBaselineRecord>(
     canQuery ? buildCostBaselineQuery(serviceIds) : "",
-    { enabled: canQuery, staleTime: 5 * 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 5 * 60_000 },
   );
 
   const refetch = useCallback(() => {
@@ -279,6 +88,9 @@ export const usePulseHealth = (): PulseHealth => {
   ]);
 
   return useMemo<PulseHealth>(() => {
+    if (showExample) {
+      return { ...DEMO_PULSE_HEALTH, isLoading: false, error: undefined, refetch };
+    }
     const scopeHours = parseScopeHours(scope.timeframe.from);
     const operational = operationalPillar(
       opResult.data?.records?.[0],
@@ -313,6 +125,7 @@ export const usePulseHealth = (): PulseHealth => {
       refetch,
     };
   }, [
+    showExample,
     scope.timeframe.from,
     samplingRatio,
     servicesLoading,

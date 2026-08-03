@@ -216,11 +216,17 @@ export interface ModelComparisonPanelProps {
   services: string[];
   /** Detected upstream caller services for the "driving upstream" dropdown. */
   upstreamOptions: string[];
+  /** Render the canned Demo Mode dataset instead of querying Grail — see
+   *  `useModels`'s `showExample` param. Note the demo dataset has no
+   *  per-service breakdown, so the "service being compared" selector doesn't
+   *  narrow the scored metrics while this is on. */
+  showExample?: boolean;
 }
 
 export const ModelComparisonPanel = ({
   services,
   upstreamOptions,
+  showExample = false,
 }: ModelComparisonPanelProps) => {
   const { scope } = useScope();
   const [profileId, setProfileId] = useState<string>(
@@ -232,7 +238,7 @@ export const ModelComparisonPanel = ({
   // service-filtered useModels query so latency/cost/errors reflect that
   // service's actual traffic.
   const [selectedService, setSelectedService] = useState<string>("");
-  const { models, isLoading } = useModels(selectedService || undefined);
+  const { models, isLoading } = useModels(selectedService || undefined, showExample);
 
   // Editable weights, seeded from the profile. Switching the use case discards
   // edits, but only after an explicit confirm (see handleProfileChange) so an

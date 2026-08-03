@@ -141,7 +141,9 @@ export const StatTile = ({
         letterSpacing: "0.05em",
         textTransform: "uppercase",
         color: "var(--text-3)",
-        whiteSpace: "normal",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
         lineHeight: 1.2,
       }}
     >
@@ -167,6 +169,8 @@ export const StatTile = ({
 
   const bodyStyle: React.CSSProperties = {
     padding: TILE_PADDING,
+    height: "100%",
+    boxSizing: "border-box",
     ...(active
       ? {
           boxShadow: "inset 0 0 0 2px var(--blue)",
@@ -209,7 +213,7 @@ export const StatTile = ({
       {...interactiveProps}
     >
       <div style={bodyStyle}>
-        <Flex flexDirection="column" gap={4}>
+        <Flex flexDirection="column" gap={4} style={{ height: "100%" }}>
           <Flex
             alignItems="center"
             gap={4}
@@ -302,12 +306,14 @@ export const StatTile = ({
           )}
           {media != null &&
             (hasValue ? (
-              media
+              <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "flex-end" }}>
+                {media}
+              </div>
             ) : (
               <Flex
                 alignItems="center"
                 justifyContent="center"
-                style={{ minWidth: 0 }}
+                style={{ minWidth: 0, flex: "1 1 auto" }}
               >
                 {media}
               </Flex>

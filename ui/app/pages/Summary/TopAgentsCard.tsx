@@ -12,8 +12,8 @@ import { useAgentCosts } from "../Pulse/useAgentCosts";
  * trace-join in useAgentCosts). Each row is click-to-filter on the agent name.
  * Drills to Agents.
  */
-export const TopAgentsCard = () => {
-  const { rows, isLoading, error } = useAgentCosts();
+export const TopAgentsCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const { rows, isLoading, error } = useAgentCosts(showExample);
 
   const items: BarListItem[] = rows.slice(0, 5).map((r) => ({
     key: r.agent,

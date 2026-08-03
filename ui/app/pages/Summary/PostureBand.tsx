@@ -472,6 +472,7 @@ const CompositionBar = ({
 export interface PostureBandProps {
   summary: PulseSummary;
   posture: FleetPosture;
+  showExample?: boolean;
 }
 
 /**
@@ -482,9 +483,9 @@ export interface PostureBandProps {
  * the delta), with an average-baseline reference on the rate/efficiency metrics,
  * count bars for tokens, and a category-composition bar for hidden risk.
  */
-export const PostureBand = ({ summary, posture }: PostureBandProps) => {
-  const daily = useDailySpend();
-  const hidden = useHiddenFailures();
+export const PostureBand = ({ summary, posture, showExample = false }: PostureBandProps) => {
+  const daily = useDailySpend(showExample);
+  const hidden = useHiddenFailures(showExample);
   const scanGroup = useScanScope();
   const s = summary.spark;
 

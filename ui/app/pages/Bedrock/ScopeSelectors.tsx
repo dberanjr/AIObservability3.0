@@ -3,6 +3,8 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { ChevronDownIcon } from "@dynatrace/strato-icons";
 import { useBedrockFacets } from "../../bedrock/useBedrock";
+import { useAccountNames } from "../../scope/AccountNamesContext";
+import { fmtAccount } from "../../data/format";
 import type { Timeframe } from "../../scope/types";
 
 export interface ScopeSelectorsProps {
@@ -14,6 +16,10 @@ export interface ScopeSelectorsProps {
   /** Hide the Model picker (governance / CloudTrail has no per-model
    *  dimension). Account + timeframe stay shared across sub-tabs. */
   showModel?: boolean;
+  /** True to populate the pickers from the bundled demo dataset instead of
+   *  querying Grail (Demo Mode / no-telemetry fallback) — see
+   *  `useBedrockFacets`'s doc comment. */
+  showExample?: boolean;
 }
 
 interface PickerOption {
@@ -220,12 +226,14 @@ export const ScopeSelectors = ({
   setAccounts,
   setModels,
   showModel = true,
+  showExample = false,
 }: ScopeSelectorsProps) => {
-  const { accounts: accountOpts, modelGroups, isLoading } = useBedrockFacets(timeframe);
+  const { accounts: accountOpts, modelGroups, isLoading } = useBedrockFacets(timeframe, showExample);
+  const { names: accountNames } = useAccountNames();
 
   const accountOptions = useMemo<PickerOption[]>(
-    () => accountOpts.map((a) => ({ value: a, label: a })),
-    [accountOpts],
+    () => accountOpts.map((a) => ({ value: a, label: fmtAccount(a, accountNames[a]) || a })),
+    [accountOpts, accountNames],
   );
 
   // modelGroups is already sorted by label (parseFacets); labels are unique

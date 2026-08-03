@@ -100,8 +100,8 @@ const buildAxisTicks = (
   return ticks;
 };
 
-const TokenConsumptionBody = () => {
-  const result = useTokenConsumption();
+const TokenConsumptionBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const result = useTokenConsumption(showExample);
   // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
   // so a truncated scan surfaces the amber "Scan budget reached" empty rather
   // than a misleading "no activity" (STATE-4).
@@ -111,9 +111,9 @@ const TokenConsumptionBody = () => {
     "ai-obs.pulse.forecast-enabled",
     false,
   );
-  const forecast = useTokenForecast(forecastEnabled);
+  const forecast = useTokenForecast(forecastEnabled, showExample);
   const { scope, setTimeframe } = useScope();
-  const spend = useSpendBreakdown();
+  const spend = useSpendBreakdown(showExample);
   // Empty-state remedies wired to the real scope / scan-limit setters, so a
   // scope-driven empty offers one-click widen / raise instead of inert prose
   // (STATE-6). A truncated scan skips "widen" (that scans MORE); an error offers
@@ -350,14 +350,14 @@ const TokenConsumptionBody = () => {
   );
 };
 
-export const TokenConsumptionChart = () => (
+export const TokenConsumptionChart = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard
     title="Token consumption"
     info="Token usage over the active timeframe, aggregated at a snapped time interval (1m / 5m / 15m / 30m / 1h / 6h / 1d). Solid line is total tokens per interval; the dashed line is estimated cost on the right axis, reconciled to the actual fleet spend (distributed across intervals by token share, since exact per-model cost per interval needs a per-model time query). The spend figure splits actual (priced models) from estimated (models not in the pricing table). Toggle Forecast to overlay Dynatrace Intelligence predictions. Click-and-drag to brush a narrower range; focus the chart and use arrow keys to read values."
     defaultOpen
   >
     <ScanScope name="Token consumption">
-      <TokenConsumptionBody />
+      <TokenConsumptionBody showExample={showExample} />
     </ScanScope>
   </CollapsibleCard>
 );

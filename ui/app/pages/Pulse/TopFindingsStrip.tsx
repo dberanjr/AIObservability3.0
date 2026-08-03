@@ -16,6 +16,7 @@ const MAX_CARDS = 5;
 
 export interface TopFindingsStripProps {
   onSelect: (finding: Finding) => void;
+  showExample?: boolean;
 }
 
 const IntelBadge = () => (
@@ -42,8 +43,8 @@ const IntelBadge = () => (
  * the section is expanded. Inherits the Dynatrace Intelligence framing since
  * this absorbed the role of the legacy AnomalyPanel.
  */
-const TopFindingsBody = ({ onSelect }: TopFindingsStripProps) => {
-  const { anomalies, isLoading, error } = useAnomalies();
+const TopFindingsBody = ({ onSelect, showExample = false }: TopFindingsStripProps) => {
+  const { anomalies, isLoading, error } = useAnomalies(showExample);
   const cards = anomalies.slice(0, MAX_CARDS);
   // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
   // so a truncated scan surfaces the amber "Scan budget reached" empty rather
@@ -93,7 +94,7 @@ const TopFindingsBody = ({ onSelect }: TopFindingsStripProps) => {
   );
 };
 
-export const TopFindingsStrip = ({ onSelect }: TopFindingsStripProps) => (
+export const TopFindingsStrip = ({ onSelect, showExample = false }: TopFindingsStripProps) => (
   <CollapsibleCard
     title="Top issues requiring attention"
     subtitle="Threshold-based detection · click any card to investigate"
@@ -101,7 +102,7 @@ export const TopFindingsStrip = ({ onSelect }: TopFindingsStripProps) => (
     defaultOpen
   >
     <ScanScope name="Top issues">
-      <TopFindingsBody onSelect={onSelect} />
+      <TopFindingsBody onSelect={onSelect} showExample={showExample} />
     </ScanScope>
   </CollapsibleCard>
 );

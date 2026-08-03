@@ -18,6 +18,7 @@ import {
 } from "../../detection/attributes";
 import { toNum } from "../../data/format";
 import { inferModelType, MODEL_TYPE_LABEL, type ModelType } from "./finopsLogic";
+import { DEMO_MODEL_RECORDS } from "./demoData";
 
 export { inferModelType, MODEL_TYPE_LABEL, type ModelType };
 
@@ -26,7 +27,7 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-interface ModelRecord {
+export interface ModelRecord {
   model?: string;
   requests?: number;
   input_tokens?: number;
@@ -91,7 +92,21 @@ export interface UseModelsResult {
   limitHit: boolean;
 }
 
-export const useModels = (serviceName?: string | null): UseModelsResult => {
+/**
+ * `showExample` defaults to false so Pulse's TopModelsPanel/useSpendBreakdown
+ * and Summary's useModelConcentration (the other callers of this shared hook)
+ * are completely unaffected — only the Models page computes its own Demo Mode
+ * / no-telemetry `showExample` flag and passes it explicitly. When true, the
+ * real query never runs and the aggregation below folds `DEMO_MODEL_RECORDS`
+ * instead — same loop, same pricing/cost math, just a canned source array.
+ * Note: `serviceName` is NOT honoured in demo mode (the canned dataset has no
+ * per-service model breakdown) — the A/B comparison panel's "service being
+ * compared" selector always scores the fleet-wide demo rows.
+ */
+export const useModels = (
+  serviceName?: string | null,
+  showExample = false,
+): UseModelsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
@@ -99,10 +114,10 @@ export const useModels = (serviceName?: string | null): UseModelsResult => {
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<ModelRecord>(
-    canQuery
+    canQuery && !showExample
       ? buildModelsQuery(resolution.serviceIds, scope.timeframe, filters, serviceName)
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseModelsResult>(() => {
@@ -133,7 +148,8 @@ export const useModels = (serviceName?: string | null): UseModelsResult => {
       domP99: number;
     }
     const byKey = new Map<string, Agg>();
-    for (const r of data?.records ?? []) {
+    const sourceRecords = showExample ? DEMO_MODEL_RECORDS : (data?.records ?? []);
+    for (const r of sourceRecords) {
       if (!r.model) continue;
       const { key, label } = canonicalizeModel(r.model);
       const requests = num(r.requests);
@@ -260,9 +276,19 @@ export const useModels = (serviceName?: string | null): UseModelsResult => {
 
     return {
       models,
-      isLoading: resolution.isLoading || isLoading,
-      error: error ?? undefined,
-      limitHit: readScanMeta({ data }, scanLimitGb)?.limitHit ?? false,
+      isLoading: showExample ? false : resolution.isLoading || isLoading,
+      error: showExample ? undefined : (error ?? undefined),
+      limitHit: showExample
+        ? false
+        : (readScanMeta({ data }, scanLimitGb)?.limitHit ?? false),
     };
-  }, [data, isLoading, error, resolution.isLoading, filters, scanLimitGb]);
+  }, [
+    data,
+    isLoading,
+    error,
+    resolution.isLoading,
+    filters,
+    scanLimitGb,
+    showExample,
+  ]);
 };

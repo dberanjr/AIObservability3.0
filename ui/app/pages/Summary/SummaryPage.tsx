@@ -7,6 +7,9 @@ import { PageIntro } from "../../components/PageIntro";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
 import { ScanScope } from "../../scope/ScanReportContext";
+import { useCapability } from "../../scope/CapabilityContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
+import { ExampleDataNotice } from "../../components/ExampleDataNotice";
 import { useEditLayout } from "../../layout/EditLayoutContext";
 import { SummaryLayoutProvider, CollapsibleTile } from "./CollapsibleTile";
 import { CustomizableGrid, type GridTile } from "./CustomizableGrid";
@@ -60,8 +63,17 @@ const Section = ({
  * debug badges can attribute Grail scan cost to the exact tile it fed.
  */
 export const SummaryPage = () => {
-  const summary = usePulseSummary();
-  const posture = useFleetPosture();
+  // Demo Mode: render the bundled canned dataset instead of querying Grail,
+  // either because the global Tweak forces it or because the app-wide
+  // capability probe found no AI telemetry at all in scope yet (first-run /
+  // fresh-trial tenants). Mirrors the Bedrock page's `showExample` gate.
+  const capability = useCapability();
+  const { pageConfig } = useTweaks();
+  const showExample =
+    pageConfig.demoMode || (!capability.isLoading && !capability.hasAnyAiSpans);
+
+  const summary = usePulseSummary(showExample);
+  const posture = useFleetPosture(showExample);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const navigate = useNavigate();
   // Layout customization is opt-in and driven by the global header "Customize"
@@ -118,20 +130,27 @@ export const SummaryPage = () => {
     // Four quarter-width tiles so Quality, Spend, Efficiency, and Guardrails
     // share ONE row at equal (stretched) height — Guardrails no longer wraps
     // to a second row leaving the Quality tile tall and half-empty.
+    // QualityTrustCard deliberately does NOT get `showExample` — it owns a
+    // separate, narrower "Show with example data" opt-in (pageConfig.showExampleData).
     makeTile("quality", "Is it good? · Quality & trust", 3, <QualityTrustCard />),
-    makeTile("finops", "Spend · FinOps", 3, <FinOpsCard />),
-    makeTile("efficiency", "Efficiency & mix", 3, <EfficiencyMixCard />),
-    makeTile("guardrails", "AI Guardrails", 3, <GuardrailsSummaryCard />),
+    makeTile("finops", "Spend · FinOps", 3, <FinOpsCard showExample={showExample} />),
+    makeTile("efficiency", "Efficiency & mix", 3, <EfficiencyMixCard showExample={showExample} />),
+    makeTile("guardrails", "AI Guardrails", 3, <GuardrailsSummaryCard showExample={showExample} />),
   ];
   const opsTiles: GridTile[] = [
-    makeTile("latency", "Latency by tier", 3, <LatencyTierCard summary={summary} />),
-    makeTile("hidden", "Hidden · 200-OK", 3, <HiddenFailuresCard />),
-    makeTile("agents", "Top agents by cost", 3, <TopAgentsCard />),
-    makeTile("activity", "Activity · 24h", 3, <ActivityCard />),
+    makeTile("latency", "Latency by tier", 3, <LatencyTierCard summary={summary} showExample={showExample} />),
+    makeTile("hidden", "Hidden · 200-OK", 3, <HiddenFailuresCard showExample={showExample} />),
+    makeTile("agents", "Top agents by cost", 3, <TopAgentsCard showExample={showExample} />),
+    makeTile("activity", "Activity · 24h", 3, <ActivityCard showExample={showExample} />),
   ];
   const signalTiles: GridTile[] = [
-    makeTile("patterns", "Problem patterns", 7, <ProblemPatternsCard />),
-    makeTile("findings", "Top findings", 5, <TopFindingsCard onSelect={setSelectedFinding} />),
+    makeTile("patterns", "Problem patterns", 7, <ProblemPatternsCard showExample={showExample} />),
+    makeTile(
+      "findings",
+      "Top findings",
+      5,
+      <TopFindingsCard onSelect={setSelectedFinding} showExample={showExample} />,
+    ),
   ];
 
   return (
@@ -154,6 +173,10 @@ export const SummaryPage = () => {
           crossLabel="Pulse →"
           crossTitle="Go to Pulse (live operations) with the current scope"
         />
+        {/* Only the automatic no-telemetry case gets the inline notice — when
+            the global Demo Mode Tweak is on, the app-wide banner already
+            covers it (don't double up). */}
+        {showExample && !pageConfig.demoMode && <ExampleDataNotice tabLabel="Summary" />}
         {firstError && <ErrorBanner error={firstError} onRetry={retryHero} />}
 
         {noTelemetry ? (
@@ -177,7 +200,7 @@ export const SummaryPage = () => {
           <>
             {/* Hero — the headline answer: fleet grade + the six KPIs. Always on. */}
             <ScanScope name="posture">
-              <PostureBand summary={summary} posture={posture} />
+              <PostureBand summary={summary} posture={posture} showExample={showExample} />
             </ScanScope>
 
             {/* Value story — is it good, what does it cost, how efficient is it. */}
@@ -211,7 +234,11 @@ export const SummaryPage = () => {
         )}
       </Flex>
       </div>
-      <FindingDrawer finding={selectedFinding} onDismiss={() => setSelectedFinding(null)} />
+      <FindingDrawer
+        finding={selectedFinding}
+        onDismiss={() => setSelectedFinding(null)}
+        showExample={showExample}
+      />
     </SummaryLayoutProvider>
   );
 };

@@ -137,8 +137,8 @@ const PatternRow = ({
  * detector's `?focus` preset (the same mechanism the Pulse map + Prompts sidebar
  * use), so the findings/board scope to that pattern.
  */
-export const ProblemPatternsCard = () => {
-  const { patterns, isLoading, error } = useProblemPatternCounts();
+export const ProblemPatternsCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const { patterns, isLoading, error } = useProblemPatternCounts(showExample);
   const goToTab = useTabNav();
   const max = Math.max(1, ...patterns.map((p) => p.count));
 

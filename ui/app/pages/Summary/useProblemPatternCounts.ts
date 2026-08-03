@@ -6,43 +6,21 @@ import {
   useResolvedServices,
   canQueryScope,
 } from "../../scope/useResolvedServices";
-import { extrapolate, useSampling } from "../../scope/SamplingContext";
+import { useSampling } from "../../scope/SamplingContext";
+import { CROSS_SPAN_FOCUS } from "../Prompts/focus";
+import { buildSameSpanPatternCountsQuery } from "./queries";
 import {
-  FOCUS_PREDICATES,
-  CROSS_SPAN_FOCUS,
-} from "../Prompts/focus";
-import { buildSameSpanPatternCountsQuery, patternAlias } from "./queries";
+  computeProblemPatternCounts,
+  CROSS_SPAN_IDS,
+  type ProblemPatternCount,
+  type PatternClass,
+} from "./parse";
+import { DEMO_PROBLEM_PATTERNS } from "./demoData";
 
-/**
- * The 4 cross-span detectors, in a fixed order so their resolver queries map to
- * a fixed set of hook calls (hooks can't run in a loop). Each id also exists in
- * `CROSS_SPAN_FOCUS` — this array just pins call order.
- */
-const CROSS_SPAN_IDS = [
-  "tool-retry-storm",
-  "agent-n1-tool-calls",
-  "vdb-topk-over-retrieval",
-  "mem-history-growth",
-] as const;
+export type { ProblemPatternCount, PatternClass };
 
-/** Resolver row cap. Trace counts for these detectors sit in the tens/low
- *  hundreds on real tenants; a 2000 ceiling counts them exactly and only flags
- *  `truncated` in the (unrealistic) event it's exceeded. */
+/** Resolver row cap — mirrors `./parse`'s `COUNT_CAP` (kept private there). */
 const COUNT_CAP = 2000;
-
-export type PatternClass = "same-span" | "cross-span";
-
-export interface ProblemPatternCount {
-  /** The `?focus` id — drills to Prompts with this focus preset. */
-  id: string;
-  label: string;
-  cls: PatternClass;
-  count: number;
-  /** Proxy signal (cross-span only) — surfaced with an "≈" marker. */
-  approximate: boolean;
-  /** The resolver hit the row cap — the count is a floor. */
-  truncated: boolean;
-}
 
 export interface UseProblemPatternCountsResult {
   patterns: ProblemPatternCount[];
@@ -61,15 +39,23 @@ export interface UseProblemPatternCountsResult {
  *     resolvers from the CROSS_SPAN_FOCUS registry (thresholds and signals
  *     unchanged) and counting the resolved traces.
  * All queries route through useScopedDql → global timeframe / segments /
- * scan-limit / filter apply. Clicking a pattern drills to Prompts with `?focus`.
+ * scan-limit / filter apply. Clicking a pattern drills to Prompts with
+ * `?focus`. The fold itself (`computeProblemPatternCounts`) lives in
+ * `./parse`, shared with `demoData.ts`'s `DEMO_PROBLEM_PATTERNS`.
+ *
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — passed down from the Summary page.
+ * No other page calls this Summary-only hook.
  */
-export const useProblemPatternCounts = (): UseProblemPatternCountsResult => {
+export const useProblemPatternCounts = (
+  showExample = false,
+): UseProblemPatternCountsResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
   const { serviceIds } = resolution;
   const canQuery = canQueryScope(resolution);
-  const opts = { enabled: canQuery, staleTime: 60_000 } as const;
+  const opts = { enabled: canQuery && !showExample, staleTime: 60_000 } as const;
 
   const sameSpan = useScopedDql<ResultRecord>(
     canQuery ? buildSameSpanPatternCountsQuery(serviceIds, scope.timeframe) : "",
@@ -125,43 +111,16 @@ export const useProblemPatternCounts = (): UseProblemPatternCountsResult => {
   );
 
   return useMemo<UseProblemPatternCountsResult>(() => {
-    const patterns: ProblemPatternCount[] = [];
-
-    // Same-span: one row per FOCUS_PREDICATES entry, count extrapolated for
-    // sampling (countIf is a count aggregate).
+    if (showExample) {
+      return { patterns: DEMO_PROBLEM_PATTERNS, isLoading: false, error: undefined };
+    }
     const sameRow = sameSpan.data?.records?.[0] as
       | Record<string, number>
       | undefined;
-    for (const [id, preset] of Object.entries(FOCUS_PREDICATES)) {
-      const raw = sameRow?.[patternAlias(id)];
-      patterns.push({
-        id,
-        label: preset.label,
-        cls: "same-span",
-        count: Math.round(extrapolate(raw, samplingRatio) ?? 0),
-        approximate: false,
-        truncated: false,
-      });
-    }
-
-    // Cross-span: count resolved traces (resolver returns cap+1 rows so we can
-    // flag truncation). Trace counts aren't extrapolated — the resolver runs
-    // over the trace population, and the ranking is what matters.
-    for (const id of CROSS_SPAN_IDS) {
-      const preset = CROSS_SPAN_FOCUS[id];
-      const records = crossResults[id].data?.records ?? [];
-      const truncated = records.length > COUNT_CAP;
-      patterns.push({
-        id,
-        label: preset.label,
-        cls: "cross-span",
-        count: Math.min(records.length, COUNT_CAP),
-        approximate: Boolean(preset.approximate),
-        truncated,
-      });
-    }
-
-    patterns.sort((a, b) => b.count - a.count);
+    const crossSpanCounts = Object.fromEntries(
+      CROSS_SPAN_IDS.map((id) => [id, crossResults[id].data?.records?.length ?? 0]),
+    );
+    const patterns = computeProblemPatternCounts(sameRow, crossSpanCounts, samplingRatio);
 
     const isLoading =
       sameSpan.isLoading ||
@@ -172,5 +131,5 @@ export const useProblemPatternCounts = (): UseProblemPatternCountsResult => {
       undefined;
 
     return { patterns, isLoading, error };
-  }, [sameSpan.data, sameSpan.isLoading, sameSpan.error, crossResults, samplingRatio]);
+  }, [showExample, sameSpan.data, sameSpan.isLoading, sameSpan.error, crossResults, samplingRatio]);
 };

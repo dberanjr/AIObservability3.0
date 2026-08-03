@@ -89,6 +89,18 @@ export interface PageConfig {
    */
   showExampleData: boolean;
   /**
+   * App-wide: force EVERY wired page/tile to render its bundled demo dataset
+   * instead of querying Grail, regardless of whether real telemetry exists —
+   * for demos, screenshots, and trial installs in a tenant with no relevant
+   * telemetry yet. A persistent banner reminds the user this isn't real data.
+   * Distinct from `showExampleData`'s narrow per-capability gap-fill, and from
+   * a page's own automatic "no telemetry found, showing example data"
+   * fallback (see e.g. `BedrockScope.showExample`), which kicks in on its own
+   * when a page's real data genuinely comes back empty — this toggle forces
+   * the same look everywhere, even where real data exists. Off by default.
+   */
+  demoMode: boolean;
+  /**
    * App-wide: show the RAW model string (e.g. us.anthropic.claude-…-v1:0)
    * instead of the normalized label. Off by default (normalized everywhere).
    */
@@ -142,6 +154,7 @@ export const DEFAULT_TWEAKS: TweaksState = {
     toolsMode: "discovered",
     agentsShowTtft: false,
     showExampleData: false,
+    demoMode: false,
     showRawModels: false,
     traceMatchCap: "balanced",
     scanStats: "totals",
@@ -161,6 +174,7 @@ export interface TweaksContextValue extends TweaksState {
   setToolsMode: (v: ToolsMode) => void;
   setAgentsShowTtft: (v: boolean) => void;
   setShowExampleData: (v: boolean) => void;
+  setDemoMode: (v: boolean) => void;
   setShowRawModels: (v: boolean) => void;
   setTraceMatchCap: (v: TraceMatchCap) => void;
   setScanStats: (v: ScanStatsMode) => void;
@@ -252,6 +266,7 @@ export const TweaksProvider = ({
       setToolsMode: mergePage("toolsMode"),
       setAgentsShowTtft: mergePage("agentsShowTtft"),
       setShowExampleData: mergePage("showExampleData"),
+      setDemoMode: mergePage("demoMode"),
       setShowRawModels: mergePage("showRawModels"),
       setTraceMatchCap: mergePage("traceMatchCap"),
       setScanStats: mergePage("scanStats"),

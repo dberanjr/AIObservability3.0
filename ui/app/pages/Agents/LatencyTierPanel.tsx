@@ -24,9 +24,9 @@ const TIER_COLOR: Record<LatencyTier, string> = {
 // Body is a separate component so the query (useLatencyDecomposition) only runs
 // when the section is expanded — CollapsibleCard renders children solely while
 // open, so a collapsed section issues no DQL.
-const LatencyTierBody = () => {
+const LatencyTierBody = ({ showExample }: { showExample: boolean }) => {
   const { tiers, totalMs, dominant, isLoading, error } =
-    useLatencyDecomposition();
+    useLatencyDecomposition(showExample);
   // Classify the empty honestly: a query error must read as an error, and a
   // scan capped at its budget as "truncated", not a false "no AI spans"
   // (STATE-2 / STATE-4). limitHit is this tile's own scan-group truncation —
@@ -188,13 +188,18 @@ const LatencyTierBody = () => {
   );
 };
 
-export const LatencyTierPanel = () => (
+export const LatencyTierPanel = ({
+  showExample = false,
+}: {
+  /** Demo Mode / no-telemetry fallback — see BedrockPage's doc comment. */
+  showExample?: boolean;
+}) => (
   <CollapsibleCard
     title="Latency by execution tier"
     info="Where wall-clock time is spent across the AI stack, by classifying every span into a tier (LLM / Retrieval-DB / Tool / Orchestration). Share = the tier's summed span duration ÷ the total across tiers. LLM spans run on the central proxy, so this is a fleet-level view of time, not per-trace self-time."
     subtitle="Where wall-clock time goes across the AI stack — model inference, retrieval/DB, tools, and orchestration."
     defaultOpen
   >
-    <LatencyTierBody />
+    <LatencyTierBody showExample={showExample} />
   </CollapsibleCard>
 );

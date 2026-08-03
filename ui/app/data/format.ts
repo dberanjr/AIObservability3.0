@@ -191,3 +191,19 @@ export const fmtRate = (value: unknown, unit: string): string => {
   if (num == null) return "—";
   return `${fmtCountCompact(num)} ${unit}`;
 };
+
+/**
+ * Canonical AWS account display string: "Account Name (111122223333)" when a
+ * name is known (from `useAccountNames`), otherwise just the bare id — never
+ * fabricates a name. Returns "" for a missing/empty id so existing call sites'
+ * own `|| "—"` / `|| "unknown account"` fallbacks keep working unchanged.
+ */
+export const fmtAccount = (
+  id: string | undefined | null,
+  name: string | undefined | null,
+): string => {
+  const cleanId = (id ?? "").trim();
+  if (!cleanId) return "";
+  const cleanName = (name ?? "").trim();
+  return cleanName ? `${cleanName} (${cleanId})` : cleanId;
+};

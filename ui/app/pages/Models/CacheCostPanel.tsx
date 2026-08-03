@@ -11,8 +11,14 @@ import { MiniStat } from "../../components/MiniStat";
 import { fmtTokens, fmtUSD, fmtPercent } from "../../data/format";
 import { useCacheCost } from "./useCacheCost";
 
-export const CacheCostPanel = () => {
-  const r = useCacheCost();
+export interface CacheCostPanelProps {
+  /** Render the canned Demo Mode dataset instead of querying Grail — see
+   *  `useCacheCost`'s `showExample` param. */
+  showExample?: boolean;
+}
+
+export const CacheCostPanel = ({ showExample = false }: CacheCostPanelProps) => {
+  const r = useCacheCost(showExample);
 
   return (
     <Surface elevation="raised" padding={16}>

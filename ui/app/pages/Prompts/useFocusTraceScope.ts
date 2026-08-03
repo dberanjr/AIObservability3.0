@@ -53,10 +53,17 @@ interface TraceRow {
 
 export const useFocusTraceScope = (
   focus: string | null | undefined,
+  /**
+   * True to skip real resolution entirely (Demo Mode / no-telemetry
+   * fallback). The Prompts list already renders its bundled demo rows
+   * unfiltered by any cross-span trace scope in that case, so this simply
+   * reports inert rather than firing a real resolver query.
+   */
+  showExample = false,
 ): FocusTraceScope => {
   const { scope } = useScope();
   const preset = crossSpanFocusPreset(focus);
-  const active = Boolean(preset);
+  const active = Boolean(preset) && !showExample;
   const cap = SAFE_TRACE_CAP;
 
   const query = useMemo(

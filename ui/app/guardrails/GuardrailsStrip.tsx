@@ -6,6 +6,14 @@ import { useGuardrails } from "./useGuardrails";
 import { guardrailTone } from "./guardrailsLogic";
 import { GUARDRAIL_TONE_COLOR } from "./GuardrailsSummaryCard";
 
+export interface GuardrailsStripProps {
+  /** True to show canned Demo Mode data instead of the real fleet-wide query
+   *  — either the global Demo Mode Tweak or the Prompts page's own
+   *  no-telemetry fallback. Passed straight through to the shared
+   *  `useGuardrails` hook, exactly like `BedrockGuardrailsSummary` does. */
+  showExample?: boolean;
+}
+
 /**
  * Compact guardrails strip for the Prompts page — guardrails gate the prompt /
  * response I/O this page analyzes, so it surfaces the fleet intervention rate
@@ -13,8 +21,8 @@ import { GUARDRAIL_TONE_COLOR } from "./GuardrailsSummaryCard";
  * per-prompt). Renders nothing while loading-empty; a one-line note when there's
  * no guardrail activity. Full detail lives on Pulse.
  */
-export const GuardrailsStrip = () => {
-  const g = useGuardrails();
+export const GuardrailsStrip = ({ showExample = false }: GuardrailsStripProps) => {
+  const g = useGuardrails(showExample);
   if (g.isLoading && !g.hasData) return null;
   if (g.error) return null;
 

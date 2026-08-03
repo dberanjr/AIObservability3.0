@@ -11,8 +11,8 @@ import { useActivityHistogram } from "../Pulse/useActivityHistogram";
  * 24h request-distribution histogram (peak hour highlighted). Drills to Pulse,
  * which owns the full activity + brush-zoom view.
  */
-export const ActivityCard = () => {
-  const { buckets, peakHour, isLoading, error } = useActivityHistogram();
+export const ActivityCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const { buckets, peakHour, isLoading, error } = useActivityHistogram(showExample);
 
   const bars: HistogramBar[] = buckets.map((b) => ({
     label: `${String(b.hour).padStart(2, "0")}:00`,

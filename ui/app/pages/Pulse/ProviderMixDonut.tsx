@@ -25,8 +25,8 @@ import {
 } from "../../scope/ScanReportContext";
 import { useProviderMix } from "./useProviderMix";
 
-const ProviderMixBody = () => {
-  const result = useProviderMix();
+const ProviderMixBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const result = useProviderMix(showExample);
   // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>)
   // so a truncated scan surfaces the amber "Scan budget reached" empty rather
   // than a misleading "no activity" (STATE-4).
@@ -111,10 +111,10 @@ const ProviderMixBody = () => {
   );
 };
 
-export const ProviderMixDonut = () => (
+export const ProviderMixDonut = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard title="Provider mix" subtitle="by request count" defaultOpen>
     <ScanScope name="Provider mix">
-      <ProviderMixBody />
+      <ProviderMixBody showExample={showExample} />
     </ScanScope>
   </CollapsibleCard>
 );

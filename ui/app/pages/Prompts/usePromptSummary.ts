@@ -9,14 +9,10 @@ import {
 import { buildPromptsSummaryQuery } from "./queries";
 import { toSidebar } from "./filterScope";
 import type { PromptsFilter } from "./usePrompts";
-import { toNum } from "../../data/format";
+import { DEMO_PROMPT_SUMMARY_RAW } from "./demoData";
+import { SAMPLE_SIZE, buildPromptSummary } from "./promptsParse";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-interface SummaryRecord {
+export interface SummaryRecord {
   total?: number;
   avg_duration_ms?: number;
   avg_input_tokens?: number;
@@ -42,11 +38,18 @@ export interface PromptSummary {
   error?: Error;
 }
 
-export const SAMPLE_SIZE = 200;
+// `SAMPLE_SIZE` and `buildPromptSummary` (aggregate query row → KPI totals)
+// live in `./promptsParse` — a dependency-free pure module — so both this
+// hook and the Demo Mode dataset can share them without either importing the
+// other's Context-dependent runtime code. Re-exported for anything that
+// still imports them from this hook file (e.g. PromptsTable, PromptsTilesRow).
+export { SAMPLE_SIZE, buildPromptSummary };
 
 export const usePromptSummary = (
   filter?: PromptsFilter,
   focus?: string | null,
+  /** True to render the bundled Demo Mode aggregate instead of querying Grail. */
+  showExample = false,
 ): PromptSummary => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
@@ -63,24 +66,18 @@ export const usePromptSummary = (
           focus,
         )
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<PromptSummary>(() => {
+    if (showExample) {
+      return { ...buildPromptSummary(DEMO_PROMPT_SUMMARY_RAW), isLoading: false, error: undefined };
+    }
     const row = data?.records?.[0];
-    const total = num(row?.total);
     return {
-      total,
-      sampleSize: Math.min(SAMPLE_SIZE, total),
-      avgDurationMs: num(row?.avg_duration_ms),
-      avgInputTokens: num(row?.avg_input_tokens),
-      avgOutputTokens: num(row?.avg_output_tokens),
-      piiDetected: num(row?.pii_detected),
-      warnings: num(row?.warnings),
-      errors: num(row?.errors),
-      truncated: num(row?.truncated),
+      ...buildPromptSummary(row),
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading]);
+  }, [data, isLoading, error, resolution.isLoading, showExample]);
 };

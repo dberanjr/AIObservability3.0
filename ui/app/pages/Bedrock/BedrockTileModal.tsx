@@ -9,6 +9,7 @@ import {
 import { AreaChart, type AxisTick } from "../../components/charts/AreaChart";
 import { BarList, type BarListItem } from "../../components/charts/BarList";
 import {
+  fmtAccount,
   fmtCount,
   fmtCountCompact,
   fmtMs,
@@ -20,6 +21,7 @@ import {
 import type { OverviewTotals, PerfByModelRow, AgentSessionRow } from "../../bedrock/parse";
 import type { BedrockDailyCostPoint } from "../../bedrock/series";
 import type { BedrockCostSummary } from "../../bedrock/cost";
+import { useAccountNames } from "../../scope/AccountNamesContext";
 
 export type BedrockTileKind =
   | "invocations"
@@ -107,6 +109,7 @@ export const BedrockTileModal = ({
   sessionRows,
 }: BedrockTileModalProps) => {
   const meta = MODAL_META[kind];
+  const { names: accountNames } = useAccountNames();
 
   // ---- cost-only derived data -------------------------------------------
   const projected30d = (costSummary.total * 30) / windowDays;
@@ -150,9 +153,9 @@ export const BedrockTileModal = ({
           label: r.session || "(unknown session)",
           value: r.estCost,
           displayValue: fmtUSDPrecise(r.estCost),
-          secondary: `${fmtCount(r.invocations)} inv · ${r.account || "unknown account"}${r.blended ? " · est. rate" : ""}`,
+          secondary: `${fmtCount(r.invocations)} inv · ${fmtAccount(r.account, accountNames[r.account]) || "unknown account"}${r.blended ? " · est. rate" : ""}`,
         })),
-    [sessionRows],
+    [sessionRows, accountNames],
   );
 
   const cacheTotal = totals.cacheRead + totals.cacheWrite;

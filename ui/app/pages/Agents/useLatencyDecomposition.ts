@@ -7,24 +7,15 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildLatencyDecompositionQuery } from "./queries";
-import { toNum } from "../../data/format";
+import {
+  parseLatencyTiers,
+  type LatencyTier,
+  type TierRecord,
+  type TierRow,
+} from "./parse";
+import { DEMO_LATENCY_TIERS } from "./demoData";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-export type LatencyTier = "LLM" | "Retrieval/DB" | "Tool" | "Orchestration";
-
-export interface TierRow {
-  tier: LatencyTier;
-  spans: number;
-  totalMs: number;
-  avgMs: number;
-  p95Ms: number;
-  /** Share of total execution time across all tiers (0–100). */
-  sharePct: number;
-}
+export type { LatencyTier, TierRow };
 
 export interface UseLatencyDecompositionResult {
   tiers: TierRow[];
@@ -35,26 +26,23 @@ export interface UseLatencyDecompositionResult {
   error?: Error;
 }
 
-const TIER_ORDER: LatencyTier[] = [
-  "LLM",
-  "Retrieval/DB",
-  "Tool",
-  "Orchestration",
-];
-
-export const useLatencyDecomposition = (): UseLatencyDecompositionResult => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — used by the Summary page's
+ * LatencyTierCard. Agents' own LatencyTierPanel never passes it, so its
+ * behavior is unchanged. The fold itself lives in `./parse` (shared with
+ * every other Agents hook) — `demoData.ts`'s `DEMO_LATENCY_TIERS` runs the
+ * SAME `parseLatencyTiers` over a small raw-record fixture.
+ */
+export const useLatencyDecomposition = (
+  showExample = false,
+): UseLatencyDecompositionResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
-  const { data, isLoading, error } = useScopedDql<{
-    tier?: string;
-    spans?: number;
-    total_ms?: number;
-    avg_ms?: number;
-    p95_ms?: number;
-  }>(
+  const { data, isLoading, error } = useScopedDql<TierRecord>(
     canQuery
       ? buildLatencyDecompositionQuery(
           resolution.serviceIds,
@@ -62,39 +50,18 @@ export const useLatencyDecomposition = (): UseLatencyDecompositionResult => {
           filters,
         )
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseLatencyDecompositionResult>(() => {
-    const raw = (data?.records ?? [])
-      .filter((r) => typeof r.tier === "string")
-      .map((r) => ({
-        tier: r.tier as LatencyTier,
-        spans: num(r.spans),
-        totalMs: num(r.total_ms),
-        avgMs: num(r.avg_ms),
-        p95Ms: num(r.p95_ms),
-      }));
-    const totalMs = raw.reduce((acc, r) => acc + r.totalMs, 0);
-    const tiers: TierRow[] = raw
-      .map((r) => ({
-        ...r,
-        sharePct: totalMs > 0 ? (r.totalMs / totalMs) * 100 : 0,
-      }))
-      .sort(
-        (a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier),
-      );
-    const dominant =
-      tiers.length > 0
-        ? tiers.reduce((m, r) => (r.totalMs > m.totalMs ? r : m), tiers[0])
-        : null;
-
+    if (showExample) {
+      return { ...DEMO_LATENCY_TIERS, isLoading: false, error: undefined };
+    }
+    const core = parseLatencyTiers(data?.records ?? []);
     return {
-      tiers,
-      totalMs,
-      dominant,
+      ...core,
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading]);
+  }, [showExample, data, isLoading, error, resolution.isLoading]);
 };

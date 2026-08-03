@@ -3,7 +3,7 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
 import { BarList, type BarListItem } from "../../../components/charts/BarList";
-import { AreaChart } from "../../../components/charts/AreaChart";
+import { StackedBarChart } from "../../../components/charts/StackedBarChart";
 import { EmptyState } from "../../../components/EmptyState";
 import { InfoTooltip } from "../../../components/InfoTooltip";
 import { MaximizablePanel } from "../../../components/MaximizablePanel";
@@ -17,12 +17,6 @@ import type { GovScope, IdentityMfaRow, SourceIpRow } from "../../../bedrock/gov
 export interface GovActivityDetailProps {
   scope: GovScope;
 }
-
-const buildAxisTicks = (labels: string[]): { index: number; label: string }[] => {
-  if (labels.length === 0) return [];
-  const step = Math.max(1, Math.floor(labels.length / 6));
-  return labels.map((label, index) => ({ index, label })).filter((_, i) => i % step === 0);
-};
 
 const SUBHEAD: React.CSSProperties = { fontSize: 12.5, fontWeight: 600 };
 
@@ -69,11 +63,16 @@ export const GovActivityDetail = ({ scope }: GovActivityDetailProps) => {
     () => actionRows.map((r) => ({ key: r.eventName, label: r.eventName, value: r.calls, displayValue: fmtCount(r.calls) })),
     [actionRows],
   );
-  const areaSeries = useMemo(
-    () => timeseries.series.map((s, i) => ({ label: s.key, color: CATEGORICAL[i % CATEGORICAL.length], values: s.values })),
+  const stackedSeries = useMemo(
+    () =>
+      timeseries.series.map((s, i) => ({
+        key: s.key,
+        label: s.key,
+        color: CATEGORICAL[i % CATEGORICAL.length],
+        values: s.values,
+      })),
     [timeseries.series],
   );
-  const axisTicks = useMemo(() => buildAxisTicks(timeseries.labels), [timeseries.labels]);
   const identityItems: BarListItem[] = useMemo(
     () => topIdentities.map((r) => ({ key: r.identity, label: r.identity, value: r.calls, displayValue: fmtCount(r.calls) })),
     [topIdentities],
@@ -115,17 +114,15 @@ export const GovActivityDetail = ({ scope }: GovActivityDetailProps) => {
             <Heading level={4} style={SUBHEAD}>Calls over time by action</Heading>
             {seriesInitial ? (
               <Skeleton style={{ height: 200, borderRadius: 8 }} />
-            ) : areaSeries.length === 0 ? (
+            ) : stackedSeries.length === 0 ? (
               <EmptyState bare title="No call activity in this window" description="No CloudTrail events to chart for the current scope." />
             ) : (
-              <AreaChart
-                series={areaSeries}
+              <StackedBarChart
+                series={stackedSeries}
+                labels={timeseries.labels}
                 height={chartH}
-                formatLeft={fmtCount}
-                xLabels={timeseries.labels}
-                axisTicks={axisTicks}
+                formatValue={fmtCount}
                 ariaLabel="Bedrock API calls over time by action"
-                interactiveLegend
               />
             )}
           </Flex>

@@ -3,8 +3,11 @@ import { Flex } from "@dynatrace/strato-components/layouts";
 import { ErrorBanner } from "../../components/ErrorState";
 import { PageIntro } from "../../components/PageIntro";
 import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
+import { ExampleDataNotice } from "../../components/ExampleDataNotice";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
+import { useCapability } from "../../scope/CapabilityContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { LatencyTierPanel } from "../Agents/LatencyTierPanel";
 import { ArchitectureMap } from "./ArchitectureMap";
 import { SpendGlance } from "./SpendGlance";
@@ -25,7 +28,18 @@ import { PulseHealthHeadline } from "./PulseHealthHeadline";
 import { usePulseSummary } from "./usePulseSummary";
 
 export const PulsePage = () => {
-  const summary = usePulseSummary();
+  // Demo Mode: true when the global Tweak is on, OR once the shared
+  // capability probe resolves and finds NO gen_ai.* spans anywhere in scope
+  // (a fresh trial install) — the same app-wide signal Bedrock's own
+  // `useBedrockAvailable` mirrors for its page. Every wired tile below
+  // renders its bundled demo dataset instead of an empty state either way;
+  // the inline notice only shows for the automatic (non-Tweak) case, since
+  // the Demo Mode Tweak already has its own always-on app-wide banner.
+  const capability = useCapability();
+  const { pageConfig } = useTweaks();
+  const showExample = pageConfig.demoMode || (!capability.isLoading && !capability.hasAnyAiSpans);
+
+  const summary = usePulseSummary(showExample);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
 
   // Page-level error surface — only the always-mounted hero summary hook is
@@ -52,19 +66,20 @@ export const PulsePage = () => {
           crossLabel="Summary →"
           crossTitle="Go to Summary (executive rollup) with the current scope"
         />
+        {showExample && !pageConfig.demoMode && <ExampleDataNotice tabLabel="Pulse" />}
         {firstError && <ErrorBanner error={firstError} />}
         {/* Top-line health answer (IA — Information-9): the same fleet grade +
             trust index the Summary hero computes, so Pulse leads with one "is it
             healthy right now" verdict before the map and the live tiles. It leads
             with the GRADE (which the map's at-rest tier verdict below does not
             show), so the two are complementary rather than duplicative. */}
-        <PulseHealthHeadline summary={summary} />
+        <PulseHealthHeadline summary={summary} showExample={showExample} />
         {/* Hero: the architecture map (priority) with the summary tiles in a
             two-column side panel. The tiles drop below the map when the
             viewport narrows (see .aiobs-pulse-hero). */}
         <div className="aiobs-pulse-hero">
-          <ArchitectureMap />
-          <SummaryTilesRow summary={summary} initialColumns={2} />
+          <ArchitectureMap showExample={showExample} />
+          <SummaryTilesRow summary={summary} initialColumns={2} showExample={showExample} />
         </div>
         <CollapsibleDataGapNote
           summary="Data caveats: error rate now includes logical failures · quality, TTFT & per-session spend unavailable"
@@ -81,31 +96,31 @@ export const PulsePage = () => {
             gap: 16,
           }}
         >
-          <TokenConsumptionChart />
-          <ActivityHistogramPanel />
+          <TokenConsumptionChart showExample={showExample} />
+          <ActivityHistogramPanel showExample={showExample} />
         </div>
-        <SpendGlance />
-        <TokenEfficiencyTiles />
+        <SpendGlance showExample={showExample} />
+        <TokenEfficiencyTiles showExample={showExample} />
         <LatencyTierPanel />
-        <TopFindingsStrip onSelect={setSelectedFinding} />
-        <PlatformHealthCard />
+        <TopFindingsStrip onSelect={setSelectedFinding} showExample={showExample} />
+        <PlatformHealthCard showExample={showExample} />
         <CapabilityGate
           id={["guardrails", "piiCategories"]}
           label="Safety & guardrails — available with instrumentation"
           hint="Emit gen_ai.*.guardrail_* and gen_ai.privacy.* to light up this panel."
         >
-          <SafetyPanel />
+          <SafetyPanel showExample={showExample} />
         </CapabilityGate>
         {/* AWS Bedrock guardrail metrics — real intervention data, independent
             of the span-based SafetyPanel capability above (guardrails emit no
             spans in this tenant). Has its own empty/loading/error states. */}
-        <GuardrailsPanel />
+        <GuardrailsPanel showExample={showExample} />
         <CapabilityGate
           id={["feedback", "promptVersion"]}
           label="Feedback & prompt versions — available with instrumentation"
           hint="Emit gen_ai.feedback.* and gen_ai.prompt_hub.* to light up this panel."
         >
-          <FeedbackPanel />
+          <FeedbackPanel showExample={showExample} />
         </CapabilityGate>
         <div
           style={{
@@ -116,9 +131,9 @@ export const PulsePage = () => {
             alignItems: "start",
           }}
         >
-          <AgentCostBarList />
-          <TopModelsCard />
-          <ProviderMixDonut />
+          <AgentCostBarList showExample={showExample} />
+          <TopModelsCard showExample={showExample} />
+          <ProviderMixDonut showExample={showExample} />
         </div>
       </Flex>
       <FindingDrawer

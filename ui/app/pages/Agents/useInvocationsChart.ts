@@ -21,6 +21,7 @@ import type { ChartStat } from "../../components/charts/ChartExpander";
 import { fmtCount } from "../../data/format";
 import { buildInvocationsSeriesQuery } from "./queries";
 import { useInvocationsForecast } from "./useInvocationsForecast";
+import { buildDemoInvocationsRecord, buildDemoForecast, type DemoInvocationsRecord } from "./demoData";
 
 interface SeriesRecord {
   invocations?: (number | null)[] | null;
@@ -113,9 +114,15 @@ export interface InvocationsChartModel {
  * The granularity is the SAME snapped bucket every other timeseries chart in
  * the app uses (`pickChartBucket`), and the x-axis is mapped from the actual
  * interval + window echoed back by makeTimeseries so labels are exact.
+ *
+ * @param showExample Demo Mode / no-telemetry fallback — see BedrockPage's
+ * doc comment. Skips the real series query AND the live forecast analyzer
+ * call (meaningless against canned data), substituting a canned demo
+ * invocations record and a deterministic synthetic forecast.
  */
 export const useInvocationsChart = (
   forecastEnabled: boolean,
+  showExample = false,
 ): InvocationsChartModel => {
   const { scope } = useScope();
   const { scanLimitGb } = useScanLimit();
@@ -128,17 +135,22 @@ export const useInvocationsChart = (
   );
 
   const series = useScopedDql<SeriesRecord>(
-    canQuery
+    canQuery && !showExample
       ? buildInvocationsSeriesQuery(
           resolution.serviceIds,
           scope.timeframe,
           requestedSec,
         )
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
-  const record = series.data?.records?.[0];
+  const demoRecord = useMemo<DemoInvocationsRecord | undefined>(
+    () => (showExample ? buildDemoInvocationsRecord(requestedSec) : undefined),
+    [showExample, requestedSec],
+  );
+
+  const record: SeriesRecord | undefined = showExample ? demoRecord : series.data?.records?.[0];
 
   const historical = useMemo(
     () => (record?.invocations ?? []).map((v) => (typeof v === "number" ? v : 0)),
@@ -165,12 +177,19 @@ export const useInvocationsChart = (
     return { startMs: now - histLen * intervalMs, endMs: now };
   }, [record, histLen, intervalMs]);
 
+  // Demo Mode never calls the live Davis analyzer (meaningless against canned
+  // data, and an unwanted network call while previewing) — a deterministic
+  // synthetic forecast is derived from the demo historical values instead.
   const forecast = useInvocationsForecast(
-    forecastEnabled,
+    forecastEnabled && !showExample,
     requestedSec,
     histLen,
   );
-  const fc = forecast.forecast;
+  const demoForecast = useMemo(
+    () => (showExample && forecastEnabled ? buildDemoForecast(historical, requestedSec) : null),
+    [showExample, forecastEnabled, historical, requestedSec],
+  );
+  const fc = showExample ? demoForecast : forecast.forecast;
   const forecastLen = forecastEnabled && fc ? fc.values.length : 0;
 
   const values = useMemo<(number | null)[]>(
@@ -241,11 +260,11 @@ export const useInvocationsChart = (
     total,
     intervalMs,
     intervalPhrase: phrase,
-    isLoading: series.isLoading,
-    isEmpty: !series.isLoading && histLen === 0,
-    error: series.error ?? undefined,
-    limitHit: readScanMeta(series, scanLimitGb)?.limitHit ?? false,
-    forecastLoading: forecast.isLoading,
-    forecastError: forecast.error,
+    isLoading: showExample ? false : series.isLoading,
+    isEmpty: showExample ? false : !series.isLoading && histLen === 0,
+    error: showExample ? undefined : (series.error ?? undefined),
+    limitHit: showExample ? false : (readScanMeta(series, scanLimitGb)?.limitHit ?? false),
+    forecastLoading: showExample ? false : forecast.isLoading,
+    forecastError: showExample ? undefined : forecast.error,
   };
 };

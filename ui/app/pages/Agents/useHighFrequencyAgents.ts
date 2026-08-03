@@ -34,13 +34,28 @@ export interface HighFrequencyAgentsResult {
   isLoading: boolean;
 }
 
+/** Canned rows — used only when `showExample` is set (Pulse's architecture
+ *  map in Demo Mode / no telemetry). Shaped like the raw query result and
+ *  folded through the SAME threshold check (`isHighFrequency`) the real path
+ *  uses, rather than a hand-typed Set. */
+const DEMO_HIGH_FREQ_RECORDS: Rec[] = [
+  { agent: "refund-adjudicator", maxToolCalls: 34 },
+  { agent: "trip-planner-agent", maxToolCalls: 22 },
+];
+
 /**
  * Per-agent detail behind the "high tool frequency" (N+1) signal: every agent
  * whose busiest single tool exceeds the threshold, with that call count,
  * ranked. One fleet query — react-query caches it, so the KPI tile, its modal
  * and the Set-returning hook below all share a single fetch.
+ *
+ * `showExample` defaults to false so this hook's OTHER callers (AgentsPage,
+ * AgentsTable, tilePopups) are unaffected — only Pulse's architecture map
+ * passes it.
  */
-export const useHighFrequencyAgentRows = (): HighFrequencyAgentsResult => {
+export const useHighFrequencyAgentRows = (
+  showExample = false,
+): HighFrequencyAgentsResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
@@ -50,20 +65,22 @@ export const useHighFrequencyAgentRows = (): HighFrequencyAgentsResult => {
     canQuery
       ? buildHighFrequencyToolsQuery(resolution.serviceIds, scope.timeframe)
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo(() => {
+    const records = showExample ? DEMO_HIGH_FREQ_RECORDS : (data?.records ?? []);
+    const ratio = showExample ? 1 : samplingRatio;
     const rows: HighFrequencyAgent[] = [];
-    for (const r of data?.records ?? []) {
-      const calls = toNum(r.maxToolCalls) * samplingRatio;
+    for (const r of records) {
+      const calls = toNum(r.maxToolCalls) * ratio;
       if (r.agent && isHighFrequency(calls)) {
         rows.push({ agent: r.agent, maxToolCalls: calls });
       }
     }
     rows.sort((a, b) => b.maxToolCalls - a.maxToolCalls);
-    return { rows, isLoading: canQuery ? isLoading : false };
-  }, [data, isLoading, canQuery, samplingRatio]);
+    return { rows, isLoading: showExample ? false : canQuery ? isLoading : false };
+  }, [data, isLoading, canQuery, samplingRatio, showExample]);
 };
 
 /**
@@ -71,7 +88,7 @@ export const useHighFrequencyAgentRows = (): HighFrequencyAgentsResult => {
  * badge and the Pulse focus presets consume. Derived from the rows hook so both
  * stay in lock-step.
  */
-export const useHighFrequencyAgents = (): Set<string> => {
-  const { rows } = useHighFrequencyAgentRows();
+export const useHighFrequencyAgents = (showExample = false): Set<string> => {
+  const { rows } = useHighFrequencyAgentRows(showExample);
   return useMemo(() => new Set(rows.map((r) => r.agent)), [rows]);
 };

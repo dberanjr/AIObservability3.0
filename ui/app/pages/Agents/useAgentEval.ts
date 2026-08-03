@@ -4,17 +4,8 @@ import { useScope } from "../../scope/ScopeContext";
 import { useGlobalFilters } from "../../scope/GlobalFilterContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { buildAgentEvalQuery } from "./queries";
-
-interface EvalRecord {
-  invocations?: number;
-  correctness_pct?: number | null;
-  hallucination_pct?: number | null;
-  success_pct?: number | null;
-  avg_ctx_tokens?: number | null;
-  with_correctness?: number;
-  with_halluc?: number;
-  with_success?: number;
-}
+import { parseAgentEvalCore, type EvalRecord } from "./parse";
+import { DEMO_AGENT_EVAL } from "./demoData";
 
 export interface AgentEvalSnapshot {
   hasAnyEval: boolean;
@@ -32,7 +23,11 @@ export interface AgentEvalSnapshot {
   error?: Error;
 }
 
-export const useAgentEval = (): AgentEvalSnapshot => {
+/**
+ * @param showExample Demo Mode / no-telemetry fallback — see BedrockPage's
+ * doc comment. Returns the canned `DEMO_AGENT_EVAL` instead of querying.
+ */
+export const useAgentEval = (showExample = false): AgentEvalSnapshot => {
   const { scope } = useScope();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
@@ -40,29 +35,19 @@ export const useAgentEval = (): AgentEvalSnapshot => {
   const canQuery = canQueryScope(_resolution);
 
   const { data, isLoading, error } = useScopedDql<EvalRecord>(
-    canQuery ? buildAgentEvalQuery(serviceIds, scope.timeframe, filters) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    canQuery && !showExample ? buildAgentEvalQuery(serviceIds, scope.timeframe, filters) : "",
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<AgentEvalSnapshot>(() => {
-    const row = data?.records?.[0];
-    const coverage = {
-      correctness: row?.with_correctness ?? 0,
-      hallucination: row?.with_halluc ?? 0,
-      success: row?.with_success ?? 0,
-      total: row?.invocations ?? 0,
-    };
-    const hasAnyEval =
-      coverage.correctness + coverage.hallucination + coverage.success > 0;
+    if (showExample) {
+      return { ...DEMO_AGENT_EVAL, isLoading: false, error: undefined };
+    }
+    const core = parseAgentEvalCore(data?.records?.[0]);
     return {
-      hasAnyEval,
-      toolCorrectnessPct: row?.correctness_pct ?? null,
-      hallucinationPct: row?.hallucination_pct ?? null,
-      taskSuccessPct: row?.success_pct ?? null,
-      avgCtxTokens: row?.avg_ctx_tokens ?? null,
-      coverage,
+      ...core,
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading, filters]);
+  }, [showExample, data, isLoading, error, servicesLoading, filters]);
 };

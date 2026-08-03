@@ -149,10 +149,10 @@ const Chip = ({ n, label, onClick }: { n: number | null; label: string; onClick:
   </button>
 );
 
-export const ArchitectureMap = () => {
-  const data = useArchitectureData();
-  const { frameworks } = useFrameworkNodes();
-  const spend = useSpendBreakdown();
+export const ArchitectureMap = ({ showExample = false }: { showExample?: boolean }) => {
+  const data = useArchitectureData(showExample);
+  const { frameworks } = useFrameworkNodes(showExample);
+  const spend = useSpendBreakdown(showExample);
   const goToTab = useTabNav();
   const { scope, setTimeframe } = useScope();
   const { scanLimitGb, setScanLimit } = useScanLimit();

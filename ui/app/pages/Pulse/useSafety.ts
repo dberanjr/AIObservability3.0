@@ -12,6 +12,7 @@ import { useSampling } from "../../scope/SamplingContext";
 import { dqlTimeArg } from "../../scope/queries";
 import { toNum } from "../../data/format";
 import { AI_SPAN_POPULATION } from "../../detection/attributeFields";
+import { DEMO_SAFETY_COUNTS, DEMO_SAFETY_ACTIONS } from "./demoData";
 
 interface CountsRecord {
   spans?: number | string;
@@ -62,7 +63,13 @@ fetch spans, samplingRatio: 1, from: ${dqlTimeArg(from)}, to: ${dqlTimeArg(to)}
 | limit 6
 `.trim();
 
-export const useSafety = (): UseSafetyResult => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — set by Pulse's SafetyPanel when
+ * Demo Mode (or the app-wide "no AI telemetry yet" fallback) is active. This
+ * hook has no other caller, so the default only matters for tests.
+ */
+export const useSafety = (showExample = false): UseSafetyResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const from = scope.timeframe.from;
@@ -70,14 +77,24 @@ export const useSafety = (): UseSafetyResult => {
 
   const counts = useScopedDql<CountsRecord>(
     useMemo(() => countsQuery(from, to), [from, to]),
-    { staleTime: 60_000 },
+    { staleTime: 60_000, enabled: !showExample },
   );
   const dist = useScopedDql<ActionRecord>(
     useMemo(() => actionQuery(from, to), [from, to]),
-    { staleTime: 60_000 },
+    { staleTime: 60_000, enabled: !showExample },
   );
 
   return useMemo<UseSafetyResult>(() => {
+    if (showExample) {
+      return {
+        spans: DEMO_SAFETY_COUNTS.spans,
+        guardrailSpans: DEMO_SAFETY_COUNTS.guardrail,
+        piiSpans: DEMO_SAFETY_COUNTS.pii,
+        actions: DEMO_SAFETY_ACTIONS.map((a) => ({ action: a.action, count: a.n })),
+        isLoading: false,
+        error: undefined,
+      };
+    }
     const rec = counts.data?.records?.[0];
     const ex = (v: unknown): number => num(v) * samplingRatio;
     const actions: GuardrailAction[] = (dist.data?.records ?? [])
@@ -91,5 +108,5 @@ export const useSafety = (): UseSafetyResult => {
       isLoading: counts.isLoading || dist.isLoading,
       error: counts.error ?? dist.error ?? undefined,
     };
-  }, [counts.data, counts.isLoading, counts.error, dist.data, dist.isLoading, dist.error, samplingRatio]);
+  }, [showExample, counts.data, counts.isLoading, counts.error, dist.data, dist.isLoading, dist.error, samplingRatio]);
 };

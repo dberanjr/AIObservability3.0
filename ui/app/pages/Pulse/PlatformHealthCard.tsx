@@ -260,9 +260,9 @@ const ContributorList = ({
   </Flex>
 );
 
-const HealthDrilldown = () => {
+const HealthDrilldown = ({ showExample = false }: { showExample?: boolean }) => {
   const { slowAgents, slowModels, errorAgents, isLoading } =
-    useHealthContributors();
+    useHealthContributors(showExample);
   if (isLoading) {
     return <Skeleton style={{ height: 60 }} />;
   }
@@ -275,8 +275,8 @@ const HealthDrilldown = () => {
   );
 };
 
-const PlatformHealthBody = () => {
-  const health = usePulseHealth();
+const PlatformHealthBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const health = usePulseHealth(showExample);
   // Expanded by default — the contributor tables are the actionable detail.
   const [open, setOpen] = useState(true);
   return (
@@ -342,14 +342,14 @@ const PlatformHealthBody = () => {
               )}
               What's contributing
             </button>
-            {open && <HealthDrilldown />}
+            {open && <HealthDrilldown showExample={showExample} />}
           </>
         )}
       </Flex>
   );
 };
 
-export const PlatformHealthCard = () => (
+export const PlatformHealthCard = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard
     title="Platform health"
     headerRight={
@@ -359,6 +359,6 @@ export const PlatformHealthCard = () => (
     }
     defaultOpen
   >
-    <PlatformHealthBody />
+    <PlatformHealthBody showExample={showExample} />
   </CollapsibleCard>
 );

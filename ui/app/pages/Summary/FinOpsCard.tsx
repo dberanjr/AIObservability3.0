@@ -147,9 +147,9 @@ const StackedDailyBars = ({
  * estimated-savings callout (useFinOps.possibleSavings, from model right-sizing).
  * Every figure flows through the cache-aware cost model. Drills to Models/FinOps.
  */
-export const FinOpsCard = () => {
-  const conc = useModelConcentration();
-  const finops = useFinOps();
+export const FinOpsCard = ({ showExample = false }: { showExample?: boolean }) => {
+  const conc = useModelConcentration(4, showExample);
+  const finops = useFinOps(showExample);
 
   const items: BarListItem[] = conc.slices.map((s) => ({
     key: s.key,

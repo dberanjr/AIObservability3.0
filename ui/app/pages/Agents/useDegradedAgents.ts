@@ -10,16 +10,8 @@ import type { DegradedTrendItem } from "../../components/SLAConfig/types";
 import { fmtMs } from "../../data/format";
 import { buildDegradedTrendQuery, buildAgentBaselineQuery } from "./queries";
 import type { AgentRow } from "./useAgents";
-
-interface TrendRecord {
-  agent?: string;
-  p90_ns?: (number | null)[] | null;
-}
-
-interface BaselineRecord {
-  agent?: string;
-  baseline_ns?: number | null;
-}
+import { buildDegradedTrendMaps, type DegradedTrendRecord as TrendRecord, type DegradedBaselineRecord as BaselineRecord } from "./parse";
+import { DEMO_DEGRADED_TREND_RECORDS, DEMO_DEGRADED_BASELINE_RECORDS } from "./demoData";
 
 export interface UseDegradedAgentsResult {
   items: DegradedTrendItem[];
@@ -33,8 +25,16 @@ const TOP_N = 5;
 const arrAvg = (a: number[]): number =>
   a.length === 0 ? 0 : a.reduce((acc, v) => acc + v, 0) / a.length;
 
+/**
+ * @param showExample Demo Mode / no-telemetry fallback — see BedrockPage's
+ * doc comment. `agents` is already Demo Mode-aware (its caller passes the
+ * same `showExample`-driven `useAgents` result), so `slow` naturally resolves
+ * to the canned fleet's slow agents; this flag additionally swaps the
+ * trend/baseline queries for the matching canned fixtures.
+ */
 export const useDegradedAgents = (
   agents: AgentRow[],
+  showExample = false,
 ): UseDegradedAgentsResult => {
   const { filters } = useGlobalFilters();
   const resolution = useResolvedServices();
@@ -52,11 +52,11 @@ export const useDegradedAgents = (
   const topNames = slow.map((a) => a.agent);
 
   const { data, isLoading, error } = useScopedDql<TrendRecord>(
-    canQuery && topNames.length > 0
+    canQuery && !showExample && topNames.length > 0
       ? buildDegradedTrendQuery(resolution.serviceIds, topNames, filters)
       : "",
     {
-      enabled: canQuery && topNames.length > 0,
+      enabled: canQuery && !showExample && topNames.length > 0,
       staleTime: 60_000,
     },
   );
@@ -64,30 +64,20 @@ export const useDegradedAgents = (
   // Real rolling-7d P90 baseline (separate window) — replaces the old
   // first-half-of-trend placeholder so "% vs baseline" is meaningful.
   const baselineResult = useScopedDql<BaselineRecord>(
-    canQuery && topNames.length > 0
+    canQuery && !showExample && topNames.length > 0
       ? buildAgentBaselineQuery(resolution.serviceIds, topNames)
       : "",
     {
-      enabled: canQuery && topNames.length > 0,
+      enabled: canQuery && !showExample && topNames.length > 0,
       staleTime: 5 * 60_000,
     },
   );
 
   return useMemo<UseDegradedAgentsResult>(() => {
-    const trendByAgent = new Map<string, number[]>();
-    for (const r of data?.records ?? []) {
-      if (!r.agent) continue;
-      const trend = (r.p90_ns ?? []).map((v) =>
-        typeof v === "number" ? v / 1_000_000 : 0,
-      );
-      trendByAgent.set(r.agent, trend);
-    }
-
-    const baselineByAgent = new Map<string, number>();
-    for (const r of baselineResult.data?.records ?? []) {
-      if (!r.agent || typeof r.baseline_ns !== "number") continue;
-      baselineByAgent.set(r.agent, r.baseline_ns / 1_000_000);
-    }
+    const { trendByAgent, baselineByAgent } = buildDegradedTrendMaps(
+      showExample ? DEMO_DEGRADED_TREND_RECORDS : (data?.records ?? []),
+      showExample ? DEMO_DEGRADED_BASELINE_RECORDS : (baselineResult.data?.records ?? []),
+    );
 
     const items: DegradedTrendItem[] = slow.map((agent) => {
       const trend = trendByAgent.get(agent.agent) ?? [];
@@ -121,10 +111,11 @@ export const useDegradedAgents = (
 
     return {
       items,
-      isLoading,
-      error: error ?? baselineResult.error ?? undefined,
+      isLoading: showExample ? false : isLoading,
+      error: showExample ? undefined : (error ?? baselineResult.error ?? undefined),
     };
   }, [
+    showExample,
     slow,
     data,
     baselineResult.data,

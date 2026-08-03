@@ -29,8 +29,8 @@ import { useRag } from "./useRag";
 
 // Body is a separate component so useRag (self-fetching DQL) only runs while
 // the section is expanded — collapsing unmounts the body and issues no query.
-const RagPanelBody = () => {
-  const r = useRag();
+const RagPanelBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const r = useRag(showExample);
   // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>
   // in ExplorerPage's ScanScopedTile) so a truncated scan surfaces the amber
   // "Scan budget reached" empty rather than a misleading "no activity" (STATE-4).
@@ -142,7 +142,13 @@ const RagPanelBody = () => {
   );
 };
 
-export const RagPanel = () => (
+export interface RagPanelProps {
+  /** Demo Mode / no-telemetry fallback — renders the bundled demo dataset
+   *  instead of querying Grail (see ExplorerPage). Defaults to false. */
+  showExample?: boolean;
+}
+
+export const RagPanel = ({ showExample = false }: RagPanelProps = {}) => (
   <CollapsibleCard
     title="Retrieval (RAG)"
     subtitle={
@@ -153,6 +159,6 @@ export const RagPanel = () => (
     }
     defaultOpen
   >
-    <RagPanelBody />
+    <RagPanelBody showExample={showExample} />
   </CollapsibleCard>
 );

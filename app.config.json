@@ -3,7 +3,7 @@
   "environmentUrl": "https://your-tenant.apps.dynatrace.com/",
   "app": {
     "name": "AI Observability 3.0 App",
-    "version": "0.2.56",
+    "version": "0.2.59",
     "description": "End-to-end observability for agentic AI workloads",
     "id": "my.ai.observability.3.0.app",
     "scopes": [
@@ -24,7 +24,8 @@
       { "name": "state:app-states:write",      "comment": "Persist org-wide app state (model pricing edits made via the Model pricing panel)" },
       { "name": "storage:filter-segments:read", "comment": "Read tenant-defined filter segments to apply as scope filters" },
       { "name": "storage:files:read",            "comment": "Read tabular files under /lookups/dynatrace/* (CMDB lookups, AppCI owner mapping) used by segment variable resolution" },
-      { "name": "storage:smartscape:read",       "comment": "Read smartscape.nodes / smartscape.relations referenced by topology-based segment variable queries" }
+      { "name": "storage:smartscape:read",       "comment": "Read smartscape.nodes / smartscape.relations referenced by topology-based segment variable queries" },
+      { "name": "extensions:configurations:read", "comment": "Read the AWS extension's monitoring configurations to resolve account id -> friendly connection name" }
     ]
   }
 }

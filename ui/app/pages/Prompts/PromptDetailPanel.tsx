@@ -233,11 +233,15 @@ export interface PromptDetailPanelProps {
   prompt: PromptRow;
   privacy: PrivacyMode;
   onClose: () => void;
+  /** True to render bundled Demo Mode data in the Trace/Topology/Logs/Info
+   *  tabs instead of querying Grail for `prompt.traceId`/`prompt.spanId`. */
+  showExample?: boolean;
 }
 
 export const PromptDetailPanel = ({
   prompt,
   privacy,
+  showExample = false,
 }: PromptDetailPanelProps) => {
   const [activeTab, setActiveTab] = useState<DetailTab>("prompts");
   const [search, setSearch] = useState("");
@@ -247,9 +251,10 @@ export const PromptDetailPanel = ({
   const { spans, isLoading, error, isTruncated } = useTraceSpans(
     prompt.traceId,
     prompt.timestampMs,
+    showExample,
   );
-  const traceLogs = useTraceLogs(prompt.traceId, prompt.timestampMs);
-  const spanDetail = usePromptSpanDetail(prompt.spanId);
+  const traceLogs = useTraceLogs(prompt.traceId, prompt.timestampMs, showExample);
+  const spanDetail = usePromptSpanDetail(prompt.spanId, showExample);
 
   // Log counts shown in the Info tab are derived from the TRACE's logs (same
   // source as the Logs tab). The per-span counts were wrong: WARN/ERROR logs in

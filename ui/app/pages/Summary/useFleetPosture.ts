@@ -14,8 +14,9 @@ import {
   buildPostureHeadline,
   isGradeIncomplete,
 } from "./posture";
+import { DEMO_FLEET_COUNTS } from "./demoData";
 
-interface CountsRecord {
+export interface CountsRecord {
   services?: number;
   agents?: number;
 }
@@ -57,16 +58,21 @@ const statusWord = (index: number | null): string => {
 const needsAttention = (p: Pillar): boolean =>
   p.status === "warning" || p.status === "critical";
 
-export const useFleetPosture = (): FleetPosture => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — passed down from the Summary page.
+ * No other page calls this Summary-only hook.
+ */
+export const useFleetPosture = (showExample = false): FleetPosture => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { serviceIds } = resolution;
   const canQuery = canQueryScope(resolution);
-  const health = usePulseHealth();
+  const health = usePulseHealth(showExample);
 
   const counts = useScopedDql<CountsRecord>(
     canQuery ? buildFleetCountsQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   const refetch = useCallback(() => {
@@ -110,7 +116,7 @@ export const useFleetPosture = (): FleetPosture => {
       trustIndex != null,
     );
 
-    const row = counts.data?.records?.[0];
+    const row = showExample ? DEMO_FLEET_COUNTS : counts.data?.records?.[0];
 
     return {
       trustIndex,
@@ -124,11 +130,12 @@ export const useFleetPosture = (): FleetPosture => {
       pillarsScored: scoredLabels.length,
       gradeIncomplete,
       pillars,
-      isLoading: health.isLoading || counts.isLoading,
-      error: health.error ?? counts.error ?? undefined,
+      isLoading: showExample ? false : health.isLoading || counts.isLoading,
+      error: showExample ? undefined : (health.error ?? counts.error ?? undefined),
       refetch,
     };
   }, [
+    showExample,
     health.operational,
     health.quality,
     health.cost,

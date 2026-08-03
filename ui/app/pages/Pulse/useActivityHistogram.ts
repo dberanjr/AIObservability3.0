@@ -3,15 +3,10 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
 import { buildActivityHistogramQuery } from "./dataQueries";
+import { computeActivityHistogram, type HistogramRecord, type HistogramBucket } from "./parse";
+import { DEMO_ACTIVITY_HISTOGRAM } from "./demoData";
 
-interface HistogramRecord {
-  requests?: (number | null)[] | null;
-}
-
-export interface HistogramBucket {
-  hour: number;
-  requests: number;
-}
+export type { HistogramRecord, HistogramBucket };
 
 export interface UseActivityHistogramResult {
   buckets: HistogramBucket[];
@@ -21,7 +16,15 @@ export interface UseActivityHistogramResult {
   error?: Error;
 }
 
-export const useActivityHistogram = (): UseActivityHistogramResult => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — used by the Summary page's
+ * ActivityCard. Pulse's own ActivityHistogramPanel never passes it, so its
+ * behavior is unchanged.
+ */
+export const useActivityHistogram = (
+  showExample = false,
+): UseActivityHistogramResult => {
   const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
   const { serviceIds, isLoading: servicesLoading } = _resolution;
@@ -32,36 +35,18 @@ export const useActivityHistogram = (): UseActivityHistogramResult => {
   // histogram is bounded the same as the rest of the app.
   const { data, isLoading, error } = useScopedDql<HistogramRecord>(
     canQuery ? buildActivityHistogramQuery(serviceIds) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseActivityHistogramResult>(() => {
-    const row = data?.records?.[0];
-    // Each bucket is a count() of requests — extrapolate every bucket.
-    const series = (row?.requests ?? []).map((v) =>
-      typeof v === "number" ? v * samplingRatio : 0,
-    );
-    // Pad or trim to 24 buckets.
-    const buckets: HistogramBucket[] = Array.from(
-      { length: 24 },
-      (_, i) => ({ hour: i, requests: series[i] ?? 0 }),
-    );
-
-    let peakHour: number | null = null;
-    let peakRequests = 0;
-    for (const b of buckets) {
-      if (b.requests > peakRequests) {
-        peakRequests = b.requests;
-        peakHour = b.hour;
-      }
+    if (showExample) {
+      return { ...DEMO_ACTIVITY_HISTOGRAM, isLoading: false, error: undefined };
     }
-
+    const core = computeActivityHistogram(data?.records?.[0], samplingRatio);
     return {
-      buckets,
-      peakHour,
-      peakRequests,
+      ...core,
       isLoading: servicesLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, servicesLoading, samplingRatio]);
+  }, [showExample, data, isLoading, error, servicesLoading, samplingRatio]);
 };

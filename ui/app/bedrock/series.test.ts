@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldDailyCost } from "./series";
+import { foldDailyCost, foldErrorRateSpark, foldSessionsSpark } from "./series";
 
 // Synthetic makeTimeseries record shaped like the live tenant: one record per
 // modelId, parallel token arrays (one slot per bucket, values null or number),
@@ -76,5 +76,47 @@ describe("foldDailyCost", () => {
     const { daily, summary } = foldDailyCost([]);
     expect(daily).toEqual([]);
     expect(summary.total).toBe(0);
+  });
+});
+
+describe("foldErrorRateSpark", () => {
+  const record = {
+    invocations: [100, 0, 200],
+    errors: [5, 0, 10],
+    timeframe: { start: "2026-07-01T00:00:00.000Z", end: "2026-07-04T00:00:00.000Z" },
+    interval: "86400000000000",
+  };
+
+  it("folds parallel invocations/errors arrays into a per-bucket error-rate percentage", () => {
+    const { values, labels } = foldErrorRateSpark([record]);
+    expect(values).toEqual([5, 0, 5]);
+    expect(labels).toEqual(["2026-07-01", "2026-07-02", "2026-07-03"]);
+  });
+
+  it("reads 0 (not NaN) for a bucket with zero invocations", () => {
+    const { values } = foldErrorRateSpark([record]);
+    expect(values[1]).toBe(0);
+  });
+
+  it("returns empty arrays for an empty result set", () => {
+    expect(foldErrorRateSpark([])).toEqual({ values: [], labels: [] });
+  });
+});
+
+describe("foldSessionsSpark", () => {
+  it("folds the single-row countDistinct(session) array into a per-bucket series", () => {
+    const { values, labels } = foldSessionsSpark([
+      {
+        sessions: [3, 5, 2],
+        timeframe: { start: "2026-07-01T00:00:00.000Z", end: "2026-07-04T00:00:00.000Z" },
+        interval: "86400000000000",
+      },
+    ]);
+    expect(values).toEqual([3, 5, 2]);
+    expect(labels).toEqual(["2026-07-01", "2026-07-02", "2026-07-03"]);
+  });
+
+  it("returns empty arrays for an empty result set", () => {
+    expect(foldSessionsSpark([])).toEqual({ values: [], labels: [] });
   });
 });

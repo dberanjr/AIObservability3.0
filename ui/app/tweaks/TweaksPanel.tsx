@@ -370,6 +370,28 @@ export const TweaksPanel = () => {
           </Flex>
 
           <Flex flexDirection="column" gap={12}>
+            <SectionLabel>Data source</SectionLabel>
+            <Flex flexDirection="column" gap={6}>
+              <FieldLabel>Demo Mode</FieldLabel>
+              <Segmented
+                ariaLabel="Demo Mode"
+                options={ON_OFF_OPTIONS}
+                value={t.pageConfig.demoMode ? "on" : "off"}
+                onChange={(v) => t.setDemoMode(v === "on")}
+              />
+              <Text style={{ fontSize: 11, color: "var(--text-3)" }}>
+                Shows realistic canned data on every wired page instead of querying
+                Grail — useful for demos, screenshots, and trial installs in a
+                tenant with no telemetry yet. A banner stays visible at the top of
+                the app the whole time this is on. Pages already fall back to
+                labelled example data on their own when they find no real
+                telemetry; this forces that same look everywhere, even where real
+                data exists.
+              </Text>
+            </Flex>
+          </Flex>
+
+          <Flex flexDirection="column" gap={12}>
             <SectionLabel>Appearance</SectionLabel>
 
             <Flex flexDirection="column" gap={6}>

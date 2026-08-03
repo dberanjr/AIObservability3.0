@@ -3,39 +3,25 @@ import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
 import { useSampling } from "../../scope/SamplingContext";
-import { canonicalizeModel } from "../../detection/attributes";
-import { costOf } from "../../data/pricing";
-import { toNum } from "../../data/format";
 import {
   buildMcpServersBreakdownQuery,
   buildMcpToolsBreakdownQuery,
   buildModelsBreakdownQuery,
 } from "./dataQueries";
+import {
+  foldTileBreakdowns,
+  type BreakdownSlice,
+  type ModelRec,
+  type ServerRec,
+  type ToolRec,
+} from "./parseHealthAndTiles";
+import {
+  DEMO_TILE_MODEL_RECORDS,
+  DEMO_TILE_SERVER_RECORDS,
+  DEMO_TILE_TOOL_RECORDS,
+} from "./demoData";
 
-export interface BreakdownSlice {
-  key: string;
-  label: string;
-  /** Primary metric used for donut sizing. */
-  value: number;
-  /** Total tokens (input + output). Always 0 for MCP slices. */
-  tokens: number;
-  /** Blended USD cost estimate. Always 0 for MCP slices. */
-  cost: number;
-  /** Average span duration ms. 0 for model slices. */
-  avgDurationMs: number;
-  /** Median (p50) span duration ms. */
-  p50DurationMs: number;
-  /** P95 span duration ms. */
-  p95DurationMs: number;
-  /** P99 span duration ms. */
-  p99DurationMs: number;
-  /** OTel span-level errors (span.status_code="error"). */
-  spanErrors: number;
-  /** Functional tool errors (isError present in response output). */
-  toolErrors: number;
-  /** Click-to-filter target for this slice's label. */
-  filter?: { attribute: string; values: string[]; label?: string };
-}
+export type { BreakdownSlice };
 
 export interface UseTileBreakdownsResult {
   models: BreakdownSlice[];
@@ -45,39 +31,23 @@ export interface UseTileBreakdownsResult {
   error?: Error;
 }
 
-interface ModelRec {
-  model?: string;
-  requests?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-}
-interface ServerRec {
-  server?: string;
-  requests?: number;
-  avg_ms?: number;
-  p50_ms?: number;
-  p95_ms?: number;
-  p99_ms?: number;
-  span_errors?: number;
-  tool_errors?: number;
-}
-interface ToolRec {
-  tool?: string;
-  calls?: number;
-  avg_ms?: number;
-  p50_ms?: number;
-  p95_ms?: number;
-  p99_ms?: number;
-  span_errors?: number;
-  tool_errors?: number;
-}
+/** Precomputed once from the raw fixtures in `./demoData` (kept as raw
+ *  records there, not this folded shape, to avoid a circular import back
+ *  into this file). */
+const DEMO_TILE_BREAKDOWNS = foldTileBreakdowns(
+  DEMO_TILE_MODEL_RECORDS,
+  DEMO_TILE_SERVER_RECORDS,
+  DEMO_TILE_TOOL_RECORDS,
+  1,
+);
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-export const useTileBreakdowns = (): UseTileBreakdownsResult => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — set by Pulse's SummaryTilesRow
+ * when Demo Mode (or the app-wide "no AI telemetry yet" fallback) is active.
+ * This hook has no other caller, so the default only matters for tests.
+ */
+export const useTileBreakdowns = (showExample = false): UseTileBreakdownsResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
@@ -86,133 +56,36 @@ export const useTileBreakdowns = (): UseTileBreakdownsResult => {
 
   const modelsRes = useScopedDql<ModelRec>(
     canQuery ? buildModelsBreakdownQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
   const serversRes = useScopedDql<ServerRec>(
     canQuery ? buildMcpServersBreakdownQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
   const toolsRes = useScopedDql<ToolRec>(
     canQuery ? buildMcpToolsBreakdownQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseTileBreakdownsResult>(() => {
-    interface ModelAgg {
-      label: string;
-      rawModels: Set<string>;
-      requests: number;
-      inputTokens: number;
-      outputTokens: number;
-      pricingKey: string;
-      domRequests: number;
+    if (showExample) {
+      return { ...DEMO_TILE_BREAKDOWNS, isLoading: false, error: undefined };
     }
-    const modelAcc = new Map<string, ModelAgg>();
-    for (const r of modelsRes.data?.records ?? []) {
-      if (typeof r.model !== "string" || !r.model) continue;
-      const { key, label } = canonicalizeModel(r.model);
-      const reqs = num(r.requests);
-      const cur =
-        modelAcc.get(key) ?? {
-          label,
-          rawModels: new Set<string>(),
-          requests: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          pricingKey: r.model,
-          domRequests: -1,
-        };
-      cur.rawModels.add(r.model);
-      cur.requests += reqs * samplingRatio;
-      cur.inputTokens += num(r.input_tokens) * samplingRatio;
-      cur.outputTokens += num(r.output_tokens) * samplingRatio;
-      if (reqs > cur.domRequests) {
-        cur.domRequests = reqs;
-        cur.pricingKey = r.model;
-      }
-      modelAcc.set(key, cur);
-    }
-    const models: BreakdownSlice[] = Array.from(modelAcc.entries())
-      .map(([key, agg]) => {
-        return {
-          key,
-          label: agg.label,
-          value: agg.requests,
-          tokens: agg.inputTokens + agg.outputTokens,
-          cost: costOf(agg.inputTokens, agg.outputTokens, agg.pricingKey),
-          avgDurationMs: 0,
-          p50DurationMs: 0,
-          p95DurationMs: 0,
-          p99DurationMs: 0,
-          spanErrors: 0,
-          toolErrors: 0,
-          filter: {
-            attribute: "gen_ai.request.model",
-            values: Array.from(agg.rawModels),
-            label: "model",
-          },
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-
-    const mcpServers: BreakdownSlice[] = (serversRes.data?.records ?? [])
-      .filter(
-        (r): r is Required<Pick<ServerRec, "server">> & ServerRec =>
-          typeof r.server === "string" && r.server.length > 0,
-      )
-      .map((r) => ({
-        key: r.server,
-        label: r.server,
-        value: num(r.requests) * samplingRatio,
-        tokens: 0,
-        cost: 0,
-        avgDurationMs: num(r.avg_ms),
-        p50DurationMs: num(r.p50_ms),
-        p95DurationMs: num(r.p95_ms),
-        p99DurationMs: num(r.p99_ms),
-        spanErrors: num(r.span_errors) * samplingRatio,
-        toolErrors: num(r.tool_errors) * samplingRatio,
-        filter: {
-          attribute: "traceloop.workflow.name",
-          values: [r.server],
-          label: "MCP server",
-        },
-      }));
-
-    const mcpTools: BreakdownSlice[] = (toolsRes.data?.records ?? [])
-      .filter(
-        (r): r is Required<Pick<ToolRec, "tool">> & ToolRec =>
-          typeof r.tool === "string" && r.tool.length > 0,
-      )
-      .map((r) => ({
-        key: r.tool,
-        label: r.tool,
-        value: num(r.calls) * samplingRatio,
-        tokens: 0,
-        cost: 0,
-        avgDurationMs: num(r.avg_ms),
-        p50DurationMs: num(r.p50_ms),
-        p95DurationMs: num(r.p95_ms),
-        p99DurationMs: num(r.p99_ms),
-        spanErrors: num(r.span_errors) * samplingRatio,
-        toolErrors: num(r.tool_errors) * samplingRatio,
-        filter: {
-          attribute: "traceloop.entity.name",
-          values: [r.tool],
-          label: "MCP tool",
-        },
-      }));
-
+    const core = foldTileBreakdowns(
+      modelsRes.data?.records ?? [],
+      serversRes.data?.records ?? [],
+      toolsRes.data?.records ?? [],
+      samplingRatio,
+    );
     return {
-      models,
-      mcpServers,
-      mcpTools,
+      ...core,
       isLoading:
         modelsRes.isLoading || serversRes.isLoading || toolsRes.isLoading,
       error:
         modelsRes.error ?? serversRes.error ?? toolsRes.error ?? undefined,
     };
   }, [
+    showExample,
     modelsRes.data,
     modelsRes.isLoading,
     modelsRes.error,

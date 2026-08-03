@@ -29,12 +29,17 @@ const INFO =
  * forecast overlay, x-axis time ticks, and a full-screen expand — the Agents
  * analogue of Pulse's token-consumption chart.
  */
-export const InvocationsChart = () => {
+export const InvocationsChart = ({
+  showExample = false,
+}: {
+  /** Demo Mode / no-telemetry fallback — see BedrockPage's doc comment. */
+  showExample?: boolean;
+}) => {
   const { scope, setTimeframe } = useScope();
   const { scanLimitGb, setScanLimit } = useScanLimit();
   const [forecastEnabled, setForecastEnabled] = useState(false);
   const [open, setOpen] = useState(true);
-  const model = useInvocationsChart(forecastEnabled);
+  const model = useInvocationsChart(forecastEnabled, showExample);
   const expander = useChartExpander();
 
   // Why the panel is empty — a real error / truncated-scan / no-activity cause

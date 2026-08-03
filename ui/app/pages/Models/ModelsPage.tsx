@@ -4,8 +4,11 @@ import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { ErrorBanner } from "../../components/ErrorState";
 import { CollapsibleDataGapNote } from "../../components/CollapsibleDataGapNote";
 import { CollapsibleCard } from "../../components/CollapsibleCard";
+import { ExampleDataNotice } from "../../components/ExampleDataNotice";
 import { FindingDrawer } from "../../components/drawers/FindingDrawer";
 import type { Finding } from "../../components/drawers/types";
+import { useCapability } from "../../scope/CapabilityContext";
+import { useTweaks } from "../../tweaks/TweaksContext";
 import { ModelBubbleChart } from "./ModelBubbleChart";
 import { ModelsFindings } from "./ModelsFindings";
 import { ModelsSidePanels } from "./ModelsSidePanels";
@@ -19,7 +22,15 @@ import { ModelsFinOpsSections } from "./ModelsFinOpsSections";
 import { useModels } from "./useModels";
 
 export const ModelsPage = () => {
-  const { models, isLoading, error, limitHit } = useModels();
+  const capability = useCapability();
+  const { pageConfig } = useTweaks();
+  // Demo Mode / no-telemetry fallback (see BedrockPage / useBedrockAvailable
+  // for the same pattern): the global Tweak forces it on, or once the shared
+  // capability probe resolves and finds zero AI spans anywhere in scope.
+  const showExample =
+    pageConfig.demoMode || (!capability.isLoading && !capability.hasAnyAiSpans);
+
+  const { models, isLoading, error, limitHit } = useModels(undefined, showExample);
   const [typeFilter, setTypeFilter] = useState<ModelTypeFilter>("all");
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
 
@@ -59,6 +70,9 @@ export const ModelsPage = () => {
             and drill into spend, efficiency and A/B trade-offs across the fleet.
           </Text>
         </Flex>
+        {showExample && !pageConfig.demoMode && (
+          <ExampleDataNotice tabLabel="Models" />
+        )}
         {error && <ErrorBanner error={error} />}
         <ModelTypeSegmented
           value={typeFilter}
@@ -131,6 +145,7 @@ export const ModelsPage = () => {
           models={models}
           typeFilter={typeFilter}
           onSelectFinding={setSelectedFinding}
+          showExample={showExample}
         />
       </Flex>
       <FindingDrawer

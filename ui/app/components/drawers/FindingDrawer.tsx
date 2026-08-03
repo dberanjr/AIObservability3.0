@@ -87,6 +87,16 @@ const formatTime = (ms?: number): string | null => {
 export interface FindingDrawerProps {
   finding: Finding | null;
   onDismiss: () => void;
+  /**
+   * `showExample` (default false, mirrors useGuardrails.ts) renders the
+   * drawer's own trend sparkline (`usePulseSeries`) from its Demo Mode
+   * fixture instead of scanning Grail — pass the owning page's `showExample`
+   * flag so a finding card opened while Demo Mode is active doesn't reveal
+   * a live (or empty) chart underneath canned findings. Every other caller
+   * of this shared drawer (Pulse, Explorer, Models, Bedrock) omits it, so
+   * their behavior is unchanged.
+   */
+  showExample?: boolean;
 }
 
 /**
@@ -109,13 +119,17 @@ const handlerFor = (
   return undefined;
 };
 
-export const FindingDrawer = ({ finding, onDismiss }: FindingDrawerProps) => {
+export const FindingDrawer = ({
+  finding,
+  onDismiss,
+  showExample = false,
+}: FindingDrawerProps) => {
   const intents = finding?.intents ?? DEFAULT_FINDING_INTENTS;
   const timestamp = formatTime(finding?.timestampMs);
   const goToTab = useTabNav();
   // Per-finding metric series (only scanned while a finding is open) so the
   // drawer shows WHEN the condition spiked over the window.
-  const series = usePulseSeries(Boolean(finding));
+  const series = usePulseSeries(Boolean(finding), showExample);
   const anomaly: (Finding & { type?: string }) | null = finding;
   const findingSeries = anomaly ? seriesForFinding(anomaly, series) : undefined;
   const isLatency = anomaly?.type === "latency-spike" || anomaly?.type === "ttft-degradation";

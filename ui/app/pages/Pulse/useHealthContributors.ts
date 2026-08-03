@@ -6,20 +6,15 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildSlowAgentsQuery, buildSlowModelsQuery } from "./queries";
-import { canonicalizeModel } from "../../detection/attributes";
-import { toNum } from "../../data/format";
+import {
+  computeHealthContributors,
+  type Contributor,
+  type SlowAgentRow,
+  type SlowModelRow,
+} from "./parseHealthAndTiles";
+import { DEMO_SLOW_AGENT_RECORDS, DEMO_SLOW_MODEL_RECORDS } from "./demoData";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-export interface Contributor {
-  name: string;
-  p95Ms: number;
-  calls: number;
-  errorRatePct: number | null;
-}
+export type { Contributor };
 
 export interface UseHealthContributorsResult {
   slowAgents: Contributor[];
@@ -28,56 +23,44 @@ export interface UseHealthContributorsResult {
   isLoading: boolean;
 }
 
-export const useHealthContributors = (): UseHealthContributorsResult => {
+/** Precomputed once from the raw fixtures in `./demoData` (kept as raw
+ *  records there, not this folded shape, to avoid a circular import back
+ *  into this file). */
+const DEMO_HEALTH_CONTRIBUTORS = computeHealthContributors(
+  DEMO_SLOW_AGENT_RECORDS,
+  DEMO_SLOW_MODEL_RECORDS,
+);
+
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — set by Pulse's PlatformHealthCard
+ * when Demo Mode (or the app-wide "no AI telemetry yet" fallback) is active.
+ */
+export const useHealthContributors = (
+  showExample = false,
+): UseHealthContributorsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
 
-  const agents = useScopedDql<{
-    name?: string;
-    p95_ms?: number;
-    calls?: number;
-    errors?: number;
-    error_rate_pct?: number;
-  }>(canQuery ? buildSlowAgentsQuery(resolution.serviceIds, scope.timeframe) : "", {
-    enabled: canQuery,
-    staleTime: 60_000,
-  });
+  const agents = useScopedDql<SlowAgentRow>(
+    canQuery ? buildSlowAgentsQuery(resolution.serviceIds, scope.timeframe) : "",
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
+  );
 
-  const models = useScopedDql<{ name?: string; p95_ms?: number; calls?: number }>(
+  const models = useScopedDql<SlowModelRow>(
     canQuery ? buildSlowModelsQuery(resolution.serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseHealthContributorsResult>(() => {
-    const agentRows: Contributor[] = (agents.data?.records ?? [])
-      .filter((r) => typeof r.name === "string")
-      .map((r) => ({
-        name: r.name as string,
-        p95Ms: num(r.p95_ms),
-        calls: num(r.calls),
-        errorRatePct: num(r.error_rate_pct),
-      }));
-
-    const modelRows: Contributor[] = (models.data?.records ?? [])
-      .filter((r) => typeof r.name === "string")
-      .map((r) => ({
-        name: canonicalizeModel(r.name as string).label,
-        p95Ms: num(r.p95_ms),
-        calls: num(r.calls),
-        errorRatePct: null,
-      }));
-
-    const errorAgents = [...agentRows]
-      .filter((a) => (a.errorRatePct ?? 0) > 0)
-      .sort((a, b) => (b.errorRatePct ?? 0) - (a.errorRatePct ?? 0))
-      .slice(0, 5);
-
+    if (showExample) {
+      return { ...DEMO_HEALTH_CONTRIBUTORS, isLoading: false };
+    }
+    const core = computeHealthContributors(agents.data?.records ?? [], models.data?.records ?? []);
     return {
-      slowAgents: agentRows,
-      slowModels: modelRows,
-      errorAgents,
+      ...core,
       isLoading: resolution.isLoading || agents.isLoading || models.isLoading,
     };
-  }, [agents.data, models.data, agents.isLoading, models.isLoading, resolution.isLoading]);
+  }, [showExample, agents.data, models.data, agents.isLoading, models.isLoading, resolution.isLoading]);
 };

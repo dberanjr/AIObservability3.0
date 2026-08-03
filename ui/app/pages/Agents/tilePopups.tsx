@@ -326,10 +326,10 @@ export const TotalAgentsBody = ({ agents }: { agents: AgentRow[] }) => {
 
 /* ---------------------------- Invocations ------------------------------ */
 
-export const InvocationsBody = () => {
+export const InvocationsBody = ({ showExample = false }: { showExample?: boolean }) => {
   const { setTimeframe } = useScope();
   const [forecastEnabled, setForecastEnabled] = useState(false);
-  const model = useInvocationsChart(forecastEnabled);
+  const model = useInvocationsChart(forecastEnabled, showExample);
   // Classify the empty so a query error / truncated scan reads as itself rather
   // than a false "no activity" (STATE-4).
   const emptyKind = emptyCause({ error: model.error, limitHit: model.limitHit });
@@ -712,9 +712,9 @@ export const TtftBody = ({
 
 /* -------------------------- Looping agents ----------------------------- */
 
-export const LoopingAgentsBody = () => {
-  const { rows, loopingCount, isLoading, isEmpty, error } = useAgentLoops();
-  const series = useAgentLoopSeries(true);
+export const LoopingAgentsBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const { rows, loopingCount, isLoading, isEmpty, error } = useAgentLoops(showExample);
+  const series = useAgentLoopSeries(true, showExample);
 
   return (
     <Flex flexDirection="column" gap={16}>
@@ -842,8 +842,8 @@ export const LoopingAgentsBody = () => {
 
 /* --------------------- N+1 tool loops (high frequency) ------------------ */
 
-export const HighFrequencyBody = () => {
-  const { rows, isLoading } = useHighFrequencyAgentRows();
+export const HighFrequencyBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const { rows, isLoading } = useHighFrequencyAgentRows(showExample);
   const worst = rows[0];
 
   return (

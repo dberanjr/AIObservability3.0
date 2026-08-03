@@ -2,38 +2,21 @@ import { useCallback, useMemo } from "react";
 import { useScopedDql } from "../../scope/useScopedDql";
 import { useScope } from "../../scope/ScopeContext";
 import { useResolvedServices, canQueryScope } from "../../scope/useResolvedServices";
-import {
-  extrapolate,
-  extrapolateSeries,
-  useSampling,
-} from "../../scope/SamplingContext";
+import { useSampling } from "../../scope/SamplingContext";
 import {
   buildMcpCountQuery,
   buildSummaryQuery,
   buildSummarySparkSeriesQuery,
 } from "./dataQueries";
-import { costOf } from "../../data/pricing";
+import {
+  computePulseSummaryCore,
+  type SummaryRecord,
+  type SeriesRecord,
+  type McpCountRecord,
+} from "./parse";
+import { DEMO_PULSE_SUMMARY } from "./demoData";
 
-interface SummaryRecord {
-  requests?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  total_tokens?: number;
-  p95_ms?: number;
-  error_rate_pct?: number;
-  models?: number;
-  mcp_servers?: number;
-  mcp_tools?: number;
-  token_efficiency_pct?: number;
-}
-
-interface SeriesRecord {
-  tokens?: (number | null)[] | null;
-  p95_ns?: (number | null)[] | null;
-  errors?: (number | null)[] | null;
-  requests?: (number | null)[] | null;
-  timeframe?: { start?: string; end?: string };
-}
+export type { SummaryRecord, SeriesRecord, McpCountRecord };
 
 export interface PulseSummary {
   tokens: number | null;
@@ -69,11 +52,6 @@ export interface PulseSummary {
   error?: Error;
   /** Re-run every underlying summary query (bound to the useDql refetches). */
   refetch: () => void;
-}
-
-interface McpCountRecord {
-  mcp_servers?: number;
-  mcp_tools?: number;
 }
 
 /**
@@ -118,22 +96,22 @@ const pickSparkIntervalSec = (totalMs: number): number => {
   return 86400; // 1 day
 };
 
-const formatIntervalLabel = (sec: number): string => {
-  if (sec < 60) return `${sec}s`;
-  if (sec < 3600) return `${Math.round(sec / 60)}m`;
-  if (sec < 86400) return `${Math.round(sec / 3600)}h`;
-  return `${Math.round(sec / 86400)}d`;
-};
-
 /**
  * Cheap blended cost estimate: spend = blended-rate × tokens. We don't have a
  * per-row spend in the summary, so cost flows through the cache-aware model at
  * the blended rate (costOf(..., null)). The per-agent breakdown in
  * useAgentCosts is the authoritative dollar figure; this is only the tile-level
- * "Spend" value.
+ * "Spend" value. The fold itself (`computePulseSummaryCore`) lives in
+ * `./parse`, shared with `demoData.ts`'s `DEMO_PULSE_SUMMARY`.
  */
 
-export const usePulseSummary = (): PulseSummary => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — used by the Summary page when the
+ * global Demo Mode Tweak is on or no AI telemetry exists at all. Pulse itself
+ * never passes it, so its behavior is unchanged.
+ */
+export const usePulseSummary = (showExample = false): PulseSummary => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
@@ -142,7 +120,7 @@ export const usePulseSummary = (): PulseSummary => {
 
   const summary = useScopedDql<SummaryRecord>(
     canQuery ? buildSummaryQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   // Bucket interval picked from a tiered map (24h → 5min, 7d → 60min,
@@ -159,14 +137,14 @@ export const usePulseSummary = (): PulseSummary => {
           sparkIntervalSec,
         )
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   // MCP server/tool counts are a separate query because the main summary
   // filters on `gen_ai.provider.name` which excludes MCP-only spans.
   const mcpCounts = useScopedDql<McpCountRecord>(
     canQuery ? buildMcpCountQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   const refetch = useCallback(() => {
@@ -179,117 +157,31 @@ export const usePulseSummary = (): PulseSummary => {
   }, [summary.refetch, spark.refetch, mcpCounts.refetch]);
 
   return useMemo<PulseSummary>(() => {
+    if (showExample) {
+      return { ...DEMO_PULSE_SUMMARY, isLoading: false, error: undefined, refetch };
+    }
     const row = summary.data?.records?.[0];
     const sparkRow = spark.data?.records?.[0];
-    // Counts and sums are sampled — extrapolate back to the unsampled
-    // population. Ratios (error rate, token efficiency) and statistics
-    // (percentiles, distinctCount) are sampling-invariant.
-    const inTok = (row?.input_tokens ?? 0) * samplingRatio;
-    const outTok = (row?.output_tokens ?? 0) * samplingRatio;
-    const tokens = extrapolate(row?.total_tokens, samplingRatio);
-    const requests = extrapolate(row?.requests, samplingRatio);
-
-    const spend = costOf(inTok, outTok, null);
-
-    // costPerRequest is invariant under sampling — spend and requests
-    // are both scaled by samplingRatio, so the quotient cancels.
-    const costPerRequest =
-      requests && requests > 0 ? spend / requests : null;
-
-    // Derive per-bucket spark series from the multi-series spark query.
-    // tokens / errors / requests are count-or-sum aggregates (extrapolate
-    // by samplingRatio); p95_ns / error-rate ratios are statistics
-    // (sampling-invariant). Spend per bucket follows from the per-bucket
-    // tokens via the same blended pricing as the headline.
-    const toNumArr = (arr: unknown): number[] =>
-      Array.isArray(arr)
-        ? arr.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : 0))
-        : [];
-    const tokensSeries = extrapolateSeries(
-      toNumArr(sparkRow?.tokens),
-      samplingRatio,
-    );
-    const p95NsSeries = toNumArr(sparkRow?.p95_ns);
-    const errorsSeries = toNumArr(sparkRow?.errors);
-    const requestsSeries = toNumArr(sparkRow?.requests);
-
-    const spendSeries = tokensSeries.map((bucketTokens) =>
-      costOf(bucketTokens / 2, bucketTokens / 2, null),
-    );
-    const p95MsSeries = p95NsSeries.map((ns) =>
-      ns > 0 ? ns / 1_000_000 : 0,
-    );
-    const errorRateSeries = requestsSeries.map((req, i) =>
-      req > 0 ? (errorsSeries[i] / req) * 100 : 0,
-    );
-    // Cost per request per bucket. spendSeries is extrapolated (from
-    // extrapolated tokens); requestsSeries is the raw sampled count, so scale
-    // it by samplingRatio to keep the quotient sampling-invariant.
-    const costPerReqSeries = spendSeries.map((bucketSpend, i) => {
-      const reqs = requestsSeries[i] * samplingRatio;
-      return reqs > 0 ? bucketSpend / reqs : 0;
-    });
-
-    // Per-bucket date+time labels for the sparkline cursor tooltip. The
-    // last bucket lines up with "now"; earlier buckets step back by
-    // intervalMs. Format compresses to HH:MM for short windows and
-    // "MMM dd HH:MM" for multi-day windows.
-    const len = Math.max(
-      tokensSeries.length,
-      p95NsSeries.length,
-      errorsSeries.length,
-      requestsSeries.length,
-    );
-    const intervalMs = sparkIntervalSec * 1000;
-    const totalSpanMs = len * intervalMs;
-    const multiDay = totalSpanMs >= 24 * 60 * 60 * 1000;
-    const tsFmt = new Intl.DateTimeFormat(undefined, {
-      ...(multiDay
-        ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
-        : { hour: "numeric", minute: "2-digit" }),
-    });
-    const nowMs = Date.now();
-    const sparkLabels: string[] = [];
-    for (let i = 0; i < len; i++) {
-      const ts = nowMs - (len - 1 - i) * intervalMs;
-      sparkLabels.push(tsFmt.format(new Date(ts)));
-    }
-
     const mcpRow = mcpCounts.data?.records?.[0];
+    const core = computePulseSummaryCore(
+      row,
+      sparkRow,
+      mcpRow,
+      samplingRatio,
+      sparkIntervalSec,
+    );
     return {
-      tokens,
-      requests,
-      spend: tokens ? spend : null,
-      costPerRequest,
-      p95Ms: row?.p95_ms ?? null,
-      errorRatePct: row?.error_rate_pct ?? null,
-      models: row?.models ?? null,
-      // MCP counts come from a dedicated query that doesn't filter on
-      // gen_ai.provider.name. Fall back to the legacy summary value if
-      // the dedicated query hasn't returned yet.
-      mcpServers: mcpRow?.mcp_servers ?? row?.mcp_servers ?? null,
-      mcpTools: mcpRow?.mcp_tools ?? row?.mcp_tools ?? null,
-      tokenEfficiencyPct: row?.token_efficiency_pct ?? null,
-      spark: {
-        tokens: tokensSeries,
-        spend: spendSeries,
-        costPerReq: costPerReqSeries,
-        p95Ms: p95MsSeries,
-        errorRatePct: errorRateSeries,
-        intervalSec: sparkIntervalSec,
-        intervalLabel: formatIntervalLabel(sparkIntervalSec),
-        labels: sparkLabels,
-      },
+      ...core,
       isLoading:
         servicesLoading ||
         summary.isLoading ||
         spark.isLoading ||
         mcpCounts.isLoading,
-      error:
-        summary.error ?? spark.error ?? mcpCounts.error ?? undefined,
+      error: summary.error ?? spark.error ?? mcpCounts.error ?? undefined,
       refetch,
     };
   }, [
+    showExample,
     samplingRatio,
     servicesLoading,
     summary.data,

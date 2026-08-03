@@ -101,8 +101,8 @@ const HeatmapLegend = ({ values }: { values: number[] }) => {
 // Body is a separate component so useExplorerHeatmap (an independent DQL query)
 // only runs while the section is expanded — collapsing unmounts the body and
 // issues no query.
-const ServiceModelHeatmapBody = () => {
-  const result = useExplorerHeatmap();
+const ServiceModelHeatmapBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const result = useExplorerHeatmap(showExample);
   // Read this panel's own scan telemetry (tagged by the enclosing <ScanScope>
   // in ExplorerPage's ScanScopedTile) so a truncated scan surfaces the amber
   // "Scan budget reached" empty rather than a misleading "no activity" (STATE-4).
@@ -546,6 +546,7 @@ const ServiceModelHeatmapBody = () => {
           service={selected.service}
           rawModels={selected.rawModels}
           modelLabel={selected.modelLabel}
+          showExample={showExample}
           onClose={() => setSelected(null)}
         />
       </ScanScope>
@@ -558,11 +559,15 @@ export interface ServiceModelHeatmapProps {
   /** Controlled collapse state, so a KPI tile can force this card open. */
   open?: boolean;
   onOpenChange?: (next: boolean) => void;
+  /** Demo Mode / no-telemetry fallback — renders the bundled demo dataset
+   *  instead of querying Grail (see ExplorerPage). Defaults to false. */
+  showExample?: boolean;
 }
 
 export const ServiceModelHeatmap = ({
   open,
   onOpenChange,
+  showExample = false,
 }: ServiceModelHeatmapProps = {}) => (
   <CollapsibleCard
     title="Service × model usage"
@@ -571,6 +576,6 @@ export const ServiceModelHeatmap = ({
     onOpenChange={onOpenChange}
     defaultOpen
   >
-    <ServiceModelHeatmapBody />
+    <ServiceModelHeatmapBody showExample={showExample} />
   </CollapsibleCard>
 );

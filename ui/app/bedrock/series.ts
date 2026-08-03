@@ -33,6 +33,27 @@ const numAt = (v: unknown, i: number): number => {
 
 const lenOf = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
 
+/** Derives a real timestamp-based bucket label ("YYYY-MM-DD" for day+ buckets,
+ *  "YYYY-MM-DD HH:MM" for sub-day buckets) from a `makeTimeseries` result's
+ *  `timeframe.start` + `interval`, falling back to a bare index when the axis
+ *  fields are missing. Shared by every fold function in this file. */
+const labelAt = (startMs: number, intervalMs: number, hasAxis: boolean, i: number): string =>
+  !hasAxis
+    ? String(i)
+    : intervalMs >= 86_400_000
+      ? new Date(startMs + i * intervalMs).toISOString().slice(0, 10)
+      : new Date(startMs + i * intervalMs).toISOString().slice(0, 16).replace("T", " ");
+
+/** Extracts the `{ startMs, intervalMs, hasAxis }` time axis shared by every
+ *  fold function below from a single `makeTimeseries` result row's
+ *  `timeframe` + `interval` fields. */
+const timeAxisOf = (r: Record<string, unknown> | undefined): { startMs: number; intervalMs: number; hasAxis: boolean } => {
+  const tf = r?.timeframe as TimeframeLike | undefined;
+  const startMs = tf?.start != null ? Date.parse(String(tf.start)) : NaN;
+  const intervalMs = r?.interval != null ? Number(r.interval) / 1e6 : NaN;
+  return { startMs, intervalMs, hasAxis: Number.isFinite(startMs) && Number.isFinite(intervalMs) };
+};
+
 /** Safe string coercion — mirrors parse.ts's `str()`. Avoids
  *  `@typescript-eslint/no-base-to-string` on a `modelId` field that's typed
  *  `unknown` (a raw DQL result value can be an object, which `String()`
@@ -48,12 +69,7 @@ export const foldDailyCost = (
   records: Record<string, unknown>[],
 ): { daily: BedrockDailyCostPoint[]; summary: BedrockCostSummary } => {
   const bucketCount = Math.max(0, ...records.map(recordBucketCount));
-
-  const first = records[0];
-  const tf = first?.timeframe as TimeframeLike | undefined;
-  const startMs = tf?.start != null ? Date.parse(String(tf.start)) : NaN;
-  const intervalMs = first?.interval != null ? Number(first.interval) / 1e6 : NaN;
-  const hasAxis = Number.isFinite(startMs) && Number.isFinite(intervalMs);
+  const { startMs, intervalMs, hasAxis } = timeAxisOf(records[0]);
 
   const daily: BedrockDailyCostPoint[] = [];
   const flat: DailyModelTokens[] = [];
@@ -81,13 +97,53 @@ export const foldDailyCost = (
     // bucket collapses onto the same calendar-day string (e.g. three 1h
     // buckets all labeled "2026-07-01"). Day-or-longer buckets keep the
     // plain date so the label stays short when it doesn't need the time.
-    const day = !hasAxis
-      ? String(i)
-      : intervalMs >= 86_400_000
-        ? new Date(startMs + i * intervalMs).toISOString().slice(0, 10)
-        : new Date(startMs + i * intervalMs).toISOString().slice(0, 16).replace("T", " ");
-    daily.push({ day, byModel, actual, savedByCache });
+    daily.push({ day: labelAt(startMs, intervalMs, hasAxis, i), byModel, actual, savedByCache });
   }
 
   return { daily, summary: bedrockCostSummary(flat) };
+};
+
+export interface BedrockSparkFold {
+  values: number[];
+  labels: string[];
+}
+
+/** Folds the single-row bucketed result of `buildBedrockErrorRateSparkQuery`
+ *  (parallel `invocations`/`errors` arrays) into a per-bucket error-rate (%)
+ *  series. A ratio of two equally-extrapolated sums — like `errorRate` in
+ *  `parseAgentSessions` (parse.ts) — so this needs no sampling-ratio scaling
+ *  of its own. */
+export const foldErrorRateSpark = (records: Record<string, unknown>[]): BedrockSparkFold => {
+  const r = records[0];
+  const bucketCount = Math.max(lenOf(r?.invocations), lenOf(r?.errors));
+  const { startMs, intervalMs, hasAxis } = timeAxisOf(r);
+
+  const values: number[] = [];
+  const labels: string[] = [];
+  for (let i = 0; i < bucketCount; i++) {
+    const inv = numAt(r?.invocations, i);
+    const err = numAt(r?.errors, i);
+    values.push(inv > 0 ? (err / inv) * 100 : 0);
+    labels.push(labelAt(startMs, intervalMs, hasAxis, i));
+  }
+  return { values, labels };
+};
+
+/** Folds the sessions-spark query's single-row bucketed `countDistinct(session)`
+ *  result into a per-bucket session-count series. HyperLogLog-approximate (any
+ *  `countDistinct` inside `makeTimeseries` is) and NEVER sampling-extrapolated
+ *  — matches how the exact headline Sessions count is treated in
+ *  `useBedrockOverview`. */
+export const foldSessionsSpark = (records: Record<string, unknown>[]): BedrockSparkFold => {
+  const r = records[0];
+  const bucketCount = lenOf(r?.sessions);
+  const { startMs, intervalMs, hasAxis } = timeAxisOf(r);
+
+  const values: number[] = [];
+  const labels: string[] = [];
+  for (let i = 0; i < bucketCount; i++) {
+    values.push(numAt(r?.sessions, i));
+    labels.push(labelAt(startMs, intervalMs, hasAxis, i));
+  }
+  return { values, labels };
 };

@@ -1150,6 +1150,9 @@ export interface PromptsTableProps {
    */
   sort: PromptSort;
   onSortChange: (s: PromptSort) => void;
+  /** True to render bundled Demo Mode data in the row-detail popup's trace/
+   *  logs/topology/info tabs instead of querying Grail. */
+  showExample?: boolean;
 }
 
 const PromptsTableBody = ({
@@ -1162,6 +1165,7 @@ const PromptsTableBody = ({
   filterSummary,
   sort,
   onSortChange,
+  showExample,
 }: PromptsTableProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState("");
@@ -1415,6 +1419,7 @@ const PromptsTableBody = ({
                             prompt={p}
                             privacy={privacy}
                             onClose={() => setSelectedId(null)}
+                            showExample={showExample}
                           />
                         </div>
                       )}

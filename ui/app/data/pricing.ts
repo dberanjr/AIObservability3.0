@@ -96,6 +96,26 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "Anthropic",
     tier: "frontier",
   },
+  // Claude 5 family (added 2026-08). Sonnet 5 priced at parity with the
+  // established Sonnet-tier rate this table already uses (3/15 has held
+  // across the 4.x generations) rather than a tenant-specific figure. Fable 5
+  // is a newer, less-documented top-tier model — priced at the same frontier
+  // rate as Opus as a reasonable placeholder pending an official published
+  // rate card; correct via the Model Pricing panel if it's off.
+  "claude-sonnet-5": {
+    inputPerMTok: 3,
+    outputPerMTok: 15,
+    contextWindow: 200_000,
+    provider: "Anthropic",
+    tier: "high",
+  },
+  "fable-5": {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    contextWindow: null,
+    provider: "Anthropic",
+    tier: "frontier",
+  },
   "claude-sonnet-4": {
     inputPerMTok: 3,
     outputPerMTok: 15,
@@ -287,6 +307,14 @@ export const PRICING: Record<string, ModelPricing> = {
     provider: "AWS Bedrock",
     tier: "low",
   },
+  // Added 2026-08 — public AWS Bedrock list rate.
+  "titan-text-express": {
+    inputPerMTok: 0.2,
+    outputPerMTok: 0.6,
+    contextWindow: 8_000,
+    provider: "AWS Bedrock",
+    tier: "low",
+  },
   "titan-text-premier": {
     inputPerMTok: 0.5,
     outputPerMTok: 1.5,
@@ -382,6 +410,12 @@ export const PRICING_BEDROCK: Record<string, ModelPricing> = {
   "nova-pro": {
     inputPerMTok: 0.8, outputPerMTok: 3.2, contextWindow: 300_000,
     provider: "Amazon", tier: "mid",
+  },
+  // Added 2026-08 — public AWS Bedrock list rate; 1M-token context is Nova
+  // Premier's distinguishing feature over Nova Pro's 300K.
+  "nova-premier": {
+    inputPerMTok: 2.5, outputPerMTok: 12.5, contextWindow: 1_000_000,
+    provider: "Amazon", tier: "high",
   },
 };
 

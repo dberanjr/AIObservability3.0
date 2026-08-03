@@ -14,6 +14,7 @@ import {
 import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
 import { computePossibleSavings } from "./finopsLogic";
+import { DEMO_DAILY_RECORDS, DEMO_SERVICE_COST_RECORDS } from "./demoData";
 
 const num = (v: unknown): number => {
   const n = toNum(v);
@@ -33,13 +34,13 @@ const DAILY_DAYS = 7;
  */
 const DAILY_MIN_SAMPLING = 100;
 
-interface DailyDayRecord {
+export interface DailyDayRecord {
   model?: string;
   input_tokens?: number;
   output_tokens?: number;
 }
 
-interface ServiceCostRecord {
+export interface ServiceCostRecord {
   service?: string;
   model?: string;
   input_tokens?: number;
@@ -122,7 +123,17 @@ const dayLabel = (offsetFromOldest: number, totalDays: number): string => {
   });
 };
 
-export const useFinOps = (): FinOpsData => {
+/**
+ * `showExample` defaults to false so Summary's FinOpsCard (the other caller
+ * of this shared hook) is completely unaffected — only the Models page
+ * computes its own Demo Mode / no-telemetry `showExample` flag and passes it
+ * explicitly. When true, every real query is skipped and the folds below run
+ * over `DEMO_DAILY_RECORDS` / `DEMO_SERVICE_COST_RECORDS` instead — same
+ * grouping/trimming/cost logic, just a canned source array, with the sampling
+ * extrapolation multiplier pinned to 1 (the canned tokens already represent
+ * full-population counts, not a sampled scan).
+ */
+export const useFinOps = (showExample = false): FinOpsData => {
   const { scope } = useScope();
   const { filters } = useGlobalFilters();
   const { samplingRatio } = useSampling();
@@ -133,9 +144,11 @@ export const useFinOps = (): FinOpsData => {
   // the platform execution-time limit; the toolbar ratio wins if it's heavier.
   const dailyRatio = Math.max(samplingRatio, DAILY_MIN_SAMPLING);
   const dayQuery = (offset: number): string =>
-    canQuery ? buildDailyTokensDayQuery(resolution.serviceIds, offset) : "";
+    canQuery && !showExample
+      ? buildDailyTokensDayQuery(resolution.serviceIds, offset)
+      : "";
   const dailyOpts = {
-    enabled: canQuery,
+    enabled: canQuery && !showExample,
     staleTime: 5 * 60_000,
     samplingRatioOverride: dailyRatio,
   } as const;
@@ -153,25 +166,31 @@ export const useFinOps = (): FinOpsData => {
   const dailyResults = [d0, d1, d2, d3, d4, d5, d6];
 
   const serviceResult = useScopedDql<ServiceCostRecord>(
-    canQuery
+    canQuery && !showExample
       ? buildServiceCostBreakdownQuery(resolution.serviceIds, scope.timeframe, filters)
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<FinOpsData>(() => {
     // ---- Daily cost timeseries (one scan per day, oldest → newest) ----
     const dayCount = DAILY_DAYS;
+    // Demo tokens already represent full-population counts (not a sampled
+    // scan), so the extrapolation multiplier is pinned to 1 in that path.
+    const ratioMultiplier = showExample ? 1 : dailyRatio;
     // model → per-day cost array, position 0 = oldest, last = most recent 24h.
     const byModelDay = new Map<string, number[]>();
     for (let offset = 0; offset < DAILY_DAYS; offset++) {
       const pos = DAILY_DAYS - 1 - offset; // offset 0 (newest) → last column
-      for (const r of dailyResults[offset].data?.records ?? []) {
+      const dayRecords = showExample
+        ? DEMO_DAILY_RECORDS[offset]
+        : (dailyResults[offset].data?.records ?? []);
+      for (const r of dayRecords) {
         if (!r.model) continue;
         // Extrapolate the floored-sample token sums back to the full population
         // before costing (sum-aggregates extrapolate cleanly).
-        const inTok = num(r.input_tokens) * dailyRatio;
-        const outTok = num(r.output_tokens) * dailyRatio;
+        const inTok = num(r.input_tokens) * ratioMultiplier;
+        const outTok = num(r.output_tokens) * ratioMultiplier;
         let arr = byModelDay.get(r.model);
         if (!arr) {
           arr = new Array<number>(DAILY_DAYS).fill(0);
@@ -227,7 +246,10 @@ export const useFinOps = (): FinOpsData => {
         topModelTokens: number;
       }
     >();
-    for (const r of serviceResult.data?.records ?? []) {
+    const serviceRecords = showExample
+      ? DEMO_SERVICE_COST_RECORDS
+      : (serviceResult.data?.records ?? []);
+    for (const r of serviceRecords) {
       if (!r.service || !r.model) continue;
       const inputTokens = num(r.input_tokens);
       const outputTokens = num(r.output_tokens);
@@ -308,14 +330,16 @@ export const useFinOps = (): FinOpsData => {
       costPerMTok,
       possibleSavings,
       dailyRatio,
-      isLoading:
-        resolution.isLoading ||
-        dailyResults.some((r) => r.isLoading) ||
-        serviceResult.isLoading,
-      error:
-        dailyResults.find((r) => r.error)?.error ??
-        serviceResult.error ??
-        undefined,
+      isLoading: showExample
+        ? false
+        : resolution.isLoading ||
+          dailyResults.some((r) => r.isLoading) ||
+          serviceResult.isLoading,
+      error: showExample
+        ? undefined
+        : (dailyResults.find((r) => r.error)?.error ??
+          serviceResult.error ??
+          undefined),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -332,5 +356,6 @@ export const useFinOps = (): FinOpsData => {
     serviceResult.error,
     resolution.isLoading,
     filters,
+    showExample,
   ]);
 };

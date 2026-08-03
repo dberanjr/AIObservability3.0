@@ -18,6 +18,7 @@
 
 import React from "react";
 import { useCapability } from "../scope/CapabilityContext";
+import { useTweaks } from "../tweaks/TweaksContext";
 import type { CapabilityId } from "../detection/attributeFields";
 import { EmptyState } from "./EmptyState";
 
@@ -49,6 +50,14 @@ export const CapabilityGate = ({
   hint,
 }: CapabilityGateProps) => {
   const cap = useCapability();
+  const { pageConfig } = useTweaks();
+  // Global Demo Mode forces every wired tile to render its bundled demo
+  // dataset, "regardless of whether real telemetry exists" (see PageConfig's
+  // `demoMode` doc comment) — so bypass the real-capability gate entirely
+  // rather than hiding a gated panel just because ITS specific attribute
+  // happens to be absent on this tenant. The automatic "no telemetry yet"
+  // case still gates on the real (all-absent) probe below, same as today.
+  if (pageConfig.demoMode) return <>{children}</>;
   if (cap.isLoading) return null;
   const ids = Array.isArray(id) ? id : [id];
   if (ids.some((i) => cap.has(i))) return <>{children}</>;

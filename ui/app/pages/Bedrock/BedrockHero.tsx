@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Skeleton } from "@dynatrace/strato-components/content";
+import { PieChartIcon, StopwatchIcon, SaveIcon, PercentIcon, type SvgIconProps } from "@dynatrace/strato-icons";
 import { Sparkline } from "../../components/charts/Sparkline";
 import { EstimatedBadge } from "../../components/DetailModal";
 import { fmtUSDPrecise } from "../../data/format";
@@ -21,24 +22,70 @@ const TONE_COLOR: Record<Insight["tone"], string> = {
   good: STATUS_COLOR.good,
 };
 
-const InsightRow = ({ insight }: { insight: Insight }) => (
-  <Flex alignItems="flex-start" gap={8}>
-    <span
-      aria-hidden
-      style={{
-        marginTop: 5,
-        width: 7,
-        height: 7,
-        borderRadius: "50%",
-        background: TONE_COLOR[insight.tone],
-        flex: "0 0 auto",
-      }}
-    />
-    <Text style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-      {insight.text}
-    </Text>
-  </Flex>
-);
+/** One icon per known insight category (see insights.ts's 3 computed
+ *  insights) — `PercentIcon` is the generic fallback for any future insight
+ *  category this map hasn't been taught yet, so a new insight type degrades
+ *  gracefully instead of crashing. */
+const CATEGORY_ICON: Record<string, React.ForwardRefExoticComponent<SvgIconProps>> = {
+  "Cost concentration": PieChartIcon,
+  "Latency outlier": StopwatchIcon,
+  "Cache savings": SaveIcon,
+};
+
+/** Icon + big-stat row: the insight's `metric` leads as a bold, tone-colored
+ *  number (echoing the KPI tiles' and BedrockFindings' card language, just
+ *  condensed into one row), with the category as a small eyebrow and the
+ *  full sentence as supporting context below. */
+const InsightRow = ({ insight }: { insight: Insight }) => {
+  const color = TONE_COLOR[insight.tone];
+  const Icon = CATEGORY_ICON[insight.category] ?? PercentIcon;
+  return (
+    <Flex gap={8} alignItems="flex-start">
+      <span
+        aria-hidden
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 30,
+          height: 30,
+          borderRadius: "50%",
+          background: `color-mix(in oklab, ${color} 14%, transparent)`,
+          flex: "0 0 auto",
+        }}
+      >
+        <Icon size={16} style={{ color }} />
+      </span>
+      <Flex flexDirection="column" gap={2} style={{ minWidth: 0 }}>
+        <Text
+          style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color,
+            lineHeight: 1.2,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {insight.metric}
+        </Text>
+        <Text
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: "var(--text-3)",
+          }}
+        >
+          {insight.category}
+        </Text>
+        <Text style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.45 }}>
+          {insight.text}
+        </Text>
+      </Flex>
+    </Flex>
+  );
+};
 
 /**
  * Narrative hero: the page's cost headline (total, an estimated-rate badge
@@ -79,7 +126,9 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          // Total Spend gets noticeably more horizontal room than the
+          // Signals column (was an even 1fr/1fr split).
+          gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
           gap: 24,
           padding: "18px 20px",
         }}
@@ -137,6 +186,8 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
               height={32}
               valueFormatter={(n) => fmtUSDPrecise(n)}
               ariaLabel="Bedrock spend trend"
+              showAxis
+              showValueLabels
             />
           )}
         </Flex>
@@ -159,7 +210,7 @@ export const BedrockHero = ({ scope }: BedrockHeroProps) => {
               <Skeleton style={{ height: 14, width: "75%", borderRadius: 4 }} />
             </Flex>
           ) : insights.length > 0 ? (
-            <Flex flexDirection="column" gap={8}>
+            <Flex flexDirection="column" gap={12}>
               {insights.map((insight) => (
                 <InsightRow key={insight.text} insight={insight} />
               ))}

@@ -26,8 +26,14 @@ const bandColor = (score: number | null): string => {
  * map's at-rest tier verdict below does NOT show) rather than restating the
  * Healthy/Degraded tier line, so the two are complementary, not duplicative.
  */
-export const PulseHealthHeadline = ({ summary }: { summary: PulseSummary }) => {
-  const posture = useFleetPosture();
+export const PulseHealthHeadline = ({
+  summary,
+  showExample = false,
+}: {
+  summary: PulseSummary;
+  showExample?: boolean;
+}) => {
+  const posture = useFleetPosture(showExample);
   const color = bandColor(posture.trustIndex);
   const loading = posture.isLoading && posture.trustIndex == null;
 

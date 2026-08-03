@@ -1,4 +1,6 @@
 import React, { useRef, useState } from "react";
+import { useTweaks } from "../../tweaks/TweaksContext";
+import { pickLabelIndices } from "./AreaChart";
 
 export interface SparklineProps {
   values: number[];
@@ -30,9 +32,26 @@ export interface SparklineProps {
    * Chart-5).
    */
   ariaLabel?: string;
+  /**
+   * Renders up to 4 small tick labels (from `labels`) below the chart, in an
+   * extra row BELOW the `height`-tall chart area (doesn't shrink the chart
+   * itself, so existing callers that don't opt in are unaffected). Off by
+   * default.
+   */
+  showAxis?: boolean;
+  /**
+   * Draws inline value-label pills on the same points the app-wide Tweaks
+   * "chart labels" setting would pick on an AreaChart (peak/minmax/
+   * interesting/all), capped at {@link MAX_SPARKLINE_VALUE_LABELS}. Off by
+   * default — most sparklines are too small for this to read cleanly; opt in
+   * for a hero/featured one (e.g. Bedrock's Total Spend tile).
+   */
+  showValueLabels?: boolean;
 }
 
 const VIEW_W = 100;
+const AXIS_ROW_H = 12;
+const MAX_SPARKLINE_VALUE_LABELS = 6;
 
 /**
  * Responsive single-series sparkline with cursor-tracking hover tooltip.
@@ -50,10 +69,14 @@ export const Sparkline = ({
   reference,
   referenceLabel,
   ariaLabel,
+  showAxis = false,
+  showValueLabels = false,
 }: SparklineProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tipX, setTipX] = useState<number>(0);
+  const { chartCurve, chartLabels } = useTweaks();
+  const smooth = chartCurve === "smooth";
 
   if (values.length < 2) {
     return (
@@ -82,6 +105,49 @@ export const Sparkline = ({
     .map((v, i) => `${(i * step).toFixed(2)},${yOf(v).toFixed(2)}`)
     .join(" ");
   const areaPoints = `0,${height} ${points} ${VIEW_W},${height}`;
+
+  // Cubic-Bezier line path (same symmetric-tangent construction AreaChart
+  // uses) for the "Smooth" chart-curve Tweak — skipped for the "bars" variant
+  // (a bar count series has no meaningful curve). Falls back to the plain
+  // polyline/polygon above when the Tweak is off.
+  const pts = values.map((v, i) => ({ x: i * step, y: yOf(v) }));
+  const SMOOTHING = 0.2;
+  const linePath = (() => {
+    let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 2] ?? pts[i - 1];
+      const p1 = pts[i - 1];
+      const p2 = pts[i];
+      const p3 = pts[i + 1] ?? pts[i];
+      const cx1 = p1.x + (p2.x - p0.x) * SMOOTHING;
+      const cy1 = p1.y + (p2.y - p0.y) * SMOOTHING;
+      const cx2 = p2.x - (p3.x - p1.x) * SMOOTHING;
+      const cy2 = p2.y - (p3.y - p1.y) * SMOOTHING;
+      d += ` C${cx1.toFixed(2)},${cy1.toFixed(2)} ${cx2.toFixed(2)},${cy2.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`;
+    }
+    return d;
+  })();
+  const areaPath = `${linePath} L${VIEW_W},${height} L0,${height} Z`;
+  const useSmoothPath = smooth && variant === "line";
+
+  // Value-label pills: same index-picking rule AreaChart uses for its Tweaks
+  // "chart labels" setting, only when the caller opts in via showValueLabels.
+  const valueLabelIdxs = showValueLabels
+    ? pickLabelIndices(values, chartLabels).slice(0, MAX_SPARKLINE_VALUE_LABELS)
+    : [];
+  // Up to 4 evenly-spaced axis ticks along the bottom, using the caller's
+  // per-bucket labels (no-op if `labels` wasn't passed).
+  const axisIdxs = showAxis && labels
+    ? (() => {
+        const capped = Math.min(4, values.length);
+        if (capped <= 1) return [0];
+        const idxs = new Set<number>();
+        for (let k = 0; k < capped; k++) {
+          idxs.add(Math.round((k * (values.length - 1)) / (capped - 1)));
+        }
+        return [...idxs].sort((a, b) => a - b);
+      })()
+    : [];
   const refY = refVal !== null ? yOf(refVal) : 0;
   const barSlot = VIEW_W / values.length;
   const barW = Math.max(0.5, barSlot * 0.72);
@@ -118,6 +184,7 @@ export const Sparkline = ({
   const accessibleLabel = ariaLabel ? `${ariaLabel}: ${summary}` : `Trend: ${summary}`;
 
   return (
+    <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
     <div
       ref={wrapRef}
       role="img"
@@ -150,6 +217,21 @@ export const Sparkline = ({
               />
             );
           })
+        ) : useSmoothPath ? (
+          <>
+            {filled && (
+              <path d={areaPath} fill={color} opacity={0.15} />
+            )}
+            <path
+              d={linePath}
+              fill="none"
+              stroke={color}
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </>
         ) : (
           <>
             {filled && (
@@ -255,6 +337,70 @@ export const Sparkline = ({
           <span style={{ fontWeight: 600 }}>{valueFormatter(hoverValue)}</span>
         </div>
       )}
+      {valueLabelIdxs.map((i) => {
+        // Chart geometry lives in a non-uniformly-stretched 100-unit viewBox
+        // (fine for shapes; text would squash/stretch), so labels are plain
+        // absolutely-positioned HTML at percentage offsets instead of SVG
+        // <text>, mirroring the tooltip/reference-label treatment above.
+        const leftPct = (i / (values.length - 1)) * 100;
+        const topPct = (yOf(values[i]) / height) * 100;
+        const anchor = i === 0 ? "left" : i === values.length - 1 ? "right" : "center";
+        return (
+          <span
+            key={i}
+            style={{
+              position: "absolute",
+              left: `${leftPct}%`,
+              top: `${topPct}%`,
+              transform:
+                anchor === "left"
+                  ? "translate(0, -130%)"
+                  : anchor === "right"
+                    ? "translate(-100%, -130%)"
+                    : "translate(-50%, -130%)",
+              fontSize: 9,
+              fontWeight: 600,
+              color: "var(--text-2)",
+              background: "var(--surface)",
+              borderRadius: 3,
+              padding: "0 3px",
+              whiteSpace: "nowrap",
+              pointerEvents: "none",
+            }}
+          >
+            {valueFormatter(values[i])}
+          </span>
+        );
+      })}
+    </div>
+    {showAxis && labels && axisIdxs.length > 0 && (
+      <div style={{ position: "relative", width: "100%", height: AXIS_ROW_H, marginTop: 2 }}>
+        {axisIdxs.map((i) => {
+          const leftPct = (i / (values.length - 1)) * 100;
+          const anchor = i === 0 ? "left" : i === values.length - 1 ? "right" : "center";
+          return (
+            <span
+              key={i}
+              style={{
+                position: "absolute",
+                left: `${leftPct}%`,
+                transform:
+                  anchor === "left"
+                    ? "translate(0, 0)"
+                    : anchor === "right"
+                      ? "translate(-100%, 0)"
+                      : "translate(-50%, 0)",
+                fontSize: 8,
+                color: "var(--text-3)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {labels[i]}
+            </span>
+          );
+        })}
+      </div>
+    )}
     </div>
   );
 };

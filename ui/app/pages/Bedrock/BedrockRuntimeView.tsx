@@ -60,7 +60,7 @@ export const BedrockRuntimeView = ({ scope }: BedrockRuntimeViewProps) => {
       <BedrockLatencyTrends scope={scope} />
       <BedrockPerModelSummary scope={scope} />
 
-      <BedrockGuardrailsSummary />
+      <BedrockGuardrailsSummary showExample={scope.showExample} />
       <BedrockFindings scope={scope} />
     </Flex>
   );

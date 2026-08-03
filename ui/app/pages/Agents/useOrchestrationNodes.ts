@@ -7,32 +7,10 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildOrchestrationNodesQuery } from "./queries";
-import { toNum } from "../../data/format";
+import { parseOrchestrationNodes, type NodeRecord, type NodeRow } from "./parse";
+import { DEMO_ORCH_NODES } from "./demoData";
 
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-interface NodeRecord {
-  node?: string;
-  agent?: string;
-  services?: Array<string | null>;
-  invocations?: number;
-  avg_ms?: number;
-  p90_ms?: number;
-  p99_ms?: number;
-}
-
-export interface NodeRow {
-  node: string;
-  agent: string;
-  service: string;
-  invocations: number;
-  avgMs: number;
-  p90Ms: number;
-  p99Ms: number;
-}
+export type { NodeRow };
 
 export interface UseOrchestrationNodesResult {
   nodes: NodeRow[];
@@ -44,46 +22,37 @@ export interface UseOrchestrationNodesResult {
  * Node-level runtime breakdown for the Agents page. Each row is one runtime
  * span name (node) within an agent, deduped across the agent's named/null
  * service entities.
+ *
+ * @param showExample Demo Mode / no-telemetry fallback — see BedrockPage's
+ * doc comment. Returns the canned `DEMO_ORCH_NODES` instead of querying.
  */
-export const useOrchestrationNodes = (): UseOrchestrationNodesResult => {
+export const useOrchestrationNodes = (
+  showExample = false,
+): UseOrchestrationNodesResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const { filters } = useGlobalFilters();
   const canQuery = canQueryScope(resolution);
 
   const { data, isLoading, error } = useScopedDql<NodeRecord>(
-    canQuery
+    canQuery && !showExample
       ? buildOrchestrationNodesQuery(
           resolution.serviceIds,
           scope.timeframe,
           filters,
         )
       : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseOrchestrationNodesResult>(() => {
-    const nodes: NodeRow[] = [];
-    for (const r of data?.records ?? []) {
-      if (!r.node || !r.agent) continue;
-      const service =
-        (r.services ?? []).find(
-          (s): s is string => typeof s === "string" && s.length > 0,
-        ) ?? r.agent;
-      nodes.push({
-        node: r.node,
-        agent: r.agent,
-        service,
-        invocations: num(r.invocations),
-        avgMs: num(r.avg_ms),
-        p90Ms: num(r.p90_ms),
-        p99Ms: num(r.p99_ms),
-      });
+    if (showExample) {
+      return { nodes: DEMO_ORCH_NODES, isLoading: false, error: undefined };
     }
     return {
-      nodes,
+      nodes: parseOrchestrationNodes(data?.records ?? []),
       isLoading: resolution.isLoading || isLoading,
       error: error ?? undefined,
     };
-  }, [data, isLoading, error, resolution.isLoading]);
+  }, [showExample, data, isLoading, error, resolution.isLoading]);
 };

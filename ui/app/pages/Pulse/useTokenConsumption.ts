@@ -7,6 +7,7 @@ import { parseScopeMs, pickChartBucket } from "../../scope/chartInterval";
 import { buildTokenSeriesQuery } from "./dataQueries";
 import { costOf } from "../../data/pricing";
 import { toNum } from "../../data/format";
+import { DEMO_TOKEN_SERIES_ROW } from "./demoData";
 
 interface SeriesRecord {
   tokens?: (number | null)[] | null;
@@ -31,7 +32,14 @@ export interface UseTokenConsumptionResult {
   error?: Error;
 }
 
-export const useTokenConsumption = (): UseTokenConsumptionResult => {
+/**
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — set by Pulse's
+ * TokenConsumptionChart when Demo Mode (or the app-wide "no AI telemetry yet"
+ * fallback) is active. This hook has no other caller, so the default only
+ * matters for tests.
+ */
+export const useTokenConsumption = (showExample = false): UseTokenConsumptionResult => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const _resolution = useResolvedServices();
@@ -44,15 +52,17 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
 
   const { data, isLoading, error } = useScopedDql<SeriesRecord>(
     canQuery ? buildTokenSeriesQuery(serviceIds, scope.timeframe, intervalSec) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<UseTokenConsumptionResult>(() => {
-    const row = data?.records?.[0];
-    // Each bucket value is a sum() of tokens — extrapolate every point.
+    const row = showExample ? DEMO_TOKEN_SERIES_ROW : data?.records?.[0];
+    // Each bucket value is a sum() of tokens — extrapolate every point. Demo
+    // fixture values are already "real" (unsampled), so skip extrapolation.
+    const effRatio = showExample ? 1 : samplingRatio;
     const arr = (row?.tokens ?? []).map((v) => {
       const n = toNum(v);
-      return Number.isFinite(n) ? n * samplingRatio : 0;
+      return Number.isFinite(n) ? n * effRatio : 0;
     });
     const intervalMs = intervalSec * 1000;
     const points: TokenSeriesPoint[] = arr.map((tokens, i) => {
@@ -75,10 +85,11 @@ export const useTokenConsumption = (): UseTokenConsumptionResult => {
       intervalLabel: bucket.label,
       totalTokens,
       totalCost,
-      isLoading: servicesLoading || isLoading,
-      error: error ?? undefined,
+      isLoading: showExample ? false : servicesLoading || isLoading,
+      error: showExample ? undefined : (error ?? undefined),
     };
   }, [
+    showExample,
     data,
     isLoading,
     error,

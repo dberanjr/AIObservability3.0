@@ -13,12 +13,12 @@ import {
   type LatencyFilter,
 } from "./queries";
 import { canonicalizeModel } from "../../detection/attributes";
-import { costOf } from "../../data/pricing";
-import { toNum } from "../../data/format";
 import { injectTraceScope } from "../../scope/queries";
 import { useFocusTraceScope } from "./useFocusTraceScope";
 import { matchEvalFilter, type EvalFilter } from "./evalTable";
 import { serverSortClause, type PromptSort } from "./promptsSort";
+import { RAW_DEMO_PROMPT_RECORDS, DEMO_TRACE_AGENT_MAP } from "./demoData";
+import { parsePromptRecords } from "./promptsParse";
 
 /** True when `val` satisfies a numeric range filter (>, <, between). */
 const matchRange = (val: number, r?: LatencyFilter): boolean => {
@@ -28,26 +28,6 @@ const matchRange = (val: number, r?: LatencyFilter): boolean => {
   if (r.op === "between")
     return (r.min == null || val >= r.min) && (r.max == null || val <= r.max);
   return true;
-};
-
-const num = (v: unknown): number => {
-  const n = toNum(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const bool = (v: unknown): boolean => v === true || v === "true";
-
-// Prompt/response content is usually a string, but some instrumentations emit
-// gen_ai.input.messages / output.messages as a record or array — render those
-// as pretty JSON so the table/popup still show something useful.
-const str = (v: unknown): string => {
-  if (typeof v === "string") return v;
-  if (v == null) return "";
-  try {
-    return JSON.stringify(v, null, 2);
-  } catch {
-    return "[unserializable value]";
-  }
 };
 
 export type PromptKind = "LLM" | "Agent";
@@ -85,7 +65,7 @@ export interface PromptRow {
   spanId: string | null;
 }
 
-interface PromptRecord {
+export interface PromptRecord {
   timestamp?: string | number;
   kind?: string;
   type_label?: string;
@@ -112,15 +92,6 @@ interface PromptRecord {
   trace_id?: string | null;
   span_id?: string | null;
 }
-
-const parseTimestamp = (v: unknown): number => {
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const parsed = Date.parse(v);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return Date.now();
-};
 
 export type { LatencyFilter };
 
@@ -193,6 +164,23 @@ const countBy = <T>(
   return counts;
 };
 
+// `parsePromptRecords` (raw DQL row → PromptRow, backfilling the agent name
+// from the trace→agent join) lives in `./promptsParse` — a dependency-free
+// pure module — so both this hook and the Demo Mode dataset can share it
+// without either importing the other's Context-dependent runtime code.
+// Re-exported here for anything that still imports it from this hook file.
+export { parsePromptRecords };
+
+/**
+ * Precomputed once at module load — the SAME `parsePromptRecords` the real
+ * query path uses (above), run over demoData's raw fixture set. Demo Mode
+ * queries nothing, so this is what `usePrompts` renders in that case.
+ */
+const DEMO_PROMPT_ROWS: PromptRow[] = parsePromptRecords(
+  RAW_DEMO_PROMPT_RECORDS,
+  DEMO_TRACE_AGENT_MAP,
+);
+
 export const usePrompts = (
   filter: PromptsFilter = {},
   /** Raw `?focus` id from a Pulse problem-pattern drill-down (PP-3). */
@@ -204,6 +192,15 @@ export const usePrompts = (
    * reordered over the sample client-side.
    */
   sort?: PromptSort,
+  /**
+   * True to render the bundled Demo Mode dataset instead of querying Grail —
+   * either the global Demo Mode Tweak or this page's own no-telemetry
+   * fallback (see PromptsPage). Every query below is skipped and every
+   * derived value (facets, hasContent/hasEval, client-side filtering) is
+   * computed over `DEMO_PROMPT_ROWS` instead, so the table/tiles/quality
+   * panel all stay internally consistent.
+   */
+  showExample = false,
 ): UsePromptsResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
@@ -217,7 +214,7 @@ export const usePrompts = (
   // matching trace.ids and scope the list to those traces (injectTraceScope).
   // Same-span focuses (the LLM ones + tool-token-spike) leave this inert and
   // use the synchronous predicate path in buildPromptsListQuery.
-  const focusScope = useFocusTraceScope(focus);
+  const focusScope = useFocusTraceScope(focus, showExample);
   // While a cross-span focus is resolving its trace.ids, gate the list query:
   // firing it before resolution would scope to a stale/empty id set.
   const focusGated = focusScope.active && focusScope.isResolving;
@@ -300,7 +297,7 @@ export const usePrompts = (
     // (firing early would scope to a stale/empty set). The global attribute
     // filter still applies and ANDs with the focus scope — both inject a
     // `| filter in(trace.id, …)` and a span must satisfy every one.
-    enabled: canQuery && !focusGated,
+    enabled: canQuery && !focusGated && !showExample,
     staleTime: 60_000,
   });
 
@@ -309,7 +306,7 @@ export const usePrompts = (
   // an agent filter doesn't drop the LLM spans we're trying to attribute.
   const { data: agentMapData } = useScopedDql<{ trace_id?: string; agent?: string }>(
     canQuery ? buildPromptAgentMapQuery(resolution.serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000, ignoreGlobalFilter: true },
+    { enabled: canQuery && !showExample, staleTime: 60_000, ignoreGlobalFilter: true },
   );
 
   // Sidebar facet OPTIONS, discovered server-side across all AI spans (not just
@@ -323,7 +320,7 @@ export const usePrompts = (
     services?: unknown;
   }>(
     canQuery ? buildPromptFacetValuesQuery(resolution.serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 300_000, ignoreGlobalFilter: true },
+    { enabled: canQuery && !showExample, staleTime: 300_000, ignoreGlobalFilter: true },
   );
 
   return useMemo<UsePromptsResult>(() => {
@@ -334,62 +331,14 @@ export const usePrompts = (
       }
     }
 
-    const prompts: PromptRow[] = [];
-    for (const r of data?.records ?? []) {
-      const spanId = typeof r.span_id === "string" ? r.span_id : null;
-      const traceId = typeof r.trace_id === "string" ? r.trace_id : null;
-      const evalHallucination =
-        typeof r.eval_hallucination === "number"
-          ? r.eval_hallucination
-          : null;
-      const evalCorrectness =
-        typeof r.eval_correctness === "number" ? r.eval_correctness : null;
-      const evalFaithfulness =
-        typeof r.eval_faithfulness === "number"
-          ? r.eval_faithfulness
-          : null;
-      const evalRelevance =
-        typeof r.eval_relevance === "number" ? r.eval_relevance : null;
-
-      const modelLabel = r.model ? canonicalizeModel(r.model).label : null;
-      const inTok = num(r.in_tok);
-      const outTok = num(r.out_tok);
-      const inCost = inTok > 0 ? costOf(inTok, 0, modelLabel) : 0;
-      const outCost = outTok > 0 ? costOf(0, outTok, modelLabel) : 0;
-
-      prompts.push({
-        id: spanId ?? `${traceId ?? "?"}-${prompts.length}`,
-        timestampMs: parseTimestamp(r.timestamp),
-        kind: r.kind === "Agent" ? "Agent" : "LLM",
-        typeLabel: str(r.type_label) || "completion",
-        service: str(r.service),
-        serviceId: str(r.service_id),
-        provider: r.provider ?? null,
-        model: modelLabel,
-        agent:
-          r.agent ?? (traceId ? traceAgent.get(traceId) ?? null : null),
-        temperature:
-          typeof r.temperature === "number" ? r.temperature : null,
-        inTokens: inTok,
-        outTokens: outTok,
-        inCost,
-        outCost,
-        durationMs: num(r.duration_ms),
-        promptText: str(r.prompt_text),
-        responseText: str(r.response_text),
-        systemPrompt: r.system_prompt ?? null,
-        piiDetected: bool(r.pii_detected),
-        hasWarning: bool(r.has_warning),
-        hasError: bool(r.has_error),
-        truncated: bool(r.truncated),
-        evalHallucination,
-        evalCorrectness,
-        evalFaithfulness,
-        evalRelevance,
-        traceId,
-        spanId,
-      });
-    }
+    // Demo Mode: render the bundled fixture set (already parsed through the
+    // same parsePromptRecords this real path uses — see demoData.ts) instead
+    // of the query results. Every downstream computation (facets, hasContent/
+    // hasEval, client-side filtering) below is unchanged — it just operates on
+    // `prompts` regardless of where the rows came from.
+    const prompts: PromptRow[] = showExample
+      ? DEMO_PROMPT_ROWS
+      : parsePromptRecords(data?.records ?? [], traceAgent);
 
     const serviceCounts = countBy(prompts, (r) => r.service);
     const modelCounts = countBy(prompts, (r) => r.model);
@@ -461,6 +410,37 @@ export const usePrompts = (
           `${p.promptText} ${p.responseText} ${p.service} ${p.model ?? ""} ${p.agent ?? ""}`.toLowerCase();
         if (!hay.includes(search)) return false;
       }
+      // Demo Mode has no real query to apply the server-side sidebar clauses
+      // (providers/operations/status toggles/agent/latency/temperature) —
+      // replicate them client-side over the fixed demo rows so every sidebar
+      // control stays functional while showing example data. In real mode
+      // these are already applied server-side (see buildPromptsListQuery),
+      // so re-checking them here would be redundant, not wrong — but is
+      // skipped to keep real-mode behavior byte-for-byte unchanged.
+      if (showExample) {
+        if (filter.onlyErrors && !p.hasError) return false;
+        if (filter.onlyPii && !p.piiDetected) return false;
+        if (filter.onlyWarnings && !p.hasWarning) return false;
+        if (filter.onlyTruncated && !p.truncated) return false;
+        if (
+          filter.providers?.length &&
+          (!p.provider || !filter.providers.includes(p.provider))
+        )
+          return false;
+        if (
+          filter.operations?.length &&
+          !filter.operations.includes(p.typeLabel)
+        )
+          return false;
+        if (filter.agents?.length && (!p.agent || !filter.agents.includes(p.agent)))
+          return false;
+        if (!matchRange(p.durationMs, filter.latency)) return false;
+        if (
+          filter.temperature &&
+          (p.temperature == null || !matchRange(p.temperature, filter.temperature))
+        )
+          return false;
+      }
       return true;
     });
 
@@ -482,8 +462,9 @@ export const usePrompts = (
       hasEval,
       // Surface the cross-span focus resolution as loading too, so the table
       // shows its spinner (not an empty state) while the trace.ids resolve.
-      isLoading: resolution.isLoading || isLoading || focusGated,
-      error: (error ?? undefined) ?? focusScope.error,
+      // Demo Mode data is bundled and synchronous, so it's never "loading".
+      isLoading: showExample ? false : resolution.isLoading || isLoading || focusGated,
+      error: showExample ? undefined : (error ?? undefined) ?? focusScope.error,
       refetch,
     };
   }, [
@@ -495,11 +476,24 @@ export const usePrompts = (
     resolution.isLoading,
     focusGated,
     focusScope.error,
+    showExample,
     filter?.search,
     filter?.kinds?.join(","),
     filter?.services?.join(","),
     filter?.models?.join(","),
     filter?.agents?.join(","),
+    filter?.providers?.join(","),
+    filter?.operations?.join(","),
+    filter?.onlyErrors,
+    filter?.onlyPii,
+    filter?.onlyWarnings,
+    filter?.onlyTruncated,
+    filter?.latency?.op,
+    filter?.latency?.min,
+    filter?.latency?.max,
+    filter?.temperature?.op,
+    filter?.temperature?.min,
+    filter?.temperature?.max,
     filter?.inCost?.op,
     filter?.inCost?.min,
     filter?.inCost?.max,

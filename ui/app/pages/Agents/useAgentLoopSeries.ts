@@ -6,10 +6,8 @@ import {
   useResolvedServices,
 } from "../../scope/useResolvedServices";
 import { buildAgentLoopsSeriesQuery } from "./queries";
-
-interface SeriesRecord {
-  node_execs?: (number | null)[] | null;
-}
+import { parseLoopSeries, type LoopSeriesRecord as SeriesRecord } from "./parse";
+import { DEMO_LOOP_SERIES } from "./demoData";
 
 export interface UseAgentLoopSeriesResult {
   /** LangGraph node-execution count per bucket. */
@@ -41,14 +39,18 @@ const parseScopeMs = (from: string): number => {
  * Time series of LangGraph node executions over the scope timeframe — the raw
  * activity loop detection reads. Lazily queried (pass `enabled`) so it only
  * runs when the Looping Agents popup is open.
+ *
+ * @param showExample Demo Mode / no-telemetry fallback — see BedrockPage's
+ * doc comment. Returns the canned `DEMO_LOOP_SERIES` instead of querying.
  */
 export const useAgentLoopSeries = (
   enabled: boolean,
+  showExample = false,
 ): UseAgentLoopSeriesResult => {
   const { scope } = useScope();
   const resolution = useResolvedServices();
   const canQuery = canQueryScope(resolution);
-  const active = enabled && canQuery;
+  const active = enabled && canQuery && !showExample;
 
   const intervalSec = useMemo(() => {
     const totalMs = parseScopeMs(scope.timeframe.from);
@@ -67,14 +69,15 @@ export const useAgentLoopSeries = (
   );
 
   return useMemo<UseAgentLoopSeriesResult>(() => {
-    const values = (series.data?.records?.[0]?.node_execs ?? []).map((v) =>
-      typeof v === "number" ? v : 0,
-    );
+    if (showExample) {
+      return { ...DEMO_LOOP_SERIES, isLoading: false, isEmpty: false };
+    }
+    const { values, total } = parseLoopSeries(series.data?.records?.[0]);
     return {
       values,
-      total: values.reduce((acc, v) => acc + v, 0),
+      total,
       isLoading: series.isLoading,
       isEmpty: !series.isLoading && values.length === 0,
     };
-  }, [series.data, series.isLoading]);
+  }, [showExample, series.data, series.isLoading]);
 };

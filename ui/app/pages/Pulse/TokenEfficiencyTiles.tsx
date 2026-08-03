@@ -155,10 +155,10 @@ const EnlargedSpark = ({
   </Flex>
 );
 
-const TokenEfficiencyBody = () => {
-  const eff = useTokenEfficiency();
-  const series = usePulseSeries();
-  const spend = useSpendBreakdown();
+const TokenEfficiencyBody = ({ showExample = false }: { showExample?: boolean }) => {
+  const eff = useTokenEfficiency(showExample);
+  const series = usePulseSeries(true, showExample);
+  const spend = useSpendBreakdown(showExample);
   const scoreExpander = useChartExpander();
   const opdExpander = useChartExpander();
 
@@ -377,8 +377,8 @@ const TokenEfficiencyBody = () => {
   );
 };
 
-export const TokenEfficiencyTiles = () => (
+export const TokenEfficiencyTiles = ({ showExample = false }: { showExample?: boolean }) => (
   <CollapsibleCard title="Token efficiency" defaultOpen bodyPadding={16}>
-    <TokenEfficiencyBody />
+    <TokenEfficiencyBody showExample={showExample} />
   </CollapsibleCard>
 );

@@ -5,22 +5,12 @@ import {
   useResolvedServices,
   canQueryScope,
 } from "../../scope/useResolvedServices";
-import { extrapolate, useSampling } from "../../scope/SamplingContext";
+import { useSampling } from "../../scope/SamplingContext";
 import { buildHiddenFailuresQuery } from "./queries";
+import { computeHiddenFailures, type HiddenRecord, type HiddenCategory } from "./parse";
+import { DEMO_HIDDEN_FAILURES } from "./demoData";
 
-interface HiddenRecord {
-  refusals?: number;
-  truncations?: number;
-  content_filters?: number;
-  other?: number;
-}
-
-export interface HiddenCategory {
-  key: string;
-  label: string;
-  count: number;
-  color: string;
-}
+export type { HiddenRecord, HiddenCategory };
 
 export interface HiddenFailures {
   categories: HiddenCategory[];
@@ -35,9 +25,15 @@ export interface HiddenFailures {
  * (plus an "other" provider/guardrail bucket when present). Counts are sampled
  * aggregates, so they extrapolate back to the unsampled population like the rest
  * of the app. Routes through useScopedDql → global timeframe, segments,
- * scan-limit, and the global trace filter all apply. Drills to Explorer.
+ * scan-limit, and the global trace filter all apply. Drills to Explorer. The
+ * fold itself (`computeHiddenFailures`) lives in `./parse`, shared with
+ * `demoData.ts`'s `DEMO_HIDDEN_FAILURES`.
+ *
+ * `showExample` (default false, mirrors useGuardrails.ts) renders the Demo
+ * Mode dataset instead of querying Grail — passed down from the Summary page
+ * (both HiddenFailuresCard and PostureBand call this hook).
  */
-export const useHiddenFailures = (): HiddenFailures => {
+export const useHiddenFailures = (showExample = false): HiddenFailures => {
   const { scope } = useScope();
   const { samplingRatio } = useSampling();
   const resolution = useResolvedServices();
@@ -46,41 +42,18 @@ export const useHiddenFailures = (): HiddenFailures => {
 
   const q = useScopedDql<HiddenRecord>(
     canQuery ? buildHiddenFailuresQuery(serviceIds, scope.timeframe) : "",
-    { enabled: canQuery, staleTime: 60_000 },
+    { enabled: canQuery && !showExample, staleTime: 60_000 },
   );
 
   return useMemo<HiddenFailures>(() => {
-    const row = q.data?.records?.[0];
-    const refusals = extrapolate(row?.refusals, samplingRatio) ?? 0;
-    const truncations = extrapolate(row?.truncations, samplingRatio) ?? 0;
-    const contentFilters =
-      extrapolate(row?.content_filters, samplingRatio) ?? 0;
-    const other = extrapolate(row?.other, samplingRatio) ?? 0;
-
-    const categories: HiddenCategory[] = [
-      { key: "refusals", label: "Refusals", count: refusals, color: "var(--red)" },
-      {
-        key: "truncations",
-        label: "Max-token truncation",
-        count: truncations,
-        color: "var(--pink)",
-      },
-      {
-        key: "content_filters",
-        label: "Content-filter blocks",
-        count: contentFilters,
-        color: "var(--amber)",
-      },
-      { key: "other", label: "Other (provider / guardrail)", count: other, color: "var(--purple-2)" },
-    ].filter((c) => c.count > 0);
-
-    const total = categories.reduce((a, c) => a + c.count, 0);
-
+    if (showExample) {
+      return { ...DEMO_HIDDEN_FAILURES, isLoading: false, error: undefined };
+    }
+    const core = computeHiddenFailures(q.data?.records?.[0], samplingRatio);
     return {
-      categories,
-      total,
+      ...core,
       isLoading: q.isLoading,
       error: q.error ?? undefined,
     };
-  }, [q.data, q.isLoading, q.error, samplingRatio]);
+  }, [showExample, q.data, q.isLoading, q.error, samplingRatio]);
 };

@@ -23,8 +23,14 @@ export interface SpendBreakdown {
   isLoading: boolean;
 }
 
-export const useSpendBreakdown = (): SpendBreakdown => {
-  const { models, isLoading } = useModels();
+/**
+ * `showExample` defaults to false (mirrors useGuardrails.ts) and is passed
+ * through to the shared `useModels` hook, whose own `showExample` branch
+ * folds its canned `DEMO_MODEL_RECORDS` through the SAME aggregation —
+ * nothing here needs its own demo dataset.
+ */
+export const useSpendBreakdown = (showExample = false): SpendBreakdown => {
+  const { models, isLoading } = useModels(null, showExample);
   return useMemo<SpendBreakdown>(() => {
     let actual = 0;
     let estimated = 0;

@@ -21,8 +21,14 @@ const TIER_COLOR: Record<LatencyTier, string> = {
  * tool calls / retrieval / orchestration (from useLatencyDecomposition). Center
  * shows the fleet P95 (passed from the shared summary). Drills to Agents.
  */
-export const LatencyTierCard = ({ summary }: { summary: PulseSummary }) => {
-  const { tiers, isLoading, error } = useLatencyDecomposition();
+export const LatencyTierCard = ({
+  summary,
+  showExample = false,
+}: {
+  summary: PulseSummary;
+  showExample?: boolean;
+}) => {
+  const { tiers, isLoading, error } = useLatencyDecomposition(showExample);
 
   const segs: StackedSegment[] = tiers
     .filter((t) => t.sharePct > 0)

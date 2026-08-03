@@ -23,10 +23,12 @@ import { GlobalFilterProvider } from "./scope/GlobalFilterContext";
 import { TraceScopeProvider } from "./scope/TraceScopeContext";
 import { CapabilityProvider } from "./scope/CapabilityContext";
 import { ScanReportProvider } from "./scope/ScanReportContext";
+import { AccountNamesProvider } from "./scope/AccountNamesContext";
 import { ThemeStyles } from "./theme/ThemeStyles";
 import { TweaksProvider } from "./tweaks/TweaksContext";
 import { EditLayoutProvider } from "./layout/EditLayoutContext";
 import { TweaksPanel } from "./tweaks/TweaksPanel";
+import { DemoModeBanner } from "./tweaks/DemoModeBanner";
 import { ColorBlindFilters } from "./tweaks/ColorBlindFilters";
 import { ModelPricingProvider } from "./pricing/ModelPricingContext";
 import { ModelPricingPanel } from "./pricing/ModelPricingPanel";
@@ -36,6 +38,7 @@ export const App = () => {
     <TweaksProvider>
     <EditLayoutProvider>
     <ModelPricingProvider>
+    <AccountNamesProvider>
     <SegmentsProvider>
     <SamplingProvider>
     <ScanLimitProvider>
@@ -47,6 +50,7 @@ export const App = () => {
       <ThemeStyles />
       <Page>
         <Page.Header>
+          <DemoModeBanner />
           <Header />
           <GlobalFilterStrip />
         </Page.Header>
@@ -108,6 +112,7 @@ export const App = () => {
     </ScanLimitProvider>
     </SamplingProvider>
     </SegmentsProvider>
+    </AccountNamesProvider>
     </ModelPricingProvider>
     </EditLayoutProvider>
     </TweaksProvider>

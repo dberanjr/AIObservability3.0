@@ -63,12 +63,14 @@ const MODAL_META: Record<TileId, { title: string; subtitle: string }> = {
 export interface AgentsTilesRowProps {
   agents: AgentRow[];
   isLoading: boolean;
+  /** Demo Mode / no-telemetry fallback — see BedrockPage's doc comment. */
+  showExample?: boolean;
 }
 
-export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
+export const AgentsTilesRow = ({ agents, isLoading, showExample = false }: AgentsTilesRowProps) => {
   const [open, setOpen] = useState<TileId | null>(null);
-  const loops = useAgentLoops();
-  const highFreq = useHighFrequencyAgentRows();
+  const loops = useAgentLoops(showExample);
+  const highFreq = useHighFrequencyAgentRows(showExample);
   // Layout customization is opt-in and driven by the global header "Customize"
   // toggle, so the KPI row can be reordered / resized from any page (SUM-4).
   const { editLayout } = useEditLayout();
@@ -115,7 +117,7 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       case "total":
         return <TotalAgentsBody agents={agents} />;
       case "invocations":
-        return <InvocationsBody />;
+        return <InvocationsBody showExample={showExample} />;
       case "slow":
         return <SlowAgentsBody agents={agents} />;
       case "error":
@@ -123,9 +125,9 @@ export const AgentsTilesRow = ({ agents, isLoading }: AgentsTilesRowProps) => {
       case "cost":
         return <CostBody agents={agents} />;
       case "looping":
-        return <LoopingAgentsBody />;
+        return <LoopingAgentsBody showExample={showExample} />;
       case "highfreq":
-        return <HighFrequencyBody />;
+        return <HighFrequencyBody showExample={showExample} />;
       case "ttft":
         return <TtftBody agents={agents} onApplied={() => setOpen(null)} />;
       default:
